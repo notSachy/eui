@@ -683,10 +683,20 @@ local function HideBlizzardBars()
             "[vehicleui] show; hide")
     end
     -- Wipe Blizzard's actionButtons tables so they don't interfere
-    for _, name in ipairs({"MultiBarBottomLeft", "MultiBarBottomRight", "MultiBarRight", "MultiBarLeft", "MultiBar5", "MultiBar6", "MultiBar7"}) do
+    for _, name in ipairs({"MainActionBar", "MainMenuBar", "MultiBarBottomLeft", "MultiBarBottomRight", "MultiBarRight", "MultiBarLeft", "MultiBar5", "MultiBar6", "MultiBar7"}) do
         local bar = _G[name]
         if bar and bar.actionButtons then
             wipe(bar.actionButtons)
+        end
+    end
+    -- Also wipe button container references on MainActionBar
+    local mainAB = _G["MainActionBar"]
+    if mainAB then
+        for i = 1, 3 do
+            local container = _G["MainActionBarButtonContainer" .. i]
+            if container and container.actionButtons then
+                wipe(container.actionButtons)
+            end
         end
     end
     -- Force all Blizzard action bars to be "enabled" via CVars so buttons work
@@ -3853,7 +3863,7 @@ function EAB:FinishSetup()
             if OverrideActionBar then
                 RegisterAttributeDriver(OverrideActionBar, "state-visibility", "[vehicleui] show; hide")
             end
-            for _, name in ipairs({"MultiBarBottomLeft", "MultiBarBottomRight", "MultiBarRight", "MultiBarLeft", "MultiBar5", "MultiBar6", "MultiBar7"}) do
+            for _, name in ipairs({"MainActionBar", "MainMenuBar", "MultiBarBottomLeft", "MultiBarBottomRight", "MultiBarRight", "MultiBarLeft", "MultiBar5", "MultiBar6", "MultiBar7"}) do
                 local bar = _G[name]
                 if bar and bar.actionButtons then wipe(bar.actionButtons) end
             end

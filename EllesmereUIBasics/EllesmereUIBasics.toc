@@ -4,7 +4,7 @@
 ## Group: EllesmereUI
 ## Notes: Blizzard Minimap & Chat Reskins
 ## Author: Ellesmere
-## Version: 2.9.6
+## Version: 3.0
 ## Dependencies: EllesmereUI
 ## SavedVariables: EllesmereUIBasicsDB
 ## IconTexture: Interface\AddOns\EllesmereUI\media\eg-logo.tga
