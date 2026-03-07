@@ -13,15 +13,6 @@ externals:
   EllesmereUIUnitFrames/Libs/oUF:
     url: https://github.com/oUF-wow/oUF
     tag: latest
-  EllesmereUI/Libs/LibStub:
-    url: https://repos.wowace.com/wow/libstub/trunk
-    type: svn
-  EllesmereUI/Libs/CallbackHandler-1.0:
-    url: https://repos.wowace.com/wow/callbackhandler/trunk/CallbackHandler-1.0
-    type: svn
-  EllesmereUI/Libs/LibDeflate:
-    url: https://github.com/SafeteeWoW/LibDeflate
-    tag: latest
 
 enable-nolib-creation: no
 
