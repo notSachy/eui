@@ -863,7 +863,8 @@ local function BuildSliderCore(parent, trackW, trackH, thumbSz, inputW, inputH, 
 
     local currentVal = getValue()
     local function UpdateSliderVisual(val)
-        local ratio = math.max(0, math.min(1, (val - minVal) / (maxVal - minVal)))
+        local range = maxVal - minVal
+        local ratio = range > 0 and math.max(0, math.min(1, (val - minVal) / range)) or 0
         trackFill:SetWidth(math.max(1, math.floor(trackW * ratio + 0.5)))
         local snapped = math.max(minVal, math.min(maxVal, math.floor(val / step + 0.5) * step))
         if not valBox:HasFocus() then valBox:SetText(FormatVal(snapped)) end
