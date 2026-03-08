@@ -14,7 +14,8 @@ externals:
     url: https://github.com/oUF-wow/oUF
     tag: latest
   Libs/LibStub:
-    url: https://repos.wowace.com/wow/libstub/trunk/LibStub
+    url: https://repos.wowace.com/wow/libstub/trunk
+    tag: 1.0
   Libs/CallbackHandler-1.0:
     url: https://repos.wowace.com/wow/callbackhandler/trunk/CallbackHandler-1.0
   Libs/LibSharedMedia-3.0:
