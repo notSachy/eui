@@ -1,4 +1,4 @@
-﻿-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
 --  EllesmereUICooldownManager.lua
 --  CDM Look Customization and Cooldown Display
 --  Mirrors Blizzard CDM bars with custom styling, cooldown swipes,
@@ -1307,7 +1307,6 @@ end
 -------------------------------------------------------------------------------
 local cdmBorderFrames = {}
 local safeEq = function(a, b) return a == b end
-local cdmBorderBackdrop = { edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 }
 
 local function GetOrCreateCDMBorder(slot)
     if cdmBorderFrames[slot] then return cdmBorderFrames[slot] end
@@ -1373,12 +1372,10 @@ local function GetOrCreateCDMBorder(slot)
     local iconSize = slot.__ECMEIcon and slot.__ECMEIcon:GetWidth() or slot:GetWidth() or 35
     local edgeSize = iconSize < 35 and 2 or 1
 
-    local border = CreateFrame("Frame", nil, slot, "BackdropTemplate")
+    local border = CreateFrame("Frame", nil, slot)
     if slot.__ECMEIcon then border:SetAllPoints(slot.__ECMEIcon) else border:SetAllPoints() end
     border:SetFrameLevel(slot:GetFrameLevel() + 5)
-    cdmBorderBackdrop.edgeSize = edgeSize
-    border:SetBackdrop(cdmBorderBackdrop)
-    border:SetBackdropBorderColor(0, 0, 0, 1)
+    PP.CreateBorder(border, 0, 0, 0, 1, edgeSize)
 
     cdmBorderFrames[slot] = border
     return border
@@ -2604,7 +2601,7 @@ local function CreateCDMIcon(barKey, index)
     local barScale = barData.barScale or 1.0
     if barScale < 0.1 then barScale = 1.0 end
     local iconSize = barData.iconSize or 36
-    local borderSize = SnapForScale(barData.borderSize or 1, barScale)
+    local borderSize = barData.borderSize or 1
     local zoom = barData.iconZoom or 0.08
 
     local icon = CreateFrame("Frame", "ECME_CDMIcon_" .. barKey .. "_" .. index, frame)
@@ -2621,8 +2618,8 @@ local function CreateCDMIcon(barKey, index)
 
     -- Icon texture
     local tex = icon:CreateTexture(nil, "ARTWORK")
-    tex:SetPoint("TOPLEFT", icon, "TOPLEFT", borderSize, -borderSize)
-    tex:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -borderSize, borderSize)
+    PP.Point(tex, "TOPLEFT", icon, "TOPLEFT", borderSize, -borderSize)
+    PP.Point(tex, "BOTTOMRIGHT", icon, "BOTTOMRIGHT", -borderSize, borderSize)
     tex:SetTexCoord(zoom, 1 - zoom, zoom, 1 - zoom)
     PP.DisablePixelSnap(tex)
     icon._tex = tex
@@ -2631,8 +2628,8 @@ local function CreateCDMIcon(barKey, index)
     local cd = CreateFrame("Cooldown", nil, icon, "CooldownFrameTemplate")
     cd:SetFrameLevel(icon:GetFrameLevel() + 1)
     cd:EnableMouse(false)
-    cd:SetPoint("TOPLEFT", icon, "TOPLEFT", borderSize, -borderSize)
-    cd:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -borderSize, borderSize)
+    PP.Point(cd, "TOPLEFT", icon, "TOPLEFT", borderSize, -borderSize)
+    PP.Point(cd, "BOTTOMRIGHT", icon, "BOTTOMRIGHT", -borderSize, borderSize)
     cd:SetDrawEdge(false)
     cd:SetDrawSwipe(true)
     cd:SetDrawBling(false)
@@ -2728,18 +2725,9 @@ local function CreateCDMIcon(barKey, index)
     end)
     icon._tooltipOverlay = tooltipOverlay
 
-    -- Border (4 edges)
-    local edges = {}
-    for i = 1, 4 do        local e = icon:CreateTexture(nil, "OVERLAY", nil, 7)
-        e:SetColorTexture(barData.borderR or 0, barData.borderG or 0, barData.borderB or 0, barData.borderA or 1)
-        PP.DisablePixelSnap(e)
-        edges[i] = e
-    end
-    edges[1]:SetPoint("TOPLEFT"); edges[1]:SetPoint("TOPRIGHT"); edges[1]:SetHeight(borderSize)
-    edges[2]:SetPoint("BOTTOMLEFT"); edges[2]:SetPoint("BOTTOMRIGHT"); edges[2]:SetHeight(borderSize)
-    edges[3]:SetPoint("TOPLEFT"); edges[3]:SetPoint("BOTTOMLEFT"); edges[3]:SetWidth(borderSize)
-    edges[4]:SetPoint("TOPRIGHT"); edges[4]:SetPoint("BOTTOMRIGHT"); edges[4]:SetWidth(borderSize)
-    icon._edges = edges
+    -- Pixel-perfect border (4 strips via PP)
+    PP.CreateBorder(icon, barData.borderR or 0, barData.borderG or 0, barData.borderB or 0, barData.borderA or 1, borderSize, "OVERLAY", 7)
+    icon._edges = {}
 
     -- State tracking
     icon._spellID = nil
@@ -2787,18 +2775,10 @@ ApplyShapeToCDMIcon = function(icon, shape, barData)
         icon._shapeApplied = nil
         icon._shapeName = nil
 
-        -- Restore square borders
-        if icon._edges then
-            for i = 1, 4 do icon._edges[i]:Show() end
-            PP.Height(icon._edges[1], borderSz)
-            PP.Height(icon._edges[2], borderSz)
-            PP.Width(icon._edges[3], borderSz)
-            PP.Width(icon._edges[4], borderSz)
-            for i = 1, 4 do
-                icon._edges[i]:SetColorTexture(brdR, brdG, brdB, brdA)
-                icon._edges[i]:SetSnapToPixelGrid(false)
-                icon._edges[i]:SetTexelSnappingBias(0)
-            end
+        -- Restore square borders (pixel-perfect via PP)
+        if icon._ppBorders then
+            PP.ShowBorder(icon)
+            PP.UpdateBorder(icon, borderSz, brdR, brdG, brdB, brdA)
         end
 
         -- Restore icon texture coords
@@ -2876,9 +2856,9 @@ ApplyShapeToCDMIcon = function(icon, shape, barData)
     local expand = ((1 / visRatio) - 1) * 0.5
     if icon._tex then icon._tex:SetTexCoord(-expand, 1 + expand, -expand, 1 + expand) end
 
-    -- Hide square borders
-    if icon._edges then
-        for i = 1, 4 do icon._edges[i]:Hide() end
+    -- Hide square borders (pixel-perfect via PP)
+    if icon._ppBorders then
+        PP.HideBorder(icon)
     end
 
     -- Shape border texture (on a dedicated frame above the cooldown swipe)
@@ -3185,16 +3165,17 @@ local function UpdateCustomBarIcons(barKey)
                     end
 
                     -- Summon-type fallback: spells with no aura but whose Blizzard CDM
-                    -- child is visible are considered active (e.g. pet summons).
+                    -- marks as active are considered active (e.g. pet summons).
                     -- On buff bars, copy the child's cooldown to show effect duration.
                     if not hasRuntimeOverride and not auraHandled then
-                        local blzCh2 = _tickBlizzAllChildCache[resolvedID] or _tickBlizzAllChildCache[spellID]
-                        if blzCh2 and blzCh2:IsShown() then
+                        local blzFbActive2 = _tickBlizzActiveCache[resolvedID] or _tickBlizzActiveCache[spellID]
+                        if blzFbActive2 and isBuffBarForOverride then
+                            local blzCh2 = _tickBlizzAllChildCache[resolvedID] or _tickBlizzAllChildCache[spellID]
                             auraHandled = true
-                            if isBuffBarForOverride then
-                                skipCDDisplay = true
-                                -- Use the cached DurationObject captured by our hook
-                                -- to avoid secret-value arithmetic from GetCooldownTimes.
+                            skipCDDisplay = true
+                            -- Use the cached DurationObject captured by our hook
+                            -- to avoid secret-value arithmetic from GetCooldownTimes.
+                            if blzCh2 then
                                 local blzCD = blzCh2.Cooldown
                                 if blzCD then
                                     ourIcon._cooldown:Clear()
@@ -3206,6 +3187,8 @@ local function UpdateCustomBarIcons(barKey)
                                     ourIcon._cooldown:SetReverse(false)
                                 end
                             end
+                        elseif blzFbActive2 then
+                            auraHandled = true
                         end
                     end
                 end
@@ -3242,13 +3225,6 @@ local function UpdateCustomBarIcons(barKey)
                    and not (EllesmereUI._mainFrame and EllesmereUI._mainFrame:IsShown()) then
                     -- Use the per-tick active cache built from all CDM viewers
                     local isActive = _tickBlizzActiveCache[resolvedID] or _tickBlizzActiveCache[spellID]
-                    -- Fallback: check if the Blizzard CDM child is visible
-                    if not isActive then
-                        local blzCh = _tickBlizzAllChildCache[resolvedID] or _tickBlizzAllChildCache[spellID]
-                        if blzCh and blzCh:IsShown() then
-                            isActive = true
-                        end
-                    end
                     if not isActive then
                         ourIcon:Hide()
                         visibleCount = visibleCount - 1
@@ -3417,13 +3393,6 @@ UpdateCDMBarIcons = function(barKey)
             if barData.hideBuffsWhenInactive and isBuffBar and not EllesmereUI._unlockActive
                and not (EllesmereUI._mainFrame and EllesmereUI._mainFrame:IsShown()) then
                 local isActive = _tickBlizzActiveCache[resolvedSid]
-                -- Fallback: check if the Blizzard CDM child is visible
-                if not isActive then
-                    local blzCh = _tickBlizzAllChildCache[resolvedSid]
-                    if blzCh and blzCh:IsShown() then
-                        isActive = true
-                    end
-                end
                 if not isActive then
                     ourIcon:Hide()
                 end
@@ -3481,22 +3450,22 @@ local function RefreshCDMIconAppearance(barKey)
 
     local barScale = barData.barScale or 1.0
     if barScale < 0.1 then barScale = 1.0 end
-    local borderSize = SnapForScale(barData.borderSize or 1, barScale)
+    local borderSize = barData.borderSize or 1
     local zoom = barData.iconZoom or 0.08
 
     for _, icon in ipairs(icons) do
         -- Update texture zoom
         if icon._tex then
             icon._tex:ClearAllPoints()
-            icon._tex:SetPoint("TOPLEFT", icon, "TOPLEFT", borderSize, -borderSize)
-            icon._tex:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -borderSize, borderSize)
+            PP.Point(icon._tex, "TOPLEFT", icon, "TOPLEFT", borderSize, -borderSize)
+            PP.Point(icon._tex, "BOTTOMRIGHT", icon, "BOTTOMRIGHT", -borderSize, borderSize)
             icon._tex:SetTexCoord(zoom, 1 - zoom, zoom, 1 - zoom)
         end
         -- Update cooldown inset
         if icon._cooldown then
             icon._cooldown:ClearAllPoints()
-            icon._cooldown:SetPoint("TOPLEFT", icon, "TOPLEFT", borderSize, -borderSize)
-            icon._cooldown:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -borderSize, borderSize)
+            PP.Point(icon._cooldown, "TOPLEFT", icon, "TOPLEFT", borderSize, -borderSize)
+            PP.Point(icon._cooldown, "BOTTOMRIGHT", icon, "BOTTOMRIGHT", -borderSize, borderSize)
             icon._cooldown:SetSwipeColor(0, 0, 0, barData.swipeAlpha or 0.7)
             icon._cooldown:SetHideCountdownNumbers(not barData.showCooldownText)
             -- Mark pending font update (applied in batch after frame renders)
@@ -3504,16 +3473,9 @@ local function RefreshCDMIconAppearance(barKey)
                 icon._pendingFontPath = GetCDMFont(); icon._pendingFontSize = barData.cooldownFontSize or 12
             end
         end
-        -- Update border edges
-        if icon._edges then
-            for _, e in ipairs(icon._edges) do
-                e:SetColorTexture(barData.borderR or 0, barData.borderG or 0, barData.borderB or 0, barData.borderA or 1)
-                PP.DisablePixelSnap(e)
-            end
-            icon._edges[1]:SetHeight(borderSize)
-            icon._edges[2]:SetHeight(borderSize)
-            icon._edges[3]:SetWidth(borderSize)
-            icon._edges[4]:SetWidth(borderSize)
+        -- Update border (pixel-perfect via PP)
+        if icon._ppBorders then
+            PP.UpdateBorder(icon, borderSize, barData.borderR or 0, barData.borderG or 0, barData.borderB or 0, barData.borderA or 1)
         end
         -- Update background
         if icon._bg then
@@ -3827,25 +3789,28 @@ local function UpdateTrackedBarIcons(barKey)
                     end
 
                     -- Buff bar fallback for spells with no aura (e.g. summons):
-                    -- when the Blizzard CDM child is visible, the effect is active.
+                    -- when the Blizzard CDM marks the spell as active, the effect is active.
                     -- Copy the child's cooldown state to show the effect duration.
                     if not hasRuntimeOverride and not auraHandled then
                         if isBuffBarForOvr then
-                            local blzFb = _tickBlizzAllChildCache[resolvedID] or _tickBlizzAllChildCache[spellID]
-                            if blzFb and blzFb:IsShown() then
+                            local blzFbActive = _tickBlizzActiveCache[resolvedID] or _tickBlizzActiveCache[spellID]
+                            if blzFbActive then
+                                local blzFb = _tickBlizzAllChildCache[resolvedID] or _tickBlizzAllChildCache[spellID]
                                 auraHandled = true
                                 skipCDDisplay = true
                                 -- Use the cached DurationObject captured by our hook
                                 -- to avoid secret-value arithmetic from GetCooldownTimes.
-                                local blzCD = blzFb.Cooldown
-                                if blzCD then
-                                    ourIcon._cooldown:Clear()
-                                    if blzFb._ecmeDurObj then
-                                        pcall(ourIcon._cooldown.SetCooldownFromDurationObject, ourIcon._cooldown, blzFb._ecmeDurObj, true)
-                                    elseif blzFb._ecmeRawStart and blzFb._ecmeRawDur then
-                                        pcall(ourIcon._cooldown.SetCooldown, ourIcon._cooldown, blzFb._ecmeRawStart, blzFb._ecmeRawDur)
+                                if blzFb then
+                                    local blzCD = blzFb.Cooldown
+                                    if blzCD then
+                                        ourIcon._cooldown:Clear()
+                                        if blzFb._ecmeDurObj then
+                                            pcall(ourIcon._cooldown.SetCooldownFromDurationObject, ourIcon._cooldown, blzFb._ecmeDurObj, true)
+                                        elseif blzFb._ecmeRawStart and blzFb._ecmeRawDur then
+                                            pcall(ourIcon._cooldown.SetCooldown, ourIcon._cooldown, blzFb._ecmeRawStart, blzFb._ecmeRawDur)
+                                        end
+                                        ourIcon._cooldown:SetReverse(false)
                                     end
-                                    ourIcon._cooldown:SetReverse(false)
                                 end
                             end
                         end
@@ -3869,20 +3834,15 @@ local function UpdateTrackedBarIcons(barKey)
                     blizzChild and blizzChild.auraDataUnit or "player",
                     true, blizzChild)
 
+                -- Store Blizzard child mapping so proc glow hooks can find our icon
+                ourIcon._blizzChild = blizzChild
+
                 ourIcon:Show()
 
                 -- Hide buff icons when inactive
                 if barData.hideBuffsWhenInactive and isBuffBarForOvr and not EllesmereUI._unlockActive
                    and not (EllesmereUI._mainFrame and EllesmereUI._mainFrame:IsShown()) then
                     local isActive = _tickBlizzActiveCache[resolvedID] or _tickBlizzActiveCache[spellID]
-                    -- Fallback: check if the Blizzard CDM child is visible
-                    -- (works for summons and other no-aura spells).
-                    if not isActive then
-                        local blzCh = _tickBlizzAllChildCache[resolvedID] or _tickBlizzAllChildCache[spellID]
-                        if blzCh and blzCh:IsShown() then
-                            isActive = true
-                        end
-                    end
                     if not isActive then
                         ourIcon:Hide()
                     else
@@ -4495,6 +4455,7 @@ function ns.GetCDMSpellsForBar(barKey)
 
     local spells = {}
     local seen = {}
+    local seenSpellID = {}  -- dedup by spellID across categories
     for _, cat in ipairs(cats) do
         local allIDs = C_CooldownViewer.GetCooldownViewerCategorySet(cat, true) or {}
         local knownIDs = C_CooldownViewer.GetCooldownViewerCategorySet(cat, false) or {}
@@ -4507,20 +4468,21 @@ function ns.GetCDMSpellsForBar(barKey)
                 local info = C_CooldownViewer.GetCooldownViewerCooldownInfo(cdID)
                 if info then
                     local sid = info.spellID or 0
-                    local name = sid > 0 and C_Spell.GetSpellName(sid) or nil
-                    local tex = sid > 0 and C_Spell.GetSpellTexture(sid) or nil
-                    if name then
-                        -- Available if it's in our pool or in a Blizzard viewer;
-                        -- fires popup only for spells the user moved to "Not Tracked"
-                        spells[#spells + 1] = {
-                            cdID = cdID,
-                            spellID = sid,
-                            name = name,
-                            icon = tex,
-                            cdmCat = cat,
-                            isDisplayed = ourPool[sid] or blizzTracked[sid] or false,
-                            isKnown = knownSet[cdID] or false,
-                        }
+                    if sid > 0 and not seenSpellID[sid] then
+                        local name = C_Spell.GetSpellName(sid)
+                        local tex = C_Spell.GetSpellTexture(sid)
+                        if name and tex then
+                            seenSpellID[sid] = true
+                            spells[#spells + 1] = {
+                                cdID = cdID,
+                                spellID = sid,
+                                name = name,
+                                icon = tex,
+                                cdmCat = cat,
+                                isDisplayed = ourPool[sid] or blizzTracked[sid] or false,
+                                isKnown = knownSet[cdID] or false,
+                            }
+                        end
                     end
                 end
             end
@@ -5184,17 +5146,22 @@ function ECME:OnInitialize()
             SaveCurrentSpecProfile()
         end
     end
+
+    -- Append SharedMedia textures to buff bar runtime tables
+    if EllesmereUI.AppendSharedMediaTextures and ns.TBB_TEXTURE_NAMES then
+        EllesmereUI.AppendSharedMediaTextures(
+            ns.TBB_TEXTURE_NAMES,
+            ns.TBB_TEXTURE_ORDER,
+            nil,
+            ns.TBB_TEXTURES
+        )
+    end
 end
 
 function ECME:OnEnable()
     -- Cache player race/class for trinket/racial/potion tracking
     _playerRace = select(2, UnitRace("player"))
     _playerClass = select(2, UnitClass("player"))
-
-    -- Minimap button (handled by parent addon)
-    if not _EllesmereUI_MinimapRegistered and EllesmereUI and EllesmereUI.CreateMinimapButton then
-        EllesmereUI.CreateMinimapButton()
-    end
 
     -- Enable CDM cooldown viewer (keep Blizzard CDM running in background
     -- so we can read its children even while hidden)

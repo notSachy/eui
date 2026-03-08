@@ -723,26 +723,35 @@ initFrame:SetScript("OnEvent", function(self)
 
         _, h = W:DualRow(parent, y,
             { type="slider", text="UI Scale",
-              min=40, max=115, step=1,
-              tooltip="Sets the scale of the entire game UI. Defaults to your current WoW UI scale setting.",
+              min=0.40, max=1.15, step=0.01,
+              tooltip="Sets the scale of the entire game UI. Lower values make everything smaller, higher values make everything larger.",
               getValue=function()
-                if EllesmereUI._blizzUIScaleDragVal then
-                    return EllesmereUI._blizzUIScaleDragVal
+                if EllesmereUI._uiScaleDragVal then
+                    return EllesmereUI._uiScaleDragVal
                 end
-                return EllesmereUIDB and EllesmereUIDB.blizzUIScale or 100
+                return EllesmereUIDB and EllesmereUIDB.ppUIScale or EllesmereUI.PP.PixelBestSize()
               end,
               setValue=function(v)
                 if not EllesmereUIDB then EllesmereUIDB = {} end
-                EllesmereUIDB.blizzUIScale = v
-                EllesmereUI._blizzUIScaleDragVal = v
-                if EllesmereUI._applyBlizzUIScale then EllesmereUI._applyBlizzUIScale() end
-                if not EllesmereUI._blizzUIScaleCleanup then
-                    EllesmereUI._blizzUIScaleCleanup = true
+                EllesmereUI._uiScaleDragVal = v
+                EllesmereUIDB.ppUIScaleAuto = false
+                -- Snapshot panel scale before changing UIParent
+                local mf = EllesmereUI._mainFrame
+                local panelScaleBefore
+                if mf then panelScaleBefore = mf:GetEffectiveScale() end
+                EllesmereUI.PP.SetUIScale(v)
+                -- Counter-scale panel so it stays visually identical
+                if mf and panelScaleBefore then
+                    local newEff = UIParent:GetEffectiveScale()
+                    if newEff > 0 then mf:SetScale(panelScaleBefore / newEff) end
+                end
+                if not EllesmereUI._uiScaleCleanup then
+                    EllesmereUI._uiScaleCleanup = true
                     C_Timer.After(0, function()
                         if not EllesmereUI._sliderDragging then
-                            EllesmereUI._blizzUIScaleDragVal = nil
+                            EllesmereUI._uiScaleDragVal = nil
                         end
-                        EllesmereUI._blizzUIScaleCleanup = false
+                        EllesmereUI._uiScaleCleanup = false
                     end)
                 end
               end },
@@ -1924,7 +1933,7 @@ initFrame:SetScript("OnEvent", function(self)
                     local div = rowFrame:CreateTexture(nil, "ARTWORK")
                     div:SetColorTexture(1, 1, 1, 0.06)
                     if div.SetSnapToPixelGrid then div:SetSnapToPixelGrid(false); div:SetTexelSnappingBias(0) end
-                    PP.Width(div, 1)
+                    div:SetWidth(1)
                     local xPos = d * colW
                     PP.Point(div, "TOP", rowFrame, "TOPLEFT", xPos, 0)
                     PP.Point(div, "BOTTOM", rowFrame, "BOTTOMLEFT", xPos, 0)
@@ -2040,6 +2049,10 @@ initFrame:SetScript("OnEvent", function(self)
                 fontDropOrder[#fontDropOrder + 1] = name
             end
         end
+        if EllesmereUI.AppendSharedMediaFonts then
+            EllesmereUI.AppendSharedMediaFonts(fontDropValues, fontDropOrder, { keyByName = true })
+        end
+
 
         -- Reload popup for font changes
         local function FontReload()
@@ -2622,48 +2635,34 @@ initFrame:SetScript("OnEvent", function(self)
     end)
 
     ---------------------------------------------------------------------------
-    --  Runtime: Blizzard UI Scale (UIParent:SetScale)
-    --  100% = default (no change). We multiply the system's base scale.
-    --  Counter-scale our panel so it stays visually identical.
+    --  Runtime: Pixel-Perfect UI Scale (UIParent:SetScale)
+    --  Scale is stored directly in EllesmereUIDB.ppUIScale as a decimal.
+    --  Startup applies it early; this handler re-applies at PLAYER_ENTERING_WORLD
+    --  to cover any Blizzard resets, and counter-scales our panel.
     ---------------------------------------------------------------------------
     do
-        local baseUIScale       -- captured once at login (Blizzard default)
-
-        local function ApplyBlizzUIScale()
-            if not baseUIScale then
-                baseUIScale = UIParent:GetScale()
-            end
-            local pct = EllesmereUIDB and EllesmereUIDB.blizzUIScale or 100
-            -- Scale proportionally from the Blizzard default.
-            -- 100% = baseUIScale (no change), 50% = half, 115% = 15% larger.
-            local newScale = baseUIScale * (pct / 100)
-            -- Snapshot our panel's current effective scale before changing UIParent
+        local function ApplyPPUIScale()
+            local scale = EllesmereUIDB and EllesmereUIDB.ppUIScale
+            if not scale then return end
+            -- Snapshot panel scale before changing UIParent
             local mf = EllesmereUI._mainFrame
             local panelScaleBefore
-            if mf then
-                panelScaleBefore = mf:GetEffectiveScale()
-            end
-            UIParent:SetScale(newScale)
-            -- Counter-scale: keep our panel at the same effective scale
+            if mf then panelScaleBefore = mf:GetEffectiveScale() end
+            EllesmereUI.PP.SetUIScale(scale)
+            -- Counter-scale panel so it stays visually identical
             if mf and panelScaleBefore then
-                local newParentEffective = UIParent:GetEffectiveScale()
-                if newParentEffective > 0 then
-                    mf:SetScale(panelScaleBefore / newParentEffective)
-                end
+                local newEff = UIParent:GetEffectiveScale()
+                if newEff > 0 then mf:SetScale(panelScaleBefore / newEff) end
             end
         end
 
-        EllesmereUI._applyBlizzUIScale = ApplyBlizzUIScale
+        EllesmereUI._applyPPUIScale = ApplyPPUIScale
 
-        local blizzScaleFrame = CreateFrame("Frame")
-        blizzScaleFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-        blizzScaleFrame:SetScript("OnEvent", function(self)
+        local ppScaleFrame = CreateFrame("Frame")
+        ppScaleFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+        ppScaleFrame:SetScript("OnEvent", function(self)
             self:UnregisterEvent("PLAYER_ENTERING_WORLD")
-            baseUIScale = UIParent:GetScale()
-            local pct = EllesmereUIDB and EllesmereUIDB.blizzUIScale or 100
-            if pct ~= 100 then
-                ApplyBlizzUIScale()
-            end
+            ApplyPPUIScale()
         end)
     end
 
@@ -3252,6 +3251,10 @@ initFrame:SetScript("OnEvent", function(self)
                 EllesmereUIDB.showSecondaryStats = false
                 EllesmereUIDB.guildChatPrivacy = false
                 EllesmereUIDB.repairWarning = nil
+                -- Reset UI scale so next reload re-snapshots from Blizzard default
+                EllesmereUIDB.ppUIScale = nil
+                EllesmereUIDB.ppUIScaleAuto = nil
+                EllesmereUIDB.blizzUIScale = nil
                 -- Developer settings defaults
                 EllesmereUIDB.errorGrabber = false
                 EllesmereUIDB.errorSound = false

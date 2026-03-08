@@ -1,4 +1,4 @@
-﻿local addonName, ns = ...
+local addonName, ns = ...
 
 local oUF = ns.oUF or oUF
 local PP = EllesmereUI.PP
@@ -480,7 +480,6 @@ end
 local MANA_COLOR = { r = 0.204, g = 0.349, b = 0.851 }
 
 local SOLID_BACKDROP = { bgFile = "Interface\\Buttons\\WHITE8X8" }
-local BORDER_BACKDROP = { edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 }
 
 local UF_FONT_DIR = "Interface\\AddOns\\EllesmereUI\\media\\fonts\\"
 local fontPaths = {
@@ -1343,12 +1342,8 @@ local function UpdateBordersForScale(frame, unit)
     local borderSize = settings.borderSize or 1
 
     -- 1) Main frame border textures
-    if frame.unifiedBorder and frame.unifiedBorder._texs then
-        local texs = frame.unifiedBorder._texs
-        PP.Height(texs[1], borderSize)
-        PP.Height(texs[2], borderSize)
-        PP.Width(texs[3], borderSize)
-        PP.Width(texs[4], borderSize)
+    if frame.unifiedBorder then
+        PP.SetBorderSize(frame.unifiedBorder, borderSize)
     end
 
     -- 2) Gather layout info
@@ -1480,14 +1475,8 @@ local function UpdateBordersForScale(frame, unit)
                 castbarBg:SetWidth(snappedFrameW)
             end
             -- Re-snap border textures
-            if castbarBg._borderTexs then
-                for _, info in ipairs(castbarBg._borderTexs) do
-                    if info.edge == "width" then
-                        PP.Width(info.tex, 1)
-                    else
-                        PP.Height(info.tex, 1)
-                    end
-                end
+            if castbarBg._ppBorders then
+                PP.SetBorderSize(castbarBg, 1)
                 frame.Castbar:ClearAllPoints()
                 PP.Point(frame.Castbar, "TOPLEFT", castbarBg, "TOPLEFT", 0, 0)
                 PP.Point(frame.Castbar, "BOTTOMRIGHT", castbarBg, "BOTTOMRIGHT", 0, 0)
@@ -2063,33 +2052,8 @@ local function CreateCastBar(frame, unit, settings)
     bgTex:SetColorTexture(0, 0, 0, 0.5)
     UnsnapTex(bgTex)
 
-    local leftBorder = castbarBg:CreateTexture(nil, "OVERLAY")
-    leftBorder:SetColorTexture(0, 0, 0, 1)
-    UnsnapTex(leftBorder)
-    PP.Width(leftBorder, 1)
-    PP.Point(leftBorder, "TOPLEFT", castbarBg, "TOPLEFT", 0, 0)
-    PP.Point(leftBorder, "BOTTOMLEFT", castbarBg, "BOTTOMLEFT", 0, 0)
-
-    local rightBorder = castbarBg:CreateTexture(nil, "OVERLAY")
-    rightBorder:SetColorTexture(0, 0, 0, 1)
-    UnsnapTex(rightBorder)
-    PP.Width(rightBorder, 1)
-    PP.Point(rightBorder, "TOPRIGHT", castbarBg, "TOPRIGHT", 0, 0)
-    PP.Point(rightBorder, "BOTTOMRIGHT", castbarBg, "BOTTOMRIGHT", 0, 0)
-
-    local bottomBorder = castbarBg:CreateTexture(nil, "OVERLAY")
-    bottomBorder:SetColorTexture(0, 0, 0, 1)
-    UnsnapTex(bottomBorder)
-    PP.Height(bottomBorder, 1)
-    PP.Point(bottomBorder, "BOTTOMLEFT", castbarBg, "BOTTOMLEFT", 0, 0)
-    PP.Point(bottomBorder, "BOTTOMRIGHT", castbarBg, "BOTTOMRIGHT", 0, 0)
-
-    -- Store castbar border textures so UpdateBordersForScale can adjust them
-    castbarBg._borderTexs = {
-        { tex = leftBorder,   edge = "width" },
-        { tex = rightBorder,  edge = "width" },
-        { tex = bottomBorder, edge = "height" },
-    }
+    -- Castbar borders (3 edges: left, right, bottom — top is shared with the frame above)
+    PP.CreateBorder(castbarBg, 0, 0, 0, 1, 1, "OVERLAY", 0)
 
     local castbar = CreateFrame("StatusBar", nil, castbarBg)
     PP.Point(castbar, "TOPLEFT", castbarBg, "TOPLEFT", 0, 0)
@@ -2184,16 +2148,8 @@ local function CreateCastBar(frame, unit, settings)
     local iconBg = iconFrame:CreateTexture(nil, "BACKGROUND")
     iconBg:SetAllPoints()
     iconBg:SetColorTexture(0, 0, 0, 1)
-    -- 1px black border
-    local function MkCBdr(parent)
-        local t = parent:CreateTexture(nil, "OVERLAY", nil, 7)
-        t:SetColorTexture(0, 0, 0, 1)
-        return t
-    end
-    local ibT = MkCBdr(iconFrame); ibT:SetHeight(1); ibT:SetPoint("TOPLEFT"); ibT:SetPoint("TOPRIGHT")
-    local ibB = MkCBdr(iconFrame); ibB:SetHeight(1); ibB:SetPoint("BOTTOMLEFT"); ibB:SetPoint("BOTTOMRIGHT")
-    local ibL = MkCBdr(iconFrame); ibL:SetWidth(1); ibL:SetPoint("TOPLEFT"); ibL:SetPoint("BOTTOMLEFT")
-    local ibR = MkCBdr(iconFrame); ibR:SetWidth(1); ibR:SetPoint("TOPRIGHT"); ibR:SetPoint("BOTTOMRIGHT")
+    -- 1px black border via unified PP system
+    PP.CreateBorder(iconFrame, 0, 0, 0, 1)
     local iconTex = iconFrame:CreateTexture(nil, "ARTWORK")
     iconTex:SetPoint("TOPLEFT", iconFrame, "TOPLEFT", 1, -1)
     iconTex:SetPoint("BOTTOMRIGHT", iconFrame, "BOTTOMRIGHT", -1, 1)
@@ -2266,30 +2222,25 @@ end
 
 
 local function FrameBorderEnter(self)
-    if self.unifiedBorder and self.unifiedBorder._texs then
+    if self.unifiedBorder and self.unifiedBorder._ppBorders then
         local unit = self.unit or "player"
         local isMini = (unit == "pet" or unit == "targettarget" or unit == "focustarget" or (unit and unit:match("^boss%d$")))
         local settings = isMini and GetMiniDonorSettings() or GetSettingsForUnit(unit)
         local hc = settings.highlightColor or { r = 1, g = 1, b = 1 }
-        for _, t in ipairs(self.unifiedBorder._texs) do
-            t:SetColorTexture(hc.r, hc.g, hc.b, 1)
-        end
+        PP.SetBorderColor(self.unifiedBorder, hc.r, hc.g, hc.b, 1)
     end
 end
 local function FrameBorderLeave(self)
-    if self.unifiedBorder and self.unifiedBorder._texs then
+    if self.unifiedBorder and self.unifiedBorder._ppBorders then
         local unit = self.unit or "player"
         local isMini = (unit == "pet" or unit == "targettarget" or unit == "focustarget" or (unit and unit:match("^boss%d$")))
         local settings = isMini and GetMiniDonorSettings() or GetSettingsForUnit(unit)
         local bc = settings.borderColor or { r = 0, g = 0, b = 0 }
-        for _, t in ipairs(self.unifiedBorder._texs) do
-            t:SetColorTexture(bc.r, bc.g, bc.b, 1)
-        end
+        PP.SetBorderColor(self.unifiedBorder, bc.r, bc.g, bc.b, 1)
     end
 end
 
--- Uses individual edge textures instead of BackdropTemplate for pixel-perfect rendering
--- (BackdropTemplate has internal pixel snapping that can't be disabled)
+-- Unified border for unit frames using the PP border system
 local function CreateUnifiedBorder(frame, unit)
     local settings = GetSettingsForUnit(unit or "player")
     local size = settings.borderSize or 1
@@ -2300,17 +2251,7 @@ local function CreateUnifiedBorder(frame, unit)
     PP.Point(border, "BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
     border:SetFrameLevel(frame:GetFrameLevel() + 10)
 
-    local function MkEdge()
-        local t = border:CreateTexture(nil, "OVERLAY", nil, 7)
-        t:SetColorTexture(bc.r, bc.g, bc.b, 1)
-        UnsnapTex(t)
-        return t
-    end
-    local eT = MkEdge(); PP.Height(eT, size); PP.Point(eT, "TOPLEFT", border, "TOPLEFT", 0, 0); PP.Point(eT, "TOPRIGHT", border, "TOPRIGHT", 0, 0)
-    local eB = MkEdge(); PP.Height(eB, size); PP.Point(eB, "BOTTOMLEFT", border, "BOTTOMLEFT", 0, 0); PP.Point(eB, "BOTTOMRIGHT", border, "BOTTOMRIGHT", 0, 0)
-    local eL = MkEdge(); PP.Width(eL, size); PP.Point(eL, "TOPLEFT", border, "TOPLEFT", 0, 0); PP.Point(eL, "BOTTOMLEFT", border, "BOTTOMLEFT", 0, 0)
-    local eR = MkEdge(); PP.Width(eR, size); PP.Point(eR, "TOPRIGHT", border, "TOPRIGHT", 0, 0); PP.Point(eR, "BOTTOMRIGHT", border, "BOTTOMRIGHT", 0, 0)
-    border._texs = { eT, eB, eL, eR }
+    PP.CreateBorder(border, bc.r, bc.g, bc.b, 1, size)
 
     frame.unifiedBorder = border
 
@@ -2340,11 +2281,10 @@ local function CreateTargetAuras(frame, unit)
         end
 
         if not button.Border then
-            button.Border = CreateFrame("Frame", nil, button, "BackdropTemplate")
+            button.Border = CreateFrame("Frame", nil, button)
             button.Border:SetAllPoints()
-            button.Border:SetBackdrop(BORDER_BACKDROP)
-            button.Border:SetBackdropBorderColor(0, 0, 0, 1)
             button.Border:SetFrameLevel(button:GetFrameLevel() + 1)
+            PP.CreateBorder(button.Border, 0, 0, 0, 1)
         end
     end
 
@@ -2525,11 +2465,10 @@ local function StyleFullFrame(frame, unit)
                     button.Cooldown:SetHideCountdownNumbers(true)
                 end
                 if not button.Border then
-                    button.Border = CreateFrame("Frame", nil, button, "BackdropTemplate")
+                    button.Border = CreateFrame("Frame", nil, button)
                     button.Border:SetAllPoints()
-                    button.Border:SetBackdrop(BORDER_BACKDROP)
-                    button.Border:SetBackdropBorderColor(0, 0, 0, 1)
                     button.Border:SetFrameLevel(button:GetFrameLevel() + 1)
+                    PP.CreateBorder(button.Border, 0, 0, 0, 1)
                 end
             end
             frame.Buffs = buffs
@@ -3491,6 +3430,11 @@ local function CreateCustomClassPower(playerFrame, style)
     local pipH = isModern and math.max(3, math.floor(sizeAdj * 0.375)) or (isCircle and (sizeAdj + 6) or (sizeAdj))
     local gap = spacingAdj
     local pad = isModern and 0 or 4
+    -- Snap all dimensions to physical pixel boundaries
+    pipSize = PP.Scale(pipSize)
+    pipH = PP.Scale(pipH)
+    gap = PP.Scale(gap)
+    pad = PP.Scale(pad)
     local totalW = maxPower * pipSize + (maxPower - 1) * gap + pad
     local totalH = pipH + pad
 
@@ -3522,7 +3466,7 @@ local function CreateCustomClassPower(playerFrame, style)
     cpBdrOverlay:SetAllPoints()
     cpBdrOverlay:SetFrameLevel(container:GetFrameLevel() + 20)
     local cpBottomBdr = cpBdrOverlay:CreateTexture(nil, "OVERLAY", nil, 7)
-    PP.Height(cpBottomBdr, 1)
+    cpBottomBdr:SetHeight(1)
     PP.Point(cpBottomBdr, "BOTTOMLEFT", cpBdrOverlay, "BOTTOMLEFT", 0, 0)
     PP.Point(cpBottomBdr, "BOTTOMRIGHT", cpBdrOverlay, "BOTTOMRIGHT", 0, 0)
     UnsnapTex(cpBottomBdr)
@@ -3553,9 +3497,9 @@ local function CreateCustomClassPower(playerFrame, style)
 
     local function MakePip(parent, index)
         local pip = CreateFrame("Frame", nil, parent)
-        pip:SetSize(pipSize, pipH)
+        PP.Size(pip, pipSize, pipH)
         local x = (index - 1) * (pipSize + gap) + pad / 2
-        pip:SetPoint("LEFT", parent, "LEFT", x, 0)
+        PP.Point(pip, "LEFT", parent, "LEFT", x, 0)
 
         -- Empty bar color (visible when pip is not filled)
         local pipEmpty = pip:CreateTexture(nil, "ARTWORK", nil, 0)
@@ -3634,8 +3578,8 @@ local function CreateCustomClassPower(playerFrame, style)
                 end
                 local x = (i - 1) * (pipSize + gap) + pad / 2
                 pips[i]:ClearAllPoints()
-                pips[i]:SetPoint("TOPLEFT", container, "TOPLEFT", x, 0)
-                pips[i]:SetSize(pipSize, pipH)
+                PP.Point(pips[i], "TOPLEFT", container, "TOPLEFT", x, 0)
+                PP.Size(pips[i], pipSize, pipH)
                 pips[i]:Show()
             end
         end
@@ -4858,15 +4802,7 @@ local function ReloadFrames()
                 else
                     PP.Point(frame.unifiedBorder, "TOPLEFT", frame, "TOPLEFT", 0, 0)
                     PP.Point(frame.unifiedBorder, "BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
-                    if frame.unifiedBorder._texs then
-                        for _, t in ipairs(frame.unifiedBorder._texs) do
-                            t:SetColorTexture(bc.r, bc.g, bc.b, 1)
-                        end
-                        PP.Height(frame.unifiedBorder._texs[1], bs)
-                        PP.Height(frame.unifiedBorder._texs[2], bs)
-                        PP.Width(frame.unifiedBorder._texs[3], bs)
-                        PP.Width(frame.unifiedBorder._texs[4], bs)
-                    end
+                    PP.UpdateBorder(frame.unifiedBorder, bs, bc.r, bc.g, bc.b, 1)
                     frame.unifiedBorder:Show()
                 end
             end
@@ -6092,12 +6028,6 @@ function EllesmereUF:OnInitialize()
         end
     end
 
-    -- Minimap button (shared across all Ellesmere addons Ã¢â‚¬â€ first to load wins)
-    -- Minimap button (handled by parent addon)
-    if not _EllesmereUI_MinimapRegistered and EllesmereUI and EllesmereUI.CreateMinimapButton then
-        EllesmereUI.CreateMinimapButton()
-    end
-
     -- Blizzard options panel is registered centrally in EllesmereUI.lua
 end
 
@@ -6112,3 +6042,4 @@ function EllesmereUF:OnEnable()
 
     -- Incompatible addon detection is handled globally by EllesmereUI
 end
+

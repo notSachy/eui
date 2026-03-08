@@ -1,7 +1,7 @@
-﻿-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
 --  EUI_Nameplates_Options.lua
 --  Registers the Nameplates module with EllesmereUI
---  Pure UI migration Ã¢â‚¬â€œ all get/set calls go to EllesmereUINameplatesDB,
+--  Pure UI migration â€“ all get/set calls go to EllesmereUINameplatesDB,
 --  same keys, same defaults, same refresh functions as the AceConfig version.
 --  Does NOT touch nameplate rendering logic.
 -------------------------------------------------------------------------------
@@ -63,7 +63,7 @@ initFrame:SetScript("OnEvent", function(self)
     local floor = math.floor
 
     ---------------------------------------------------------------------------
-    --  DB helper Ã¢â‚¬â€œ always reads live EllesmereUINameplatesDB
+    --  DB helper â€“ always reads live EllesmereUINameplatesDB
     ---------------------------------------------------------------------------
     local function DB()
         return EllesmereUINameplatesDB
@@ -168,10 +168,24 @@ initFrame:SetScript("OnEvent", function(self)
         "Fonts\\MORPHEUS.TTF",
         "Fonts\\skurri.ttf",
     }
+    if EllesmereUI.AppendSharedMediaFonts then
+        EllesmereUI.AppendSharedMediaFonts(fontValues, fontOrder)
+    end
 
     ---------------------------------------------------------------------------
     --  Health bar texture dropdown values (built from ns tables)
     ---------------------------------------------------------------------------
+    -- Append SharedMedia textures to the runtime ns tables first so both
+    -- the dropdown AND the live nameplate rendering can resolve SM keys.
+    if EllesmereUI.AppendSharedMediaTextures then
+        EllesmereUI.AppendSharedMediaTextures(
+            ns.healthBarTextureNames or {},
+            ns.healthBarTextureOrder or {},
+            nil,
+            ns.healthBarTextures
+        )
+    end
+
     local hbtValues = {}
     local hbtOrder = {}
     do
@@ -196,7 +210,7 @@ initFrame:SetScript("OnEvent", function(self)
     --  Live Preview System
     --
     --  A cosmetic-only enemy nameplate preview built from persistent frames.
-    --  Created once, updated via :Update() Ã¢â‚¬â€ no rebuilding, no GC pressure.
+    --  Created once, updated via :Update() â€” no rebuilding, no GC pressure.
     --  Reads current DB settings for colors, sizes, font, health number, etc.
     ---------------------------------------------------------------------------
     local activePreview
@@ -221,7 +235,7 @@ initFrame:SetScript("OnEvent", function(self)
     local _sliderDragShowRaidMarker = false
     local _sliderDragShowClassification = false
 
-    -- Persistent random preview values Ã¢â‚¬â€ regenerated only on tab switch, NOT on
+    -- Persistent random preview values â€” regenerated only on tab switch, NOT on
     -- profile changes or setting tweaks (which trigger fast-path RefreshPage rebuilds).
     local _previewHpPct
     local _previewCastFill
@@ -247,7 +261,7 @@ initFrame:SetScript("OnEvent", function(self)
     --- @param parentW number  available width
     --- @return number height consumed
     --- Build the nameplate preview in the content header area.
-    --- Exact 1:1 replica of a real enemy nameplate Ã¢â‚¬â€ same pixel sizes,
+    --- Exact 1:1 replica of a real enemy nameplate â€” same pixel sizes,
     --- same anchors, same fonts, same borders. No glow, no added effects.
     --- @param parent  Frame   contentHeaderFrame
     --- @param parentW number  available width
@@ -260,7 +274,7 @@ initFrame:SetScript("OnEvent", function(self)
         local BORDER_CORNER = 6
         local BORDER_TEX = "Interface\\AddOns\\EllesmereUINameplates\\Media\\border-colorless.png"
 
-        -- Container Ã¢â‚¬â€ sized in Update()
+        -- Container â€” sized in Update()
         local pf = CreateFrame("Frame", nil, parent)
         pf:SetPoint("TOP", parent, "TOP", 0, 0)
 
@@ -293,7 +307,7 @@ initFrame:SetScript("OnEvent", function(self)
         -- Icon textures whose insets (px, -px) need refreshing when scale changes
         local _insetIcons = {}
 
-        -- 1px black border helper Ã¢â‚¬â€œ uses Snap() for the preview's effective scale
+        -- 1px black border helper â€“ uses Snap() for the preview's effective scale
         -- (not PixelUtil, which snaps to screen pixels and can disagree with
         -- the preview's own pixel grid at certain panel scales)
         -- Returns a refresh function that re-snaps the 1px sizes when scale changes.
@@ -323,7 +337,7 @@ initFrame:SetScript("OnEvent", function(self)
             if tex.SetSnapToPixelGrid then tex:SetSnapToPixelGrid(false); tex:SetTexelSnappingBias(0) end
         end
 
-        -- Health bar Ã¢â‚¬â€ the central anchor for everything
+        -- Health bar â€” the central anchor for everything
         local health = CreateFrame("StatusBar", nil, pf)
         health:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
         UnsnapTex(health:GetStatusBarTexture())
@@ -350,7 +364,8 @@ initFrame:SetScript("OnEvent", function(self)
         -- Hash line on preview health bar
         local previewHashLine = health:CreateTexture(nil, "OVERLAY", nil, 3)
         previewHashLine:SetColorTexture(1, 1, 1, 0.8)
-        PP.Width(previewHashLine, 2)
+        UnsnapTex(previewHashLine)
+        previewHashLine:SetWidth(Snap(2))
         previewHashLine:SetPoint("TOP", health, "TOP", 0, 0)
         previewHashLine:SetPoint("BOTTOM", health, "BOTTOM", 0, 0)
         previewHashLine:Hide()
@@ -360,7 +375,7 @@ initFrame:SetScript("OnEvent", function(self)
 
         local BORDER_TEX_SIMPLE = "Interface\\AddOns\\EllesmereUINameplates\\Media\\border-simple.png"
 
-        -- Wrapper frame around the health bar Ã¢â‚¬â€ a plain Frame (not StatusBar).
+        -- Wrapper frame around the health bar â€” a plain Frame (not StatusBar).
         -- The image border is parented to this wrapper so it never interacts
         -- with StatusBar internals.  Sized to match the health bar exactly.
         local healthWrapper = CreateFrame("Frame", nil, pf)
@@ -385,7 +400,7 @@ initFrame:SetScript("OnEvent", function(self)
                 f._texs[#f._texs + 1] = t
                 return t
             end
-            -- Corners Ã¢â‚¬â€ inset UV by half a texel (T) from texture edges (0.0 and 1.0)
+            -- Corners â€” inset UV by half a texel (T) from texture edges (0.0 and 1.0)
             -- so the GPU fully samples the outermost solid pixel line.
             local T = 0.042
             local function UnsnapAfter(t)
@@ -418,10 +433,10 @@ initFrame:SetScript("OnEvent", function(self)
             if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
             return t
         end
-        local solidT = MkSolidEdge(); PP.Height(solidT, 1); PP.Point(solidT, "TOPLEFT", healthWrapper, "TOPLEFT", 0, 0); PP.Point(solidT, "TOPRIGHT", healthWrapper, "TOPRIGHT", 0, 0)
-        local solidB = MkSolidEdge(); PP.Height(solidB, 1); PP.Point(solidB, "BOTTOMLEFT", healthWrapper, "BOTTOMLEFT", 0, 0); PP.Point(solidB, "BOTTOMRIGHT", healthWrapper, "BOTTOMRIGHT", 0, 0)
-        local solidL = MkSolidEdge(); PP.Width(solidL, 1); PP.Point(solidL, "TOPLEFT", healthWrapper, "TOPLEFT", 0, 0); PP.Point(solidL, "BOTTOMLEFT", healthWrapper, "BOTTOMLEFT", 0, 0)
-        local solidR = MkSolidEdge(); PP.Width(solidR, 1); PP.Point(solidR, "TOPRIGHT", healthWrapper, "TOPRIGHT", 0, 0); PP.Point(solidR, "BOTTOMRIGHT", healthWrapper, "BOTTOMRIGHT", 0, 0)
+        local solidT = MkSolidEdge(); solidT:SetHeight(1); PP.Point(solidT, "TOPLEFT", healthWrapper, "TOPLEFT", 0, 0); PP.Point(solidT, "TOPRIGHT", healthWrapper, "TOPRIGHT", 0, 0)
+        local solidB = MkSolidEdge(); solidB:SetHeight(1); PP.Point(solidB, "BOTTOMLEFT", healthWrapper, "BOTTOMLEFT", 0, 0); PP.Point(solidB, "BOTTOMRIGHT", healthWrapper, "BOTTOMRIGHT", 0, 0)
+        local solidL = MkSolidEdge(); solidL:SetWidth(1); PP.Point(solidL, "TOPLEFT", healthWrapper, "TOPLEFT", 0, 0); PP.Point(solidL, "BOTTOMLEFT", healthWrapper, "BOTTOMLEFT", 0, 0)
+        local solidR = MkSolidEdge(); solidR:SetWidth(1); PP.Point(solidR, "TOPRIGHT", healthWrapper, "TOPRIGHT", 0, 0); PP.Point(solidR, "BOTTOMRIGHT", healthWrapper, "BOTTOMRIGHT", 0, 0)
         local _solidEdges = { solidT, solidB, solidL, solidR }
 
         -- 9-slice soft glow frame for EllesmereUI target glow preview
@@ -511,7 +526,7 @@ initFrame:SetScript("OnEvent", function(self)
         arrows.right:Hide()
         pf._arrows = arrows  -- expose for Update resizing
 
-        -- Classification icon (elite dragon) Ã¢â‚¬â€ shown when transient toggle is on
+        -- Classification icon (elite dragon) â€” shown when transient toggle is on
         local classIcon = pf:CreateTexture(nil, "OVERLAY")
         classIcon:SetTexture("Interface\\AddOns\\EllesmereUI\\media\\elite-rare-indicator.png")
         classIcon:SetSize(24, 24)
@@ -570,7 +585,7 @@ initFrame:SetScript("OnEvent", function(self)
         castParts.targetFS:SetMaxLines(1)
         castParts.targetFS:SetText(UnitName("player") or "Spell Target")
 
-        -- Class power pips (cosmetic preview Ã¢â‚¬â€ queries live class/spec resource count)
+        -- Class power pips (cosmetic preview â€” queries live class/spec resource count)
         -- Packed into a single table to stay under Lua's 60-upvalue limit.
         local CP = {
             PIP_W = 8, PIP_H = 3, PIP_GAP = 2,
@@ -630,8 +645,8 @@ initFrame:SetScript("OnEvent", function(self)
         -- Debuffs: 2 icons centered above name
         local debuffs = {}
         local debuffData = {
-            { icon = 136207, text = "8",  dur = 12, elapsed = 4, stacks = 3 },  -- SW:P  (12s total, 4s elapsed Ã¢â€ â€™ 8s left, 3 stacks)
-            { icon = 135978, text = "14", dur = 18, elapsed = 4, stacks = 0 },  -- VT    (18s total, 4s elapsed Ã¢â€ â€™ 14s left)
+            { icon = 136207, text = "8",  dur = 12, elapsed = 4, stacks = 3 },  -- SW:P  (12s total, 4s elapsed â†’ 8s left, 3 stacks)
+            { icon = 135978, text = "14", dur = 18, elapsed = 4, stacks = 0 },  -- VT    (18s total, 4s elapsed â†’ 14s left)
         }
         for i = 1, PV_CONST.DEBUFF_COUNT do
             local d = CreateFrame("Frame", nil, pf)
@@ -734,7 +749,7 @@ initFrame:SetScript("OnEvent", function(self)
         local _cachedRawBarW, _cachedXOff
 
         -------------------------------------------------------------------
-        --  Update Ã¢â‚¬â€ re-reads DB, applies to existing frames. No rebuilds.
+        --  Update â€” re-reads DB, applies to existing frames. No rebuilds.
         -------------------------------------------------------------------
         pf.Update = function(self)
             local fontPath   = (EllesmereUI and EllesmereUI.GetFontPath and EllesmereUI.GetFontPath("nameplates")) or DBVal("font")
@@ -866,7 +881,7 @@ initFrame:SetScript("OnEvent", function(self)
                 if pf._raidOverlay then pf._raidOverlay:Show() end
             end
 
-            -- Classification icon (elite dragon) Ã¢â‚¬â€ slot-based
+            -- Classification icon (elite dragon) â€” slot-based
             classIcon:ClearAllPoints()
             local clXOff, clYOff = 0, 0
             if clPos ~= "none" then
@@ -897,7 +912,7 @@ initFrame:SetScript("OnEvent", function(self)
                 if pf._classOverlay then pf._classOverlay:Show() end
             end
 
-            -- Arrow push is no longer used Ã¢â‚¬â€ arrows are placed OUTSIDE auras now
+            -- Arrow push is no longer used â€” arrows are placed OUTSIDE auras now
             -- (arrow positioning happens after all auras are placed)
 
             -- Cast bar: full health bar width, icon hangs outside left edge
@@ -925,7 +940,7 @@ initFrame:SetScript("OnEvent", function(self)
             -- Name font + color + position (font size set per-slot below)
             local nameYOff = DBVal("nameYOffset") or defaults.nameYOffset
 
-            -- Ã¢â€â‚¬Ã¢â€â‚¬ Slot-based text positioning Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+            -- â”€â”€ Slot-based text positioning â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             -- Read slot assignments
             local slotTop    = DBVal("textSlotTop") or defaults.textSlotTop
             local slotRight  = DBVal("textSlotRight") or defaults.textSlotRight
@@ -1324,7 +1339,7 @@ initFrame:SetScript("OnEvent", function(self)
                 if pf._arrowOverlay then pf._arrowOverlay:Hide() end
             end
 
-            -- Height calculation Ã¢â‚¬â€ "top" slot determines the area above the name
+            -- Height calculation â€” "top" slot determines the area above the name
             -- Find which aura type is in the "top" slot for height,
             -- including per-slot Y offsets that push elements further up.
             local topExtent = 0
@@ -1507,7 +1522,6 @@ initFrame:SetScript("OnEvent", function(self)
                     local scaledH   = Snap(CP.PIP_H * cpScale)
                     local scaledGap = Snap(cpGap * cpScale)
                     local totalPipW = cpMax * scaledW + (cpMax - 1) * scaledGap
-                    local startX    = Snap(-totalPipW / 2 + scaledW / 2)
 
                     -- Determine anchor frame and direction
                     local anchorPoint, anchorRelPoint, anchorFrame, yDir
@@ -1526,13 +1540,25 @@ initFrame:SetScript("OnEvent", function(self)
 
                     local cpEmptyCol = (DB() and DB().classPowerEmptyColor) or defaults.classPowerEmptyColor
 
+                    -- Pre-compute each pip's left-edge X in group-local coords.
+                    -- Position by BOTTOMLEFT/TOPLEFT to avoid half-pixel center offsets.
+                    local pipPositions = {}
+                    for i = 1, cpMax do
+                        pipPositions[i] = Snap((i - 1) * (scaledW + scaledGap))
+                    end
+                    local groupW = pipPositions[cpMax] + scaledW
+                    local halfGroup = Snap(groupW / 2)
+
+                    local leftAnchor = (anchorPoint == "BOTTOM") and "BOTTOMLEFT" or "TOPLEFT"
+
                     for i = 1, CP.MAX_POSSIBLE do
                         local pip = CP.pips[i]
                         if i <= cpMax then
                             pip:ClearAllPoints()
                             pip:SetSize(scaledW, scaledH)
-                            pip:SetPoint(anchorPoint, anchorFrame, anchorRelPoint,
-                                Snap(startX + (i - 1) * (scaledW + scaledGap) + cpXOff), Snap(yDir * cpYOff))
+                            local pipLeftX = Snap(pipPositions[i] - halfGroup + cpXOff)
+                            pip:SetPoint(leftAnchor, anchorFrame, anchorRelPoint,
+                                pipLeftX, Snap(yDir * cpYOff))
 
                             -- Background behind each pip
                             local bg = pip._bg
@@ -1902,7 +1928,7 @@ initFrame:SetScript("OnEvent", function(self)
                     t3:SetPoint("TOPLEFT", pf, "TOPLEFT", SLIDER_LEFT, r3Y - 2)
                     v3:ClearAllPoints(); v3:SetPoint("TOPRIGHT", pf, "TOPRIGHT", -SIDE_PAD, r3Y)
 
-                    -- Row 4: Show Health Percent (toggle Ã¢â‚¬â€ inverted from friendlyHideHealthText)
+                    -- Row 4: Show Health Percent (toggle â€” inverted from friendlyHideHealthText)
                     local r4Y = r3Y - ROW_H - GAP
                     local lbl4 = MakeFont(pf, 11, nil, 1, 1, 1); lbl4:SetAlpha(0.6)
                     lbl4:SetText("Show Health Percent"); lbl4:SetPoint("TOPLEFT", pf, "TOPLEFT", SIDE_PAD, r4Y)
@@ -2382,13 +2408,14 @@ initFrame:SetScript("OnEvent", function(self)
 
             -- 1px black border
             local function AddIconBorder(p)
+                local onePx = PP.Scale(1)
                 local function mkB(anchor1, rel, anchor2, isH)
                     local t = p:CreateTexture(nil, "OVERLAY", nil, 7)
                     t:SetColorTexture(0, 0, 0, 1)
                     if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
                     PP.Point(t, anchor1, p, anchor1, 0, 0)
                     PP.Point(t, anchor2, p, anchor2, 0, 0)
-                    if isH then PP.Height(t, 1) else PP.Width(t, 1) end
+                    if isH then t:SetHeight(onePx) else t:SetWidth(onePx) end
                     return t
                 end
                 local tEdge = mkB("TOPLEFT", p, "TOPRIGHT", true)
@@ -2398,13 +2425,13 @@ initFrame:SetScript("OnEvent", function(self)
                 if lEdge.SetSnapToPixelGrid then lEdge:SetSnapToPixelGrid(false); lEdge:SetTexelSnappingBias(0) end
                 PP.Point(lEdge, "TOPLEFT", tEdge, "BOTTOMLEFT", 0, 0)
                 PP.Point(lEdge, "BOTTOMLEFT", bEdge, "TOPLEFT", 0, 0)
-                PP.Width(lEdge, 1)
+                lEdge:SetWidth(onePx)
                 local rEdge = p:CreateTexture(nil, "OVERLAY", nil, 7)
                 rEdge:SetColorTexture(0, 0, 0, 1)
                 if rEdge.SetSnapToPixelGrid then rEdge:SetSnapToPixelGrid(false); rEdge:SetTexelSnappingBias(0) end
                 PP.Point(rEdge, "TOPRIGHT", tEdge, "BOTTOMRIGHT", 0, 0)
                 PP.Point(rEdge, "BOTTOMRIGHT", bEdge, "TOPRIGHT", 0, 0)
-                PP.Width(rEdge, 1)
+                rEdge:SetWidth(onePx)
             end
             AddIconBorder(iconFrame)
 
@@ -2823,7 +2850,7 @@ initFrame:SetScript("OnEvent", function(self)
         -----------------------------------------------------------------------
         local slotKeys = { "debuffSlot", "buffSlot", "ccSlot", "raidMarkerPos", "classificationSlot" }
 
-        -- Inverted mapping: position Ã¢â€ â€™ element (for CORE POSITIONS dropdowns)
+        -- Inverted mapping: position â†’ element (for CORE POSITIONS dropdowns)
         local elementToKey = {
             debuffs        = "debuffSlot",
             buffs          = "buffSlot",
@@ -3220,7 +3247,7 @@ initFrame:SetScript("OnEvent", function(self)
         local COGS_ICON = EllesmereUI.COGS_ICON
 
         -- opts = { title, xGet, xSet, yGet, ySet, sizeGet, sizeSet, sizeMin, sizeMax, sizeStep, sizeLabel }
-        -- sizeGet may be nil Ã¢â€ â€™ no size row shown
+        -- sizeGet may be nil â†’ no size row shown
         local function ShowCogPopup(anchorBtn, opts)
             if not cogPopup then
                 local SolidTex = EllesmereUI.SolidTex
@@ -4488,20 +4515,22 @@ initFrame:SetScript("OnEvent", function(self)
                 local function MkEdge()
                     local t = glowFrame:CreateTexture(nil, "OVERLAY", nil, 7)
                     t:SetColorTexture(c.r, c.g, c.b, 1)
+                    if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
                     return t
                 end
                 glowFrame._top = MkEdge()
                 glowFrame._bot = MkEdge()
                 glowFrame._lft = MkEdge()
                 glowFrame._rgt = MkEdge()
-                glowFrame._top:SetHeight(2)
+                local glowPx = PP.Scale(2)
+                glowFrame._top:SetHeight(glowPx)
                 glowFrame._top:SetPoint("TOPLEFT"); glowFrame._top:SetPoint("TOPRIGHT")
-                glowFrame._bot:SetHeight(2)
+                glowFrame._bot:SetHeight(glowPx)
                 glowFrame._bot:SetPoint("BOTTOMLEFT"); glowFrame._bot:SetPoint("BOTTOMRIGHT")
-                glowFrame._lft:SetWidth(2)
+                glowFrame._lft:SetWidth(glowPx)
                 glowFrame._lft:SetPoint("TOPLEFT", glowFrame._top, "BOTTOMLEFT")
                 glowFrame._lft:SetPoint("BOTTOMLEFT", glowFrame._bot, "TOPLEFT")
-                glowFrame._rgt:SetWidth(2)
+                glowFrame._rgt:SetWidth(glowPx)
                 glowFrame._rgt:SetPoint("TOPRIGHT", glowFrame._top, "BOTTOMRIGHT")
                 glowFrame._rgt:SetPoint("BOTTOMRIGHT", glowFrame._bot, "TOPRIGHT")
             end
@@ -4556,7 +4585,7 @@ initFrame:SetScript("OnEvent", function(self)
             return nil
         end
 
-        -- Resolve a dynamic click mapping for icon elements Ã¢â€ â€™ Core Positions row
+        -- Resolve a dynamic click mapping for icon elements â†’ Core Positions row
         local function ResolveCoreMapping(element)
             local pos = FindCorePosForElement(element)
             if not pos then return { section = coreHeader, target = coreRow1 } end
@@ -4565,7 +4594,7 @@ initFrame:SetScript("OnEvent", function(self)
             return { section = coreHeader, target = info.row, slotSide = (info.side == "_leftRegion") and "left" or "right" }
         end
 
-        -- Resolve a dynamic click mapping for text elements Ã¢â€ â€™ Core Text Positions row
+        -- Resolve a dynamic click mapping for text elements â†’ Core Text Positions row
         local function ResolveTextMapping(element)
             local slotKey = FindTextSlotForElement(element)
             if not slotKey then return { section = coreTextHeader, target = textRow1 } end
@@ -4661,9 +4690,14 @@ initFrame:SetScript("OnEvent", function(self)
 
         -- Hit overlay factory for preview elements
         -- opts (optional table):
-        --   hlAnchor     = frame Ã¢â€ â€™ draw highlight around this frame instead of btn
-        --   hlBehindText = true  Ã¢â€ â€™ draw highlight on a child frame at icon level + 1
+        --   hlAnchor     = frame â†’ draw highlight around this frame instead of btn
+        --   hlBehindText = true  â†’ draw highlight on a child frame at icon level + 1
         --                          (text lives on a child frame at icon level + 2)
+        local function SnapPreview(val)
+            local s = activePreview and activePreview:GetEffectiveScale() or 1
+            if s <= 0 then s = 1 end
+            return math.floor(val * s + 0.5) / s
+        end
         local function CreateHitOverlay(element, mappingKey, isText, frameLevelOverride, opts)
             local anchor = isText and element:GetParent() or element
             -- If the element is a Texture (not a Frame), parent to its owner frame
@@ -4723,10 +4757,11 @@ initFrame:SetScript("OnEvent", function(self)
                 if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
                 return t
             end
-            local ht = MkHL(); PP.Height(ht, 2); ht:SetPoint("TOPLEFT", hlAnchorFrame, "TOPLEFT"); ht:SetPoint("TOPRIGHT", hlAnchorFrame, "TOPRIGHT")
-            local hb = MkHL(); PP.Height(hb, 2); hb:SetPoint("BOTTOMLEFT", hlAnchorFrame, "BOTTOMLEFT"); hb:SetPoint("BOTTOMRIGHT", hlAnchorFrame, "BOTTOMRIGHT")
-            local hl = MkHL(); PP.Width(hl, 2); hl:SetPoint("TOPLEFT", ht, "BOTTOMLEFT"); hl:SetPoint("BOTTOMLEFT", hb, "TOPLEFT")
-            local hr = MkHL(); PP.Width(hr, 2); hr:SetPoint("TOPRIGHT", ht, "BOTTOMRIGHT"); hr:SetPoint("BOTTOMRIGHT", hb, "TOPRIGHT")
+            local hlPx = SnapPreview(2)
+            local ht = MkHL(); ht:SetHeight(hlPx); ht:SetPoint("TOPLEFT", hlAnchorFrame, "TOPLEFT"); ht:SetPoint("TOPRIGHT", hlAnchorFrame, "TOPRIGHT")
+            local hb = MkHL(); hb:SetHeight(hlPx); hb:SetPoint("BOTTOMLEFT", hlAnchorFrame, "BOTTOMLEFT"); hb:SetPoint("BOTTOMRIGHT", hlAnchorFrame, "BOTTOMRIGHT")
+            local hl = MkHL(); hl:SetWidth(hlPx); hl:SetPoint("TOPLEFT", ht, "BOTTOMLEFT"); hl:SetPoint("BOTTOMLEFT", hb, "TOPLEFT")
+            local hr = MkHL(); hr:SetWidth(hlPx); hr:SetPoint("TOPRIGHT", ht, "BOTTOMRIGHT"); hr:SetPoint("BOTTOMRIGHT", hb, "TOPRIGHT")
             btn._hlTextures = { ht, hb, hl, hr }
             local function ShowHL() for _, t in ipairs(btn._hlTextures) do t:Show() end end
             local function HideHL() for _, t in ipairs(btn._hlTextures) do t:Hide() end end
@@ -4784,7 +4819,7 @@ initFrame:SetScript("OnEvent", function(self)
                     end
                 end
             end
-            -- Cast icon overlay (separate from cast bar Ã¢â‚¬â€ navigates to Show Spell Icon row)
+            -- Cast icon overlay (separate from cast bar â€” navigates to Show Spell Icon row)
             local castOverlayLevel
             if pv._cast then
                 castOverlayLevel = pv._cast:GetFrameLevel() + 20
@@ -4801,10 +4836,11 @@ initFrame:SetScript("OnEvent", function(self)
                         if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
                         return t
                     end
-                    local it = MkIOHL(); PP.Height(it, 2); it:SetPoint("TOPLEFT"); it:SetPoint("TOPRIGHT")
-                    local ib = MkIOHL(); PP.Height(ib, 2); ib:SetPoint("BOTTOMLEFT"); ib:SetPoint("BOTTOMRIGHT")
-                    local il = MkIOHL(); PP.Width(il, 2); il:SetPoint("TOPLEFT", it, "BOTTOMLEFT"); il:SetPoint("BOTTOMLEFT", ib, "TOPLEFT")
-                    local ir = MkIOHL(); PP.Width(ir, 2); ir:SetPoint("TOPRIGHT", it, "BOTTOMRIGHT"); ir:SetPoint("BOTTOMRIGHT", ib, "TOPRIGHT")
+                    local ioPx = SnapPreview(2)
+                    local it = MkIOHL(); it:SetHeight(ioPx); it:SetPoint("TOPLEFT"); it:SetPoint("TOPRIGHT")
+                    local ib = MkIOHL(); ib:SetHeight(ioPx); ib:SetPoint("BOTTOMLEFT"); ib:SetPoint("BOTTOMRIGHT")
+                    local il = MkIOHL(); il:SetWidth(ioPx); il:SetPoint("TOPLEFT", it, "BOTTOMLEFT"); il:SetPoint("BOTTOMLEFT", ib, "TOPLEFT")
+                    local ir = MkIOHL(); ir:SetWidth(ioPx); ir:SetPoint("TOPRIGHT", it, "BOTTOMRIGHT"); ir:SetPoint("BOTTOMRIGHT", ib, "TOPRIGHT")
                     iconOv._hlTextures = { it, ib, il, ir }
                     local function ShowIOHL() for _, t in ipairs(iconOv._hlTextures) do t:Show() end end
                     local function HideIOHL() for _, t in ipairs(iconOv._hlTextures) do t:Hide() end end
@@ -4824,10 +4860,11 @@ initFrame:SetScript("OnEvent", function(self)
                     if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
                     return t
                 end
-                local ct = MkCHL(); PP.Height(ct, 2); ct:SetPoint("TOPLEFT"); ct:SetPoint("TOPRIGHT")
-                local cb = MkCHL(); PP.Height(cb, 2); cb:SetPoint("BOTTOMLEFT"); cb:SetPoint("BOTTOMRIGHT")
-                local cl = MkCHL(); PP.Width(cl, 2); cl:SetPoint("TOPLEFT", ct, "BOTTOMLEFT"); cl:SetPoint("BOTTOMLEFT", cb, "TOPLEFT")
-                local cr = MkCHL(); PP.Width(cr, 2); cr:SetPoint("TOPRIGHT", ct, "BOTTOMRIGHT"); cr:SetPoint("BOTTOMRIGHT", cb, "TOPRIGHT")
+                local coPx = SnapPreview(2)
+                local ct = MkCHL(); ct:SetHeight(coPx); ct:SetPoint("TOPLEFT"); ct:SetPoint("TOPRIGHT")
+                local cb = MkCHL(); cb:SetHeight(coPx); cb:SetPoint("BOTTOMLEFT"); cb:SetPoint("BOTTOMRIGHT")
+                local cl = MkCHL(); cl:SetWidth(coPx); cl:SetPoint("TOPLEFT", ct, "BOTTOMLEFT"); cl:SetPoint("BOTTOMLEFT", cb, "TOPLEFT")
+                local cr = MkCHL(); cr:SetWidth(coPx); cr:SetPoint("TOPRIGHT", ct, "BOTTOMRIGHT"); cr:SetPoint("BOTTOMRIGHT", cb, "TOPRIGHT")
                 castOverlay._hlTextures = { ct, cb, cl, cr }
                 local function ShowCHL() for _, t in ipairs(castOverlay._hlTextures) do t:Show() end end
                 local function HideCHL() for _, t in ipairs(castOverlay._hlTextures) do t:Hide() end end
@@ -4872,7 +4909,7 @@ initFrame:SetScript("OnEvent", function(self)
                 classOverlay = CreateHitOverlay(pv._classIcon, "classIcon")
                 if not showClassificationPreview then classOverlay:Hide() end
             end
-            -- Class resource pips Ã¢â‚¬â€ wrapper button spanning all visible pips
+            -- Class resource pips â€” wrapper button spanning all visible pips
             local cpOverlay
             if pv._cpPips then
                 local firstVis, lastVis
@@ -4899,10 +4936,11 @@ initFrame:SetScript("OnEvent", function(self)
                         if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
                         return t
                     end
-                    local cpt = MkCPHL(); PP.Height(cpt, 2); cpt:SetPoint("TOPLEFT"); cpt:SetPoint("TOPRIGHT")
-                    local cpb = MkCPHL(); PP.Height(cpb, 2); cpb:SetPoint("BOTTOMLEFT"); cpb:SetPoint("BOTTOMRIGHT")
-                    local cpl = MkCPHL(); PP.Width(cpl, 2); cpl:SetPoint("TOPLEFT", cpt, "BOTTOMLEFT"); cpl:SetPoint("BOTTOMLEFT", cpb, "TOPLEFT")
-                    local cpr = MkCPHL(); PP.Width(cpr, 2); cpr:SetPoint("TOPRIGHT", cpt, "BOTTOMRIGHT"); cpr:SetPoint("BOTTOMRIGHT", cpb, "TOPRIGHT")
+                    local cpPx = SnapPreview(2)
+                    local cpt = MkCPHL(); cpt:SetHeight(cpPx); cpt:SetPoint("TOPLEFT"); cpt:SetPoint("TOPRIGHT")
+                    local cpb = MkCPHL(); cpb:SetHeight(cpPx); cpb:SetPoint("BOTTOMLEFT"); cpb:SetPoint("BOTTOMRIGHT")
+                    local cpl = MkCPHL(); cpl:SetWidth(cpPx); cpl:SetPoint("TOPLEFT", cpt, "BOTTOMLEFT"); cpl:SetPoint("BOTTOMLEFT", cpb, "TOPLEFT")
+                    local cpr = MkCPHL(); cpr:SetWidth(cpPx); cpr:SetPoint("TOPRIGHT", cpt, "BOTTOMRIGHT"); cpr:SetPoint("BOTTOMRIGHT", cpb, "TOPRIGHT")
                     cpBtn._hlTextures = { cpt, cpb, cpl, cpr }
                     local function ShowCPHL() for _, t in ipairs(cpBtn._hlTextures) do t:Show() end end
                     local function HideCPHL() for _, t in ipairs(cpBtn._hlTextures) do t:Hide() end end
@@ -4924,7 +4962,7 @@ initFrame:SetScript("OnEvent", function(self)
             -- Sync overlay visibility with preview toggles
             pv._raidOverlay = raidOverlay
             pv._classOverlay = classOverlay
-            -- Target arrows Ã¢â‚¬â€ wrapper button spanning both arrow textures
+            -- Target arrows â€” wrapper button spanning both arrow textures
             local arrowOverlay
             if pv._arrows then
                 local arrowBtn = CreateFrame("Button", nil, pv)
@@ -4940,15 +4978,16 @@ initFrame:SetScript("OnEvent", function(self)
                     return t
                 end
                 -- Highlight on left arrow
-                local alt = MkAHL(); PP.Height(alt, 2); alt:SetPoint("TOPLEFT", pv._arrows.left, -2, 2); alt:SetPoint("TOPRIGHT", pv._arrows.left, 2, 2)
-                local alb = MkAHL(); PP.Height(alb, 2); alb:SetPoint("BOTTOMLEFT", pv._arrows.left, -2, -2); alb:SetPoint("BOTTOMRIGHT", pv._arrows.left, 2, -2)
-                local all = MkAHL(); PP.Width(all, 2); all:SetPoint("TOPLEFT", alt, "BOTTOMLEFT"); all:SetPoint("BOTTOMLEFT", alb, "TOPLEFT")
-                local alr = MkAHL(); PP.Width(alr, 2); alr:SetPoint("TOPRIGHT", alt, "BOTTOMRIGHT"); alr:SetPoint("BOTTOMRIGHT", alb, "TOPRIGHT")
+                local aPx = SnapPreview(2)
+                local alt = MkAHL(); alt:SetHeight(aPx); alt:SetPoint("TOPLEFT", pv._arrows.left, -2, 2); alt:SetPoint("TOPRIGHT", pv._arrows.left, 2, 2)
+                local alb = MkAHL(); alb:SetHeight(aPx); alb:SetPoint("BOTTOMLEFT", pv._arrows.left, -2, -2); alb:SetPoint("BOTTOMRIGHT", pv._arrows.left, 2, -2)
+                local all = MkAHL(); all:SetWidth(aPx); all:SetPoint("TOPLEFT", alt, "BOTTOMLEFT"); all:SetPoint("BOTTOMLEFT", alb, "TOPLEFT")
+                local alr = MkAHL(); alr:SetWidth(aPx); alr:SetPoint("TOPRIGHT", alt, "BOTTOMRIGHT"); alr:SetPoint("BOTTOMRIGHT", alb, "TOPRIGHT")
                 -- Highlight on right arrow
-                local art = MkAHL(); PP.Height(art, 2); art:SetPoint("TOPLEFT", pv._arrows.right, -2, 2); art:SetPoint("TOPRIGHT", pv._arrows.right, 2, 2)
-                local arb = MkAHL(); PP.Height(arb, 2); arb:SetPoint("BOTTOMLEFT", pv._arrows.right, -2, -2); arb:SetPoint("BOTTOMRIGHT", pv._arrows.right, 2, -2)
-                local arl = MkAHL(); PP.Width(arl, 2); arl:SetPoint("TOPLEFT", art, "BOTTOMLEFT"); arl:SetPoint("BOTTOMLEFT", arb, "TOPLEFT")
-                local arr = MkAHL(); PP.Width(arr, 2); arr:SetPoint("TOPRIGHT", art, "BOTTOMRIGHT"); arr:SetPoint("BOTTOMRIGHT", arb, "TOPRIGHT")
+                local art = MkAHL(); art:SetHeight(aPx); art:SetPoint("TOPLEFT", pv._arrows.right, -2, 2); art:SetPoint("TOPRIGHT", pv._arrows.right, 2, 2)
+                local arb = MkAHL(); arb:SetHeight(aPx); arb:SetPoint("BOTTOMLEFT", pv._arrows.right, -2, -2); arb:SetPoint("BOTTOMRIGHT", pv._arrows.right, 2, -2)
+                local arl = MkAHL(); arl:SetWidth(aPx); arl:SetPoint("TOPLEFT", art, "BOTTOMLEFT"); arl:SetPoint("BOTTOMLEFT", arb, "TOPLEFT")
+                local arr = MkAHL(); arr:SetWidth(aPx); arr:SetPoint("TOPRIGHT", art, "BOTTOMRIGHT"); arr:SetPoint("BOTTOMRIGHT", arb, "TOPRIGHT")
                 arrowBtn._hlTextures = { alt, alb, all, alr, art, arb, arl, arr }
                 local function ShowAHL() for _, t in ipairs(arrowBtn._hlTextures) do t:Show() end end
                 local function HideAHL() for _, t in ipairs(arrowBtn._hlTextures) do t:Hide() end end
@@ -4988,7 +5027,7 @@ initFrame:SetScript("OnEvent", function(self)
         return castIconPool[castIconIdx]
     end
 
-    -- Cast fill values: each at least 5% apart, range 40Ã¢â‚¬â€œ90%
+    -- Cast fill values: each at least 5% apart, range 40â€“90%
     local castFillUsed = {}
     local function ResetCastFills()
         for i = #castFillUsed, 1, -1 do castFillUsed[i] = nil end
@@ -5076,7 +5115,7 @@ initFrame:SetScript("OnEvent", function(self)
             bg:SetAllPoints()
             bg:SetColorTexture(0.20, 0.20, 0.20, 1.0)
 
-            -- 1px solid border Ã¢â‚¬â€ on a dedicated frame ABOVE the health StatusBar
+            -- 1px solid border â€” on a dedicated frame ABOVE the health StatusBar
             -- so the border renders on top (child frames cover parent textures).
             -- Parented to container (not health) so it stays at full opacity
             -- when the health bar is dimmed via SetDisabled.
@@ -5273,7 +5312,7 @@ initFrame:SetScript("OnEvent", function(self)
             spark:SetPoint("CENTER", cast:GetStatusBarTexture(), "RIGHT", 0, 0)
             spark:SetBlendMode("ADD")
 
-            -- Cast icon frame (to the left) Ã¢â‚¬â€ no border for Colors tab previews
+            -- Cast icon frame (to the left) â€” no border for Colors tab previews
             local iconFrame = CreateFrame("Frame", nil, cast)
             iconFrame:SetSize(BAR_H + 2, BAR_H + 2)
             iconFrame:SetPoint("RIGHT", cast, "LEFT", 0, 0)
@@ -5464,7 +5503,7 @@ initFrame:SetScript("OnEvent", function(self)
         -- ShuffleCastIcons()  -- disabled: no cast previews on Colors page
         -- ResetCastFills()    -- disabled: no cast previews on Colors page
 
-        --[[ COLOR PRESET SYSTEM (disabled Ã¢â‚¬â€ kept for future use)
+        --[[ COLOR PRESET SYSTEM (disabled â€” kept for future use)
         -- Color preset keys
         local colorPresetKeys = {
             "focusColorEnabled", "focus", "focusOverlayTexture", "focusOverlayAlpha", "focusOverlayColor", "caster", "miniboss", "enemyInCombat",
@@ -5670,7 +5709,7 @@ initFrame:SetScript("OnEvent", function(self)
             cogBtn:EnableMouse(not isFocusTextureNone())
         end
 
-        -- Focus preview bar Ã¢â‚¬â€ anchored so its right edge aligns with the
+        -- Focus preview bar â€” anchored so its right edge aligns with the
         -- Enable Focus Color toggle's right edge (SIDE_PAD = 20 from region edge).
         -- MakeColorPreviewBar positions the bar at -(20+24+27) = -71 to leave room
         -- for a swatch; we override that to -20 since there's no swatch here.
@@ -5940,7 +5979,7 @@ initFrame:SetScript("OnEvent", function(self)
                 RandomizePreviewValues()
                 -- Refresh the preview after cache restore
                 if activePreview and activePreview.Update then activePreview:Update() end
-                -- Refresh hint visibility Ã¢â‚¬â€ never recreate here, just show/hide
+                -- Refresh hint visibility â€” never recreate here, just show/hide
                 local dismissed = IsPreviewHintDismissed()
                 if _previewHintFS then
                     if dismissed then
@@ -5996,7 +6035,7 @@ initFrame:SetScript("OnEvent", function(self)
     })
 
     ---------------------------------------------------------------------------
-    --  Slash command  /enp  Ã¢â‚¬â€ opens EllesmereUI to the Nameplates module
+    --  Slash command  /enp  â€” opens EllesmereUI to the Nameplates module
     ---------------------------------------------------------------------------
     SLASH_ELLESMERENAMEPLATES1 = "/enp"
     SlashCmdList.ELLESMERENAMEPLATES = function(msg)

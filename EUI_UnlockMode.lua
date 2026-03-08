@@ -123,6 +123,7 @@ local openAnimFrame        -- lock animation frame (open)
 local logoFadeFrame        -- the 2s logo+title fade-out timer frame
 local pendingPositions = {}   -- { [barKey] = {point,relPoint,x,y} } — unsaved changes
 local snapshotPositions = {}  -- original positions captured when unlock mode opens
+local snapshotAnchors = {}    -- original anchor data captured when unlock mode opens
 local hasChanges = false      -- true if user dragged anything this session
 local snapHighlightKey = nil   -- barKey of mover currently showing snap highlight border
 local snapHighlightAnim = nil  -- OnUpdate frame for the pulsing border
@@ -171,6 +172,54 @@ local _overlayFadeFrame         -- tiny OnUpdate driver for select-element dimme
 local SELECT_ELEMENT_ALPHA = 0.50  -- overlay alpha during select-element pick mode
 local SELECT_ELEMENT_FADE  = 0.50  -- seconds for the fade transition
 
+-- Width Match / Height Match / Anchor To pick modes
+-- Only one pick mode can be active at a time. The active picker mover is stored here.
+local pickMode = nil           -- nil, "widthMatch", "heightMatch", "anchorTo"
+local pickModeMover = nil      -- the mover that initiated the pick mode
+local anchorDropdownFrame = nil -- lazy-created dropdown for anchor direction selection
+local anchorDropdownCatcher = nil -- click-catcher behind anchor dropdown
+
+-------------------------------------------------------------------------------
+--  Anchor / Match DB helpers
+--  Stored in EllesmereUIDB.unlockAnchors = { [childKey] = { target=key, side="LEFT"|"RIGHT"|"TOP"|"BOTTOM" } }
+--  Width/height matches are applied immediately and saved to the element's
+--  own settings — no persistent "match" relationship is stored.
+-------------------------------------------------------------------------------
+-- Forward declarations for functions defined later but referenced by anchor helpers
+local GetBarFrame
+local GetBarLabel
+
+local function GetAnchorDB()
+    if not EllesmereUIDB then return nil end
+    if not EllesmereUIDB.unlockAnchors then
+        EllesmereUIDB.unlockAnchors = {}
+    end
+    return EllesmereUIDB.unlockAnchors
+end
+
+local function GetAnchorInfo(barKey)
+    local db = GetAnchorDB()
+    if not db then return nil end
+    return db[barKey]
+end
+
+local function SetAnchorInfo(childKey, targetKey, side)
+    local db = GetAnchorDB()
+    if not db then return end
+    db[childKey] = { target = targetKey, side = side }
+end
+
+local function ClearAnchorInfo(childKey)
+    local db = GetAnchorDB()
+    if not db then return end
+    db[childKey] = nil
+end
+
+local function IsAnchored(barKey)
+    local info = GetAnchorInfo(barKey)
+    return info ~= nil
+end
+
 -- Smoothly fade the background overlay between normal and select-element alpha
 local function FadeOverlayForSelectElement(entering)
     if not unlockFrame or not unlockFrame._overlay then return end
@@ -187,6 +236,141 @@ local function FadeOverlayForSelectElement(entering)
         unlockFrame._overlay:SetColorTexture(0.02, 0.03, 0.04, a)
         if t >= 1 then self:SetScript("OnUpdate", nil) end
     end)
+end
+
+-- Cancel any active pick mode (width match, height match, anchor to, or snap select)
+-- Restores overlay text and screen brightness
+local function CancelPickMode()
+    if pickModeMover then
+        local m = pickModeMover
+        -- Restore overlay text visibility
+        if m._showOverlayText then m._showOverlayText() end
+        if m._hidePickText then m._hidePickText() end
+        pickMode = nil
+        pickModeMover = nil
+        FadeOverlayForSelectElement(false)
+    end
+    -- Also cancel snap select-element picker if active
+    if selectElementPicker then
+        local picker = selectElementPicker
+        picker._snapTarget = picker._preSelectTarget
+        picker._preSelectTarget = nil
+        if picker._updateSnapLabel then picker._updateSnapLabel() end
+        selectElementPicker = nil
+        FadeOverlayForSelectElement(false)
+    end
+    -- Hide anchor dropdown if open
+    if anchorDropdownFrame then anchorDropdownFrame:Hide() end
+    if anchorDropdownCatcher then anchorDropdownCatcher:Hide() end
+end
+
+-- Red border flash animation for error feedback (e.g. trying to drag an anchored element)
+local function FlashRedBorder(m)
+    if not m or not m._brd then return end
+    -- Create a dedicated red border overlay if not yet created
+    if not m._redFlashBrd then
+        m._redFlashBrd = EllesmereUI.MakeBorder(m, 1, 0.2, 0.2, 0)
+        m._redFlashBrd._frame:SetFrameLevel(m:GetFrameLevel() + 4)
+    end
+    local brd = m._redFlashBrd
+    local elapsed = 0
+    if not m._redFlashFrame then
+        m._redFlashFrame = CreateFrame("Frame")
+    end
+    m._redFlashFrame:SetScript("OnUpdate", function(self, dt)
+        elapsed = elapsed + dt
+        if elapsed < 0.8 then
+            local a = 0.5 + 0.5 * math.sin(elapsed * 10)
+            brd:SetColor(1, 0.2, 0.2, a)
+        elseif elapsed < 1.5 then
+            brd:SetColor(1, 0.2, 0.2, math.max(0, 1 - (elapsed - 0.8) / 0.7))
+        else
+            brd:SetColor(1, 0.2, 0.2, 0)
+            self:SetScript("OnUpdate", nil)
+        end
+    end)
+end
+
+-- Apply an anchor relationship: position the child element relative to the target
+-- side: "LEFT", "RIGHT", "TOP", "BOTTOM" — child is placed on that side of the target
+local function ApplyAnchorPosition(childKey, targetKey, side)
+    local childBar = GetBarFrame(childKey)
+    local targetBar = GetBarFrame(targetKey)
+    if not childBar or not targetBar then return end
+    if InCombatLockdown() then return end
+
+    local uiS = UIParent:GetEffectiveScale()
+    local tS = targetBar:GetEffectiveScale()
+    local cS = childBar:GetEffectiveScale()
+
+    -- Get target bounds in UIParent space
+    local tL = (targetBar:GetLeft() or 0) * tS / uiS
+    local tR = (targetBar:GetRight() or 0) * tS / uiS
+    local tT = (targetBar:GetTop() or 0) * tS / uiS
+    local tB = (targetBar:GetBottom() or 0) * tS / uiS
+
+    -- Get child size in UIParent space
+    local cW = (childBar:GetWidth() or 50) * cS / uiS
+    local cH = (childBar:GetHeight() or 50) * cS / uiS
+
+    -- Compute child center in UIParent space based on anchor side
+    local cx, cy
+    local tCX = (tL + tR) / 2
+    local tCY = (tT + tB) / 2
+    if side == "LEFT" then
+        cx = tL - cW / 2
+        cy = tCY
+    elseif side == "RIGHT" then
+        cx = tR + cW / 2
+        cy = tCY
+    elseif side == "TOP" then
+        cx = tCX
+        cy = tT + cH / 2
+    elseif side == "BOTTOM" then
+        cx = tCX
+        cy = tB - cH / 2
+    end
+
+    -- Convert to child's local space for TOPLEFT anchor
+    local ratio = uiS / cS
+    local barHW = (childBar:GetWidth() or 0) * 0.5
+    local barHH = (childBar:GetHeight() or 0) * 0.5
+    local barX = cx * ratio - barHW
+    local barY = (cy - UIParent:GetHeight()) * ratio + barHH
+
+    pcall(function()
+        childBar:ClearAllPoints()
+        childBar:SetPoint("TOPLEFT", UIParent, "TOPLEFT", barX, barY)
+    end)
+
+    -- Update mover position to match
+    local m = movers[childKey]
+    if m then
+        local mHW = m:GetWidth() / 2
+        local mHH = m:GetHeight() / 2
+        m:ClearAllPoints()
+        m:SetPoint("TOPLEFT", UIParent, "TOPLEFT", cx - mHW, cy + mHH - UIParent:GetHeight())
+    end
+
+    -- Store in pending positions
+    pendingPositions[childKey] = {
+        point = "TOPLEFT", relPoint = "TOPLEFT",
+        x = barX, y = barY,
+    }
+    local prevScale = type(pendingPositions[childKey]) == "table" and pendingPositions[childKey].scale or nil
+    if prevScale then pendingPositions[childKey].scale = prevScale end
+    hasChanges = true
+end
+
+-- Re-apply all saved anchor positions (called on open and after target moves)
+local function ReapplyAllAnchors()
+    local db = GetAnchorDB()
+    if not db then return end
+    for childKey, info in pairs(db) do
+        if movers[childKey] and movers[info.target] then
+            ApplyAnchorPosition(childKey, info.target, info.side)
+        end
+    end
 end
 
 -------------------------------------------------------------------------------
@@ -240,7 +424,7 @@ end
 -------------------------------------------------------------------------------
 --  Bar frame resolution  (works for both action bars and registered elements)
 -------------------------------------------------------------------------------
-local function GetBarFrame(barKey)
+GetBarFrame = function(barKey)
     -- Registered element?
     local elem = registeredElements[barKey]
     if elem and elem.getFrame then
@@ -259,7 +443,7 @@ local function GetBarFrame(barKey)
     return nil
 end
 
-local function GetBarLabel(barKey)
+GetBarLabel = function(barKey)
     -- Registered element?
     local elem = registeredElements[barKey]
     if elem and elem.label then
@@ -1091,6 +1275,10 @@ local function DeselectMover()
             selectElementPicker = nil
             FadeOverlayForSelectElement(false)
         end
+        -- Cancel width/height/anchor pick mode if this mover was the picker
+        if pickModeMover == selectedMover then
+            CancelPickMode()
+        end
     end
     selectedMover = nil
 end
@@ -1102,12 +1290,16 @@ local function ApplyDarkOverlays()
             m._bg:SetColorTexture(0.075, 0.113, 0.141, 0.95)
             if m._label then m._label:SetAlpha(1); m._label:Show() end
             if m._coordFS then m._coordFS:SetAlpha(1) end
+            -- Show action row text (width/height match, anchor to)
+            if m._showOverlayText then m._showOverlayText() end
             -- Lock frame alpha to 1 so bg/text stay at full opacity
             if not m._dragging then m:SetAlpha(1) end
         else
             m._bg:SetColorTexture(0, 0, 0, 0)
             if m._label then m._label:Hide() end
             if m._coordFS then m._coordFS:Hide() end
+            -- Hide action row text
+            if m._hideOverlayText then m._hideOverlayText() end
             -- Restore normal alpha behavior
             if not m._dragging and not m._selected and not m:IsMouseOver() then
                 m:SetAlpha(MOVER_ALPHA)
@@ -1149,6 +1341,17 @@ local function NudgeMover(dx, dy)
     end
     -- Update coordinate readout after nudge
     if m.UpdateCoordText then m:UpdateCoordText() end
+
+    -- Anchor chain: reposition any elements anchored to this one
+    local anchorDB = GetAnchorDB()
+    if anchorDB then
+        for childKey, info in pairs(anchorDB) do
+            if info.target == m._barKey then
+                ApplyAnchorPosition(childKey, info.target, info.side)
+                if movers[childKey] then movers[childKey]:Sync() end
+            end
+        end
+    end
 end
 
 -- Arrow key repeat state
@@ -1375,6 +1578,220 @@ local function CreateMover(barKey)
     coordFS:Hide()
     mover._coordFS = coordFS
 
+    ---------------------------------------------------------------------------
+    --  Width Match | Height Match | Anchor To  (centered below the name)
+    --  Also: "Anchored to: X" text and pick-mode instruction text
+    ---------------------------------------------------------------------------
+    -- Container for the action links (centered below name)
+    local actionRow = labelFrame:CreateFontString(nil, "OVERLAY")
+    actionRow:SetFont(FONT_PATH, 8, "OUTLINE")
+    actionRow:SetTextColor(1, 1, 1, 0.45)
+    actionRow:SetPoint("TOP", nameFS, "BOTTOM", 0, -2)
+    actionRow:SetJustifyH("CENTER")
+    actionRow:SetWordWrap(false)
+    actionRow:Hide()
+
+    -- We use three invisible click buttons overlaid on the text regions
+    local WM_TEXT = "Width Match"
+    local HM_TEXT = "Height Match"
+    local AT_TEXT = "Anchor To"
+    local SEP = "  |cff555555|  |r"
+
+    -- Clickable buttons for each action (parented to labelFrame for correct level)
+    local wmBtn = CreateFrame("Button", nil, labelFrame)
+    wmBtn:SetFrameLevel(labelFrame:GetFrameLevel() + 2)
+    wmBtn:RegisterForClicks("LeftButtonUp")
+    wmBtn:EnableMouse(true)
+    wmBtn:Hide()
+
+    local hmBtn = CreateFrame("Button", nil, labelFrame)
+    hmBtn:SetFrameLevel(labelFrame:GetFrameLevel() + 2)
+    hmBtn:RegisterForClicks("LeftButtonUp")
+    hmBtn:EnableMouse(true)
+    hmBtn:Hide()
+
+    local atBtn = CreateFrame("Button", nil, labelFrame)
+    atBtn:SetFrameLevel(labelFrame:GetFrameLevel() + 2)
+    atBtn:RegisterForClicks("LeftButtonUp")
+    atBtn:EnableMouse(true)
+    atBtn:Hide()
+
+    -- Font strings inside each button for hover coloring
+    local wmFS = wmBtn:CreateFontString(nil, "OVERLAY")
+    wmFS:SetFont(FONT_PATH, 8, "OUTLINE")
+    wmFS:SetTextColor(1, 1, 1, 0.45)
+    wmFS:SetText(WM_TEXT)
+    wmFS:SetPoint("CENTER")
+
+    local sep1FS = labelFrame:CreateFontString(nil, "OVERLAY")
+    sep1FS:SetFont(FONT_PATH, 8, "OUTLINE")
+    sep1FS:SetTextColor(0.33, 0.33, 0.33, 1)
+    sep1FS:SetText("|")
+    sep1FS:Hide()
+
+    local hmFS = hmBtn:CreateFontString(nil, "OVERLAY")
+    hmFS:SetFont(FONT_PATH, 8, "OUTLINE")
+    hmFS:SetTextColor(1, 1, 1, 0.45)
+    hmFS:SetText(HM_TEXT)
+    hmFS:SetPoint("CENTER")
+
+    local sep2FS = labelFrame:CreateFontString(nil, "OVERLAY")
+    sep2FS:SetFont(FONT_PATH, 8, "OUTLINE")
+    sep2FS:SetTextColor(0.33, 0.33, 0.33, 1)
+    sep2FS:SetText("|")
+    sep2FS:Hide()
+
+    local atFS = atBtn:CreateFontString(nil, "OVERLAY")
+    atFS:SetFont(FONT_PATH, 8, "OUTLINE")
+    atFS:SetTextColor(1, 1, 1, 0.45)
+    atFS:SetText(AT_TEXT)
+    atFS:SetPoint("CENTER")
+
+    -- Layout: [Width Match] | [Height Match] | [Anchor To] centered below name
+    local function LayoutActionRow()
+        local wmW = wmFS:GetStringWidth() or 50
+        local hmW = hmFS:GetStringWidth() or 55
+        local atW = atFS:GetStringWidth() or 45
+        local sepW = 10  -- approximate separator width
+        local totalW = wmW + sepW + hmW + sepW + atW
+        local startX = -totalW / 2
+
+        wmBtn:SetSize(wmW + 4, 14)
+        wmBtn:ClearAllPoints()
+        wmBtn:SetPoint("TOP", nameFS, "BOTTOM", startX + wmW / 2, -2)
+
+        sep1FS:ClearAllPoints()
+        sep1FS:SetPoint("TOP", nameFS, "BOTTOM", startX + wmW + sepW / 2, -2)
+
+        hmBtn:SetSize(hmW + 4, 14)
+        hmBtn:ClearAllPoints()
+        hmBtn:SetPoint("TOP", nameFS, "BOTTOM", startX + wmW + sepW + hmW / 2, -2)
+
+        sep2FS:ClearAllPoints()
+        sep2FS:SetPoint("TOP", nameFS, "BOTTOM", startX + wmW + sepW + hmW + sepW / 2, -2)
+
+        atBtn:SetSize(atW + 4, 14)
+        atBtn:ClearAllPoints()
+        atBtn:SetPoint("TOP", nameFS, "BOTTOM", startX + wmW + sepW + hmW + sepW + atW / 2, -2)
+    end
+
+    -- "Anchored to: X" text (shown when this element is anchored)
+    local anchoredFS = labelFrame:CreateFontString(nil, "OVERLAY")
+    anchoredFS:SetFont(FONT_PATH, 8, "OUTLINE")
+    anchoredFS:SetTextColor(1, 0.7, 0.3, 0.7)
+    anchoredFS:SetPoint("BOTTOM", mover, "BOTTOM", 0, 3)
+    anchoredFS:SetJustifyH("CENTER")
+    anchoredFS:SetWordWrap(false)
+    anchoredFS:Hide()
+    mover._anchoredFS = anchoredFS
+
+    -- Pick mode instruction text (shown when in pick mode, replaces all other text)
+    local pickFS = labelFrame:CreateFontString(nil, "OVERLAY")
+    pickFS:SetFont(FONT_PATH, 10, "OUTLINE")
+    pickFS:SetTextColor(1, 1, 1, 0.85)
+    pickFS:SetPoint("CENTER", mover, "CENTER")
+    pickFS:SetJustifyH("CENTER")
+    pickFS:SetWordWrap(true)
+    pickFS:Hide()
+    mover._pickFS = pickFS
+
+    -- Show/hide overlay text helpers
+    local function ShowOverlayText()
+        if darkOverlaysEnabled then
+            nameFS:SetAlpha(1); nameFS:Show()
+        end
+        -- TEMPORARILY DISABLED: match/anchor UI not ready for release
+        -- LayoutActionRow()
+        -- wmBtn:Show(); hmBtn:Show(); atBtn:Show()
+        -- sep1FS:Show(); sep2FS:Show()
+        -- local anchorInfo = GetAnchorInfo(barKey)
+        -- if anchorInfo then
+        --     local targetLabel = GetBarLabel(anchorInfo.target) or anchorInfo.target
+        --     anchoredFS:SetText("Anchored to: " .. targetLabel)
+        --     anchoredFS:Show()
+        --     wmBtn:Hide(); hmBtn:Hide(); atBtn:Hide()
+        --     sep1FS:Hide(); sep2FS:Hide()
+        -- else
+        --     anchoredFS:Hide()
+        -- end
+        pickFS:Hide()
+    end
+
+    local function HideOverlayText()
+        nameFS:Hide()
+        wmBtn:Hide(); hmBtn:Hide(); atBtn:Hide()
+        sep1FS:Hide(); sep2FS:Hide()
+        anchoredFS:Hide()
+    end
+
+    local function ShowPickText(text)
+        HideOverlayText()
+        pickFS:SetText(text)
+        pickFS:Show()
+    end
+
+    local function HidePickText()
+        pickFS:Hide()
+    end
+
+    mover._showOverlayText = ShowOverlayText
+    mover._hideOverlayText = HideOverlayText
+    mover._showPickText = ShowPickText
+    mover._hidePickText = HidePickText
+
+    -- Refresh the anchored text (called after anchor changes)
+    function mover:RefreshAnchoredText()
+        -- TEMPORARILY DISABLED: match/anchor UI not ready for release
+        -- local anchorInfo = GetAnchorInfo(self._barKey)
+        -- if anchorInfo then
+        --     local targetLabel = GetBarLabel(anchorInfo.target) or anchorInfo.target
+        --     anchoredFS:SetText("Anchored to: " .. targetLabel)
+        --     if darkOverlaysEnabled then anchoredFS:Show() end
+        --     wmBtn:Hide(); hmBtn:Hide(); atBtn:Hide()
+        --     sep1FS:Hide(); sep2FS:Hide()
+        -- else
+        --     anchoredFS:Hide()
+        --     if darkOverlaysEnabled then
+        --         LayoutActionRow()
+        --         wmBtn:Show(); hmBtn:Show(); atBtn:Show()
+        --         sep1FS:Show(); sep2FS:Show()
+        --     end
+        -- end
+    end
+
+    -- Hover effects for action buttons
+    wmBtn:SetScript("OnEnter", function() wmFS:SetTextColor(1, 1, 1, 0.85) end)
+    wmBtn:SetScript("OnLeave", function() wmFS:SetTextColor(1, 1, 1, 0.45) end)
+    hmBtn:SetScript("OnEnter", function() hmFS:SetTextColor(1, 1, 1, 0.85) end)
+    hmBtn:SetScript("OnLeave", function() hmFS:SetTextColor(1, 1, 1, 0.45) end)
+    atBtn:SetScript("OnEnter", function() atFS:SetTextColor(1, 1, 1, 0.85) end)
+    atBtn:SetScript("OnLeave", function() atFS:SetTextColor(1, 1, 1, 0.45) end)
+
+    -- Click handlers for Width Match / Height Match / Anchor To
+    wmBtn:SetScript("OnClick", function()
+        CancelPickMode()
+        pickMode = "widthMatch"
+        pickModeMover = mover
+        ShowPickText("Click any element\nto match its width")
+        FadeOverlayForSelectElement(true)
+    end)
+
+    hmBtn:SetScript("OnClick", function()
+        CancelPickMode()
+        pickMode = "heightMatch"
+        pickModeMover = mover
+        ShowPickText("Click any element\nto match its height")
+        FadeOverlayForSelectElement(true)
+    end)
+
+    atBtn:SetScript("OnClick", function()
+        CancelPickMode()
+        pickMode = "anchorTo"
+        pickModeMover = mover
+        ShowPickText("Click any element\nto anchor to it")
+        FadeOverlayForSelectElement(true)
+    end)
+
     -- Helper: update coordinate readout from mover's current position
     function mover:UpdateCoordText()
         local fs = self._coordFS
@@ -1390,6 +1807,11 @@ local function CreateMover(barKey)
 
     mover._barKey = barKey
     mover:SetAlpha(darkOverlaysEnabled and 1 or MOVER_ALPHA)
+
+    -- Show action row text on creation if dark overlays are enabled
+    if darkOverlaysEnabled and mover._showOverlayText then
+        mover._showOverlayText()
+    end
 
     -- Sync size/position to the real bar (or registered element)
     function mover:Sync()
@@ -1497,6 +1919,11 @@ local function CreateMover(barKey)
     -- Drag handlers: manual cursor-based positioning for live snap + live bar movement
     mover:SetScript("OnDragStart", function(self)
         if InCombatLockdown() then return end
+        -- Block dragging for anchored elements — flash red border instead
+        if IsAnchored(self._barKey) then
+            FlashRedBorder(self)
+            return
+        end
         SelectMover(self)
         self:SetAlpha(darkOverlaysEnabled and 1 or MOVER_DRAG)
         self._dragging = true
@@ -1589,6 +2016,17 @@ local function CreateMover(barKey)
                 end)
             end
 
+            -- Anchor chain: live-reposition any elements anchored to this one
+            local anchorDB = GetAnchorDB()
+            if anchorDB then
+                for childKey, info in pairs(anchorDB) do
+                    if info.target == s._barKey then
+                        ApplyAnchorPosition(childKey, info.target, info.side)
+                        if movers[childKey] then movers[childKey]:Sync() end
+                    end
+                end
+            end
+
             ShowAlignmentGuides(s._barKey)
         end)
     end)
@@ -1642,6 +2080,17 @@ local function CreateMover(barKey)
             end
             hasChanges = true
         end
+
+        -- Anchor chain: reposition any elements anchored to this one
+        local anchorDB = GetAnchorDB()
+        if anchorDB then
+            for childKey, info in pairs(anchorDB) do
+                if info.target == self._barKey then
+                    ApplyAnchorPosition(childKey, info.target, info.side)
+                    if movers[childKey] then movers[childKey]:Sync() end
+                end
+            end
+        end
     end)
 
     -- Hover effects
@@ -1650,6 +2099,12 @@ local function CreateMover(barKey)
             self:SetFrameLevel(self._raisedLevel)
             -- Select Element mode: white border highlight on hover targets
             if selectElementPicker and selectElementPicker ~= self then
+                self._brd:SetColor(1, 1, 1, 0.9)
+                if not darkOverlaysEnabled then self:SetAlpha(MOVER_HOVER) end
+                return
+            end
+            -- Pick mode (width/height match, anchor to): white border on hover targets
+            if pickModeMover and pickModeMover ~= self and pickMode then
                 self._brd:SetColor(1, 1, 1, 0.9)
                 if not darkOverlaysEnabled then self:SetAlpha(MOVER_HOVER) end
                 return
@@ -1672,6 +2127,236 @@ local function CreateMover(barKey)
     -- Left-click to select
     mover:SetScript("OnClick", function(self, button)
         if button == "LeftButton" then
+            -- Width Match / Height Match / Anchor To pick mode handling
+            -- Clicking the source mover itself cancels the pick mode
+            if pickModeMover and pickModeMover == self and pickMode then
+                CancelPickMode()
+                return
+            end
+            if pickModeMover and pickModeMover ~= self and pickMode then
+                local sourceMover = pickModeMover
+                local sourceKey = sourceMover._barKey
+                local targetKey = self._barKey
+
+                if pickMode == "widthMatch" then
+                    -- Get target width and apply to source
+                    local targetElem = registeredElements[targetKey]
+                    local targetBar = GetBarFrame(targetKey)
+                    local targetW
+                    if targetElem and targetElem.getSize then
+                        targetW = targetElem.getSize(targetKey)
+                    elseif targetBar then
+                        targetW = targetBar:GetWidth()
+                    end
+                    if targetW and targetW > 0 then
+                        local sourceElem = registeredElements[sourceKey]
+                        if sourceElem and sourceElem.setWidth then
+                            sourceElem.setWidth(sourceKey, targetW)
+                            hasChanges = true
+                        end
+                    end
+                    CancelPickMode()
+                    -- Re-sync movers after size change
+                    C_Timer.After(0.15, function()
+                        if movers[sourceKey] then movers[sourceKey]:Sync() end
+                    end)
+                    return
+
+                elseif pickMode == "heightMatch" then
+                    -- Get target height and apply to source
+                    local targetElem = registeredElements[targetKey]
+                    local targetBar = GetBarFrame(targetKey)
+                    local _, targetH
+                    if targetElem and targetElem.getSize then
+                        _, targetH = targetElem.getSize(targetKey)
+                    elseif targetBar then
+                        targetH = targetBar:GetHeight()
+                    end
+                    if targetH and targetH > 0 then
+                        local sourceElem = registeredElements[sourceKey]
+                        if sourceElem and sourceElem.setHeight then
+                            sourceElem.setHeight(sourceKey, targetH)
+                            hasChanges = true
+                        end
+                    end
+                    CancelPickMode()
+                    -- Re-sync movers after size change
+                    C_Timer.After(0.15, function()
+                        if movers[sourceKey] then movers[sourceKey]:Sync() end
+                    end)
+                    return
+
+                elseif pickMode == "anchorTo" then
+                    -- Show anchor direction dropdown near the clicked target
+                    local pm = pickModeMover
+                    local pmKey = pm._barKey
+
+                    -- Circular anchor detection: walk the target's anchor chain
+                    -- to make sure it doesn't eventually point back to pmKey
+                    local circular = false
+                    local visited = { [pmKey] = true }
+                    local walk = targetKey
+                    while walk do
+                        if visited[walk] then circular = true; break end
+                        visited[walk] = true
+                        local info = GetAnchorInfo(walk)
+                        walk = info and info.target or nil
+                    end
+                    if circular then
+                        CancelPickMode()
+                        FlashRedBorder(self)
+                        return
+                    end
+
+                    CancelPickMode()
+                    -- Build and show the anchor direction dropdown
+                    if not anchorDropdownFrame then
+                        anchorDropdownFrame = CreateFrame("Frame", nil, unlockFrame)
+                        anchorDropdownFrame:SetFrameStrata("FULLSCREEN_DIALOG")
+                        anchorDropdownFrame:SetFrameLevel(260)
+                        anchorDropdownFrame:SetClampedToScreen(true)
+                        anchorDropdownFrame:EnableMouse(true)
+                    end
+                    -- Click catcher behind dropdown
+                    if not anchorDropdownCatcher then
+                        anchorDropdownCatcher = CreateFrame("Button", nil, unlockFrame)
+                        anchorDropdownCatcher:SetFrameStrata("FULLSCREEN_DIALOG")
+                        anchorDropdownCatcher:SetFrameLevel(259)
+                        anchorDropdownCatcher:SetAllPoints(UIParent)
+                        anchorDropdownCatcher:RegisterForClicks("AnyUp")
+                        anchorDropdownCatcher:SetScript("OnClick", function()
+                            anchorDropdownFrame:Hide()
+                            anchorDropdownCatcher:Hide()
+                        end)
+                    end
+                    -- Rebuild dropdown content
+                    for _, child in ipairs({anchorDropdownFrame:GetChildren()}) do child:Hide(); child:SetParent(nil) end
+                    for _, tex in ipairs({anchorDropdownFrame:GetRegions()}) do if tex.Hide then tex:Hide() end end
+
+                    local DD_ITEM_H = 24
+                    local DD_WIDTH = 160
+                    anchorDropdownFrame:SetSize(DD_WIDTH, 10)
+                    anchorDropdownFrame:ClearAllPoints()
+                    anchorDropdownFrame:SetPoint("TOPLEFT", self, "TOPRIGHT", 4, 0)
+
+                    local ddBg = anchorDropdownFrame:CreateTexture(nil, "BACKGROUND")
+                    ddBg:SetAllPoints()
+                    ddBg:SetColorTexture(0.075, 0.113, 0.141, 0.95)
+                    EllesmereUI.MakeBorder(anchorDropdownFrame, 1, 1, 1, 0.20)
+
+                    local ddY = -4
+                    -- Title
+                    local titleFS = anchorDropdownFrame:CreateFontString(nil, "OVERLAY")
+                    titleFS:SetFont(FONT_PATH, 10, "OUTLINE")
+                    titleFS:SetTextColor(1, 1, 1, 0.40)
+                    titleFS:SetJustifyH("LEFT")
+                    titleFS:SetPoint("TOPLEFT", anchorDropdownFrame, "TOPLEFT", 10, ddY - 4)
+                    titleFS:SetText("Anchor Direction")
+                    ddY = ddY - 18
+                    local titleDiv = anchorDropdownFrame:CreateTexture(nil, "ARTWORK")
+                    titleDiv:SetHeight(1)
+                    titleDiv:SetColorTexture(1, 1, 1, 0.10)
+                    titleDiv:SetPoint("TOPLEFT", anchorDropdownFrame, "TOPLEFT", 1, ddY - 2)
+                    titleDiv:SetPoint("TOPRIGHT", anchorDropdownFrame, "TOPRIGHT", -1, ddY - 2)
+                    ddY = ddY - 5
+
+                    local sides = { "Left", "Right", "Top", "Bottom" }
+                    for _, sideName in ipairs(sides) do
+                        local sideVal = string.upper(sideName)
+                        local item = CreateFrame("Button", nil, anchorDropdownFrame)
+                        item:SetHeight(DD_ITEM_H)
+                        item:SetPoint("TOPLEFT", anchorDropdownFrame, "TOPLEFT", 1, ddY)
+                        item:SetPoint("TOPRIGHT", anchorDropdownFrame, "TOPRIGHT", -1, ddY)
+                        item:SetFrameLevel(anchorDropdownFrame:GetFrameLevel() + 2)
+                        item:RegisterForClicks("AnyUp")
+                        local hl = item:CreateTexture(nil, "ARTWORK")
+                        hl:SetAllPoints()
+                        hl:SetColorTexture(1, 1, 1, 0)
+                        local lbl = item:CreateFontString(nil, "OVERLAY")
+                        lbl:SetFont(FONT_PATH, 11, "OUTLINE")
+                        lbl:SetTextColor(0.75, 0.75, 0.75, 0.9)
+                        lbl:SetJustifyH("LEFT")
+                        lbl:SetPoint("LEFT", item, "LEFT", 10, 0)
+                        lbl:SetText("Anchor to " .. sideName)
+                        item:SetScript("OnEnter", function()
+                            hl:SetColorTexture(1, 1, 1, 0.08)
+                            lbl:SetTextColor(1, 1, 1, 1)
+                        end)
+                        item:SetScript("OnLeave", function()
+                            hl:SetColorTexture(1, 1, 1, 0)
+                            lbl:SetTextColor(0.75, 0.75, 0.75, 0.9)
+                        end)
+                        item:SetScript("OnClick", function()
+                            anchorDropdownFrame:Hide()
+                            anchorDropdownCatcher:Hide()
+                            -- Set anchor relationship
+                            SetAnchorInfo(pmKey, targetKey, sideVal)
+                            -- Apply the anchor position
+                            ApplyAnchorPosition(pmKey, targetKey, sideVal)
+                            hasChanges = true
+                            -- Refresh the anchored mover's text
+                            if movers[pmKey] and movers[pmKey].RefreshAnchoredText then
+                                movers[pmKey]:RefreshAnchoredText()
+                            end
+                            -- Re-sync mover
+                            C_Timer.After(0.15, function()
+                                if movers[pmKey] then movers[pmKey]:Sync() end
+                            end)
+                        end)
+                        ddY = ddY - DD_ITEM_H
+                    end
+
+                    -- "Remove Anchor" option if already anchored
+                    if IsAnchored(pmKey) then
+                        local divR = anchorDropdownFrame:CreateTexture(nil, "ARTWORK")
+                        divR:SetHeight(1)
+                        divR:SetColorTexture(1, 1, 1, 0.10)
+                        divR:SetPoint("TOPLEFT", anchorDropdownFrame, "TOPLEFT", 1, ddY - 4)
+                        divR:SetPoint("TOPRIGHT", anchorDropdownFrame, "TOPRIGHT", -1, ddY - 4)
+                        ddY = ddY - 9
+
+                        local removeItem = CreateFrame("Button", nil, anchorDropdownFrame)
+                        removeItem:SetHeight(DD_ITEM_H)
+                        removeItem:SetPoint("TOPLEFT", anchorDropdownFrame, "TOPLEFT", 1, ddY)
+                        removeItem:SetPoint("TOPRIGHT", anchorDropdownFrame, "TOPRIGHT", -1, ddY)
+                        removeItem:SetFrameLevel(anchorDropdownFrame:GetFrameLevel() + 2)
+                        removeItem:RegisterForClicks("AnyUp")
+                        local rHl = removeItem:CreateTexture(nil, "ARTWORK")
+                        rHl:SetAllPoints()
+                        rHl:SetColorTexture(1, 1, 1, 0)
+                        local rLbl = removeItem:CreateFontString(nil, "OVERLAY")
+                        rLbl:SetFont(FONT_PATH, 11, "OUTLINE")
+                        rLbl:SetTextColor(0.9, 0.3, 0.3, 0.9)
+                        rLbl:SetJustifyH("LEFT")
+                        rLbl:SetPoint("LEFT", removeItem, "LEFT", 10, 0)
+                        rLbl:SetText("Remove Anchor")
+                        removeItem:SetScript("OnEnter", function()
+                            rHl:SetColorTexture(1, 1, 1, 0.08)
+                            rLbl:SetTextColor(1, 0.4, 0.4, 1)
+                        end)
+                        removeItem:SetScript("OnLeave", function()
+                            rHl:SetColorTexture(1, 1, 1, 0)
+                            rLbl:SetTextColor(0.9, 0.3, 0.3, 0.9)
+                        end)
+                        removeItem:SetScript("OnClick", function()
+                            anchorDropdownFrame:Hide()
+                            anchorDropdownCatcher:Hide()
+                            ClearAnchorInfo(pmKey)
+                            hasChanges = true
+                            if movers[pmKey] and movers[pmKey].RefreshAnchoredText then
+                                movers[pmKey]:RefreshAnchoredText()
+                            end
+                        end)
+                        ddY = ddY - DD_ITEM_H
+                    end
+
+                    anchorDropdownFrame:SetHeight(-ddY + 4)
+                    anchorDropdownFrame:Show()
+                    anchorDropdownCatcher:Show()
+                    return
+                end
+            end
+
             -- Select Element pick mode: clicking a different mover sets it as snap target
             if selectElementPicker and selectElementPicker ~= self then
                 local picker = selectElementPicker
@@ -2891,6 +3576,11 @@ local function CreateMover(barKey)
             pendingPositions[bk] = "RESET"
             hasChanges = true
             ClearBarPosition(bk)
+            -- Clear any anchor relationship on this element
+            if IsAnchored(bk) then
+                ClearAnchorInfo(bk)
+                if mover.RefreshAnchoredText then mover:RefreshAnchoredText() end
+            end
             local snap = snapshotPositions[bk]
             local b = GetBarFrame(bk)
             if b then
@@ -3951,6 +4641,15 @@ local function SnapshotPositions()
             end
         end
     end
+
+    -- Snapshot anchor data so we can revert on discard
+    wipe(snapshotAnchors)
+    local anchorDB = GetAnchorDB()
+    if anchorDB then
+        for childKey, info in pairs(anchorDB) do
+            snapshotAnchors[childKey] = { target = info.target, side = info.side }
+        end
+    end
 end
 
 -- Commit pending positions to SavedVariables
@@ -4051,6 +4750,15 @@ local function RevertPositions()
             end
         end
     end
+
+    -- Revert anchor data to snapshot state
+    local anchorDB = GetAnchorDB()
+    if anchorDB then
+        wipe(anchorDB)
+        for childKey, info in pairs(snapshotAnchors) do
+            anchorDB[childKey] = { target = info.target, side = info.side }
+        end
+    end
 end
 
 -- Internal close (actually hides everything and returns to options)
@@ -4096,7 +4804,14 @@ local function DoClose()
     -- Reset session state
     wipe(pendingPositions)
     wipe(snapshotPositions)
+    wipe(snapshotAnchors)
     hasChanges = false
+
+    -- Clean up pick mode / anchor dropdown state
+    pickMode = nil
+    pickModeMover = nil
+    if anchorDropdownFrame then anchorDropdownFrame:Hide() end
+    if anchorDropdownCatcher then anchorDropdownCatcher:Hide() end
 
     -- Restore action bar alpha and scale (MainBar may have been hidden by OnWorld)
     if EAB and EAB.db and not InCombatLockdown() then
@@ -4259,6 +4974,19 @@ local function CreateUnlockFrame()
             local dimmer = _G["EUIConfirmDimmer"]
             if dimmer and dimmer:IsShown() then
                 self:SetPropagateKeyboardInput(true)
+                return
+            end
+            -- If anchor dropdown is open, close it instead of closing unlock mode
+            if anchorDropdownFrame and anchorDropdownFrame:IsShown() then
+                self:SetPropagateKeyboardInput(false)
+                anchorDropdownFrame:Hide()
+                if anchorDropdownCatcher then anchorDropdownCatcher:Hide() end
+                return
+            end
+            -- If in width/height/anchor pick mode, cancel it instead of closing
+            if pickModeMover and pickMode then
+                self:SetPropagateKeyboardInput(false)
+                CancelPickMode()
                 return
             end
             -- If in select-element pick mode, cancel it instead of closing
@@ -4649,6 +5377,13 @@ function ns.OpenUnlockMode()
                 end
                 -- Sort frame levels: smaller movers render on top
                 SortMoverFrameLevels()
+                -- Re-apply saved anchor positions and refresh anchored mover text
+                ReapplyAllAnchors()
+                for bk, _ in pairs(movers) do
+                    if movers[bk].RefreshAnchoredText then
+                        movers[bk]:RefreshAnchoredText()
+                    end
+                end
             end
 
             local glitchT = elapsed - GRID_START
@@ -4836,6 +5571,11 @@ function ns.OpenUnlockMode()
             hudFrame:SetPoint("TOP", UIParent, "TOP", 0, 0)
         end
         self:SetScript("OnUpdate", nil)
+
+        -- ReapplyAllAnchors during open sets hasChanges; reset it since
+        -- the user hasn't actually changed anything yet.
+        hasChanges = false
+        wipe(pendingPositions)
 
         -- Auto-select a mover if requested (e.g. from cog popup link)
         if EllesmereUI._unlockAutoSelectKey then

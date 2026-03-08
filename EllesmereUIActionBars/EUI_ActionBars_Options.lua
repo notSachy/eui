@@ -1,7 +1,7 @@
-﻿-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
 --  EUI_ActionBar_Options.lua
 --  Registers the real Action Bars module with EllesmereUI
---  Pure UI makeover ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ all get/set calls go to EAB.db.profile, same as before
+--  Pure UI makeover ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“ all get/set calls go to EAB.db.profile, same as before
 -------------------------------------------------------------------------------
 local ADDON_NAME, ns = ...
 local EAB = ns.EAB
@@ -180,7 +180,7 @@ initFrame:SetScript("OnEvent", function(self)
 
     ---------------------------------------------------------------------------
     --  Scale slider 2x multiplier conversion
-    --  Slider value ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â stored barScale with 2x distance from 100
+    --  Slider value ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â stored barScale with 2x distance from 100
     ---------------------------------------------------------------------------
     local function SliderToScale(sliderVal)
         return (100 + (sliderVal - 100) * 2) / 100
@@ -197,7 +197,7 @@ initFrame:SetScript("OnEvent", function(self)
     local barLabels = {}
     local barOrder  = {}
     for _, key in ipairs(BAR_DROPDOWN_ORDER) do
-        -- Skip individual MicroBar/BagBar and XPBar/RepBar â€” replaced by combined entries
+        -- Skip individual MicroBar/BagBar and XPBar/RepBar — replaced by combined entries
         if key ~= "MicroBar" and key ~= "BagBar" and key ~= "XPBar" and key ~= "RepBar" then
             barLabels[key] = BAR_DROPDOWN_VALUES[key]
             barOrder[#barOrder + 1] = key
@@ -318,7 +318,7 @@ initFrame:SetScript("OnEvent", function(self)
     --  preview creates its child frames once and exposes an :Update() method
     --  that re-reads all current DB values and applies them to the existing
     --  textures.  Widget callbacks call UpdatePreview() which is extremely
-    --  cheap ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â no frame creation, no GC pressure, just SetPoint / SetSize /
+    --  cheap ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â no frame creation, no GC pressure, just SetPoint / SetSize /
     --  SetColorTexture / SetTexCoord calls on already-existing objects.
     ---------------------------------------------------------------------------
     local activePreview    -- reference to the current preview frame (if any)
@@ -333,7 +333,7 @@ initFrame:SetScript("OnEvent", function(self)
         return EllesmereUIDB and EllesmereUIDB.previewHintDismissed
     end
 
-    -- Lightweight refresh ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â just re-reads settings and updates visuals
+    -- Lightweight refresh ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â just re-reads settings and updates visuals
     local function UpdatePreview()
         -- Recover activePreview from content header if it was lost (e.g. page cache restore)
         if not activePreview and EllesmereUI._contentHeaderPreview then
@@ -344,7 +344,7 @@ initFrame:SetScript("OnEvent", function(self)
         end
     end
 
-    -- Full refresh ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â also recalculates content header height (for bar scale changes)
+    -- Full refresh ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â also recalculates content header height (for bar scale changes)
     local function UpdatePreviewAndResize()
         if not activePreview and EllesmereUI._contentHeaderPreview then
             activePreview = EllesmereUI._contentHeaderPreview
@@ -496,7 +496,7 @@ initFrame:SetScript("OnEvent", function(self)
         pf._buttons   = buttons
         pf._previewBG = previewBG
 
-        -- The Update method ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â reads current DB + Blizzard state, applies it --
+        -- The Update method ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â reads current DB + Blizzard state, applies it --
         pf.Update = function(self)
             local settings = SB()
             if not settings then return end
@@ -747,7 +747,7 @@ initFrame:SetScript("OnEvent", function(self)
                         if not entry.shapeBorderTex then
                             entry.shapeBorderTex = bf:CreateTexture(nil, "OVERLAY", nil, 6)
                         end
-                        -- No mask on border â€” just render at button frame size
+                        -- No mask on border — just render at button frame size
                         pcall(entry.shapeBorderTex.RemoveMaskTexture, entry.shapeBorderTex, entry.shapeMask)
                         entry.shapeBorderTex:ClearAllPoints()
                         entry.shapeBorderTex:SetAllPoints(bf)
@@ -827,7 +827,7 @@ initFrame:SetScript("OnEvent", function(self)
                     countFS:SetPoint("BOTTOMRIGHT", bf, "BOTTOMRIGHT", -1 + ctOX, 4 + ctOY)
                     end -- close alwaysShowButtons else
                 else
-                    -- Button beyond numButtonsShowable ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â hide it
+                    -- Button beyond numButtonsShowable ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â hide it
                     bf:Hide()
                 end
             end
@@ -958,7 +958,7 @@ initFrame:SetScript("OnEvent", function(self)
         txt:SetPoint("CENTER")
         txt:SetText("Click to Sync Different Values")
 
-        -- Hover effect (text only ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â backdrop stays constant)
+        -- Hover effect (text only ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â backdrop stays constant)
         overlay:SetScript("OnEnter", function()
             txt:SetTextColor(1, 1, 1, 1)
         end)
@@ -978,7 +978,7 @@ initFrame:SetScript("OnEvent", function(self)
     end
 
     ---------------------------------------------------------------------------
-    --  WrapGroupCogPopup  ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ  overlay for cog-popup settings in multi-edit
+    --  WrapGroupCogPopup  ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“  overlay for cog-popup settings in multi-edit
     --  If ANY of the settingKeys are MIXED, wraps the showFn so that when the
     --  popup opens an overlay covers the entire popup with "Click to Sync".
     --  Clicking syncs ALL listed settings from the eyeball bar.
@@ -1117,6 +1117,9 @@ initFrame:SetScript("OnEvent", function(self)
         "Fonts\\MORPHEUS.TTF",
         "Fonts\\skurri.ttf",
     }
+    if EllesmereUI.AppendSharedMediaFonts then
+        EllesmereUI.AppendSharedMediaFonts(fontValues, fontOrder)
+    end
 
     ---------------------------------------------------------------------------
     --  Unified bar settings builder  (shared by Multi Bar Edit & Single Bar Edit)
@@ -1941,7 +1944,7 @@ initFrame:SetScript("OnEvent", function(self)
                   end,
                   setValue=function(v)
                       -- Set icon zoom BEFORE applying shapes so the new zoom
-                      -- value is read by ApplyShapesForBar â†’ ApplyShapeToButton
+                      -- value is read by ApplyShapesForBar → ApplyShapeToButton
                       SSet("iconZoom", ns.SHAPE_ZOOM_DEFAULTS[v] or 5.5)
                       SSet("buttonShape", v, function(k)
                           -- Reset border thickness to the default for the new shape mode
@@ -2339,20 +2342,22 @@ initFrame:SetScript("OnEvent", function(self)
                     local function MkEdge()
                         local t = glowFrame:CreateTexture(nil, "OVERLAY", nil, 7)
                         t:SetColorTexture(c.r, c.g, c.b, 1)
+                        if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
                         return t
                     end
                     glowFrame._top = MkEdge()
                     glowFrame._bot = MkEdge()
                     glowFrame._lft = MkEdge()
                     glowFrame._rgt = MkEdge()
-                    glowFrame._top:SetHeight(2)
+                    local glowPx = PP.Scale(2)
+                    glowFrame._top:SetHeight(glowPx)
                     glowFrame._top:SetPoint("TOPLEFT"); glowFrame._top:SetPoint("TOPRIGHT")
-                    glowFrame._bot:SetHeight(2)
+                    glowFrame._bot:SetHeight(glowPx)
                     glowFrame._bot:SetPoint("BOTTOMLEFT"); glowFrame._bot:SetPoint("BOTTOMRIGHT")
-                    glowFrame._lft:SetWidth(2)
+                    glowFrame._lft:SetWidth(glowPx)
                     glowFrame._lft:SetPoint("TOPLEFT", glowFrame._top, "BOTTOMLEFT")
                     glowFrame._lft:SetPoint("BOTTOMLEFT", glowFrame._bot, "TOPLEFT")
-                    glowFrame._rgt:SetWidth(2)
+                    glowFrame._rgt:SetWidth(glowPx)
                     glowFrame._rgt:SetPoint("TOPRIGHT", glowFrame._top, "BOTTOMRIGHT")
                     glowFrame._rgt:SetPoint("BOTTOMRIGHT", glowFrame._bot, "TOPRIGHT")
                 end
@@ -2474,10 +2479,11 @@ initFrame:SetScript("OnEvent", function(self)
                     if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
                     return t
                 end
-                local ht = MkHL(); PP.Height(ht, 2); ht:SetPoint("TOPLEFT", hlAnchorFrame, "TOPLEFT"); ht:SetPoint("TOPRIGHT", hlAnchorFrame, "TOPRIGHT")
-                local hb = MkHL(); PP.Height(hb, 2); hb:SetPoint("BOTTOMLEFT", hlAnchorFrame, "BOTTOMLEFT"); hb:SetPoint("BOTTOMRIGHT", hlAnchorFrame, "BOTTOMRIGHT")
-                local hl = MkHL(); PP.Width(hl, 2); hl:SetPoint("TOPLEFT", ht, "BOTTOMLEFT"); hl:SetPoint("BOTTOMLEFT", hb, "TOPLEFT")
-                local hr = MkHL(); PP.Width(hr, 2); hr:SetPoint("TOPRIGHT", ht, "BOTTOMRIGHT"); hr:SetPoint("BOTTOMRIGHT", hb, "TOPRIGHT")
+                local hlPx = PP.Scale(2)
+                local ht = MkHL(); ht:SetHeight(hlPx); ht:SetPoint("TOPLEFT", hlAnchorFrame, "TOPLEFT"); ht:SetPoint("TOPRIGHT", hlAnchorFrame, "TOPRIGHT")
+                local hb = MkHL(); hb:SetHeight(hlPx); hb:SetPoint("BOTTOMLEFT", hlAnchorFrame, "BOTTOMLEFT"); hb:SetPoint("BOTTOMRIGHT", hlAnchorFrame, "BOTTOMRIGHT")
+                local hl = MkHL(); hl:SetWidth(hlPx); hl:SetPoint("TOPLEFT", ht, "BOTTOMLEFT"); hl:SetPoint("BOTTOMLEFT", hb, "TOPLEFT")
+                local hr = MkHL(); hr:SetWidth(hlPx); hr:SetPoint("TOPRIGHT", ht, "BOTTOMRIGHT"); hr:SetPoint("BOTTOMRIGHT", hb, "TOPRIGHT")
                 btn._hlTextures = { ht, hb, hl, hr }
                 local function ShowHL() for _, t in ipairs(btn._hlTextures) do t:Show() end end
                 local function HideHL() for _, t in ipairs(btn._hlTextures) do t:Hide() end end
@@ -2718,7 +2724,7 @@ initFrame:SetScript("OnEvent", function(self)
                     EAB.db.profile.selectedBar = v
                     EllesmereUI:InvalidateContentHeaderCache()
                     EllesmereUI:SetContentHeader(_barsHeaderBuilder)
-                    -- Always force full rebuild â€” combined keys (MicroBagBars,
+                    -- Always force full rebuild — combined keys (MicroBagBars,
                     -- XPRepBars) and StanceBar share the same visOnly/dataBar
                     -- flags, so the old conditional missed transitions between them.
                     EllesmereUI:RefreshPage(true)
@@ -2818,19 +2824,8 @@ initFrame:SetScript("OnEvent", function(self)
         icon:SetColorTexture(0.15, 0.15, 0.15, 1)
         f._icon = icon
 
-        -- 1px black border
-        local function mkBorder(anchor1, anchor2, isH)
-            local t = f:CreateTexture(nil, "OVERLAY", nil, 7)
-            t:SetColorTexture(0, 0, 0, 1)
-            if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
-            PP.Point(t, anchor1, f, anchor1, 0, 0)
-            PP.Point(t, anchor2, f, anchor2, 0, 0)
-            if isH then PP.Height(t, 1) else PP.Width(t, 1) end
-        end
-        mkBorder("TOPLEFT", "TOPRIGHT", true)
-        mkBorder("BOTTOMLEFT", "BOTTOMRIGHT", true)
-        mkBorder("TOPLEFT", "BOTTOMLEFT", false)
-        mkBorder("TOPRIGHT", "BOTTOMRIGHT", false)
+        -- 1px black border via unified PP system
+        PP.CreateBorder(f, 0, 0, 0, 1, 1, "OVERLAY", 7)
 
         return f
     end
@@ -2855,6 +2850,7 @@ initFrame:SetScript("OnEvent", function(self)
             for i = 1, 4 do
                 local t = f:CreateTexture(nil, "OVERLAY", nil, 2)
                 t:SetColorTexture(1, 1, 1, 1)
+                PP.DisablePixelSnap(t)
                 f._borderOv[i] = t
             end
         end
@@ -3021,7 +3017,7 @@ initFrame:SetScript("OnEvent", function(self)
             -- Auto-Cast Shine preview
             ns.StartAutoCastShine(f, iconSize, cr, cg, cb, p.procGlowScale or 1.0)
         elseif loopEntry.shapeGlow then
-            -- Shape Glow preview â€” use first bar's shape mask
+            -- Shape Glow preview — use first bar's shape mask
             local maskPath
             for k, bs in pairs(EAB.db.profile.bars) do
                 if bs then
@@ -3319,7 +3315,7 @@ initFrame:SetScript("OnEvent", function(self)
             { type="dropdown", text="Custom Proc Glow",
               values=procGlowValues, order=procGlowOrder,
               disabled=function() return hasCustomShape end,
-              disabledTooltip="Custom shapes always use Shape Glow â€” change your bar shape to None or Cropped to pick a different glow",
+              disabledTooltip="Custom shapes always use Shape Glow — change your bar shape to None or Cropped to pick a different glow",
               getValue=function() if p.procGlowEnabled == false then return 0 end; return p.procGlowType or 1 end,
               setValue=function(v)
                   local wasOff = (p.procGlowType == 0) or (p.procGlowEnabled == false)
@@ -3457,7 +3453,7 @@ initFrame:SetScript("OnEvent", function(self)
             if pageName == PAGE_BARS then
                 UpdatePreview()
                 ShowEditOverlay(SelectedKey())
-                -- Refresh hint visibility ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â never recreate here, just show/hide
+                -- Refresh hint visibility ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â never recreate here, just show/hide
                 local dismissed = IsPreviewHintDismissed()
                 if _abPreviewHintFS then
                     if dismissed then

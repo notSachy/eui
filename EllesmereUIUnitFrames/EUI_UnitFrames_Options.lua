@@ -103,6 +103,11 @@ initFrame:SetScript("OnEvent", function(self)
         "Gotham Narrow Ultra", "Gotham Narrow", "Russo One", "Ubuntu",
         "Friz Quadrata", "Arial", "Morpheus", "Skurri",
     }
+    if EllesmereUI.AppendSharedMediaFonts then
+        EllesmereUI.AppendSharedMediaFonts(fontValues, fontOrder, {
+            keyByName = true, runtimePaths = fontPaths,
+        })
+    end
 
     ---------------------------------------------------------------------------
     --  Individual Display unit selector
@@ -1221,32 +1226,8 @@ initFrame:SetScript("OnEvent", function(self)
             cbBg:SetColorTexture(0, 0, 0, 0.5)
             UnsnapTex(cbBg)
 
-            -- 1px black borders on left, right, bottom (matching real CreateCastBar)
-            local cbBdrL = castbar:CreateTexture(nil, "OVERLAY")
-            cbBdrL:SetColorTexture(0, 0, 0, 1)
-            PP.Width(cbBdrL, 1)
-            PP.Point(cbBdrL, "TOPLEFT", castbar, "TOPLEFT", 0, 0)
-            PP.Point(cbBdrL, "BOTTOMLEFT", castbar, "BOTTOMLEFT", 0, 0)
-            UnsnapTex(cbBdrL)
-
-            local cbBdrR = castbar:CreateTexture(nil, "OVERLAY")
-            cbBdrR:SetColorTexture(0, 0, 0, 1)
-            PP.Width(cbBdrR, 1)
-            PP.Point(cbBdrR, "TOPRIGHT", castbar, "TOPRIGHT", 0, 0)
-            PP.Point(cbBdrR, "BOTTOMRIGHT", castbar, "BOTTOMRIGHT", 0, 0)
-            UnsnapTex(cbBdrR)
-
-            local cbBdrB = castbar:CreateTexture(nil, "OVERLAY")
-            cbBdrB:SetColorTexture(0, 0, 0, 1)
-            PP.Height(cbBdrB, 1)
-            PP.Point(cbBdrB, "BOTTOMLEFT", castbar, "BOTTOMLEFT", 0, 0)
-            PP.Point(cbBdrB, "BOTTOMRIGHT", castbar, "BOTTOMRIGHT", 0, 0)
-            UnsnapTex(cbBdrB)
-
-            -- Store castbar border refs for scale compensation
-            castbar._cbBdrL = cbBdrL
-            castbar._cbBdrR = cbBdrR
-            castbar._cbBdrB = cbBdrB
+            -- Black borders via unified PP system
+            PP.CreateBorder(castbar, 0, 0, 0, 1, 1, "OVERLAY", 0)
 
             -- Cast fill (inset 1px from left, 1px from bottom to sit inside borders)
             castFill = castbar:CreateTexture(nil, "ARTWORK")
@@ -1293,17 +1274,8 @@ initFrame:SetScript("OnEvent", function(self)
             iconBg:SetAllPoints()
             iconBg:SetColorTexture(0, 0, 0, 1)
             UnsnapTex(iconBg)
-            -- 1px black border edges
-            local function MkIconBdr()
-                local t = castIconFrame:CreateTexture(nil, "OVERLAY", nil, 7)
-                t:SetColorTexture(0, 0, 0, 1)
-                UnsnapTex(t)
-                return t
-            end
-            local ibT = MkIconBdr(); PP.Height(ibT, 1); PP.Point(ibT, "TOPLEFT", castIconFrame, "TOPLEFT", 0, 0); PP.Point(ibT, "TOPRIGHT", castIconFrame, "TOPRIGHT", 0, 0)
-            local ibB = MkIconBdr(); PP.Height(ibB, 1); PP.Point(ibB, "BOTTOMLEFT", castIconFrame, "BOTTOMLEFT", 0, 0); PP.Point(ibB, "BOTTOMRIGHT", castIconFrame, "BOTTOMRIGHT", 0, 0)
-            local ibL = MkIconBdr(); PP.Width(ibL, 1); PP.Point(ibL, "TOPLEFT", castIconFrame, "TOPLEFT", 0, 0); PP.Point(ibL, "BOTTOMLEFT", castIconFrame, "BOTTOMLEFT", 0, 0)
-            local ibR = MkIconBdr(); PP.Width(ibR, 1); PP.Point(ibR, "TOPRIGHT", castIconFrame, "TOPRIGHT", 0, 0); PP.Point(ibR, "BOTTOMRIGHT", castIconFrame, "BOTTOMRIGHT", 0, 0)
+            -- 1px black border via unified PP system
+            PP.CreateBorder(castIconFrame, 0, 0, 0, 1)
             local castIconTex = castIconFrame:CreateTexture(nil, "ARTWORK")
             PP.Point(castIconTex, "TOPLEFT", castIconFrame, "TOPLEFT", 1, -1)
             PP.Point(castIconTex, "BOTTOMRIGHT", castIconFrame, "BOTTOMRIGHT", -1, 1)
@@ -1311,7 +1283,6 @@ initFrame:SetScript("OnEvent", function(self)
             castIconTex:SetTexture(castSpellIcon)
             UnsnapTex(castIconTex)
             castIconFrame._iconTex = castIconTex
-            castIconFrame._iconBdrs = { ibT, ibB, ibL, ibR }
 
             -- Hide initially if player castbar not enabled
             if unitKey == "player" and castbarH <= 0 then
@@ -1534,7 +1505,7 @@ initFrame:SetScript("OnEvent", function(self)
             -- 1px inset bottom border for "above" position (matches frame border color)
             -- Sublevel 7 so it renders over pip fill textures (sublevel 3)
             local cpBottomBdr = cpPipContainer:CreateTexture(nil, "OVERLAY", nil, 7)
-            PP.Height(cpBottomBdr, 1)
+            cpBottomBdr:SetHeight(1)
             PP.Point(cpBottomBdr, "BOTTOMLEFT", cpPipContainer, "BOTTOMLEFT", 0, 0)
             PP.Point(cpBottomBdr, "BOTTOMRIGHT", cpPipContainer, "BOTTOMRIGHT", 0, 0)
             UnsnapTex(cpBottomBdr)
@@ -1557,29 +1528,7 @@ initFrame:SetScript("OnEvent", function(self)
         local initBdrBtbAtt = (initBdrBtbPos == "top" or initBdrBtbPos == "bottom")
         border:SetHeight(settings.healthHeight + initPpExtra + (settings.bottomTextBar and initBdrBtbAtt and (settings.bottomTextBarHeight or 16) or 0))
         border:SetFrameLevel(barArea:GetFrameLevel() + 5)
-        local function MkBdrTex()
-            local t = border:CreateTexture(nil, "OVERLAY", nil, 7)
-            t:SetColorTexture(bdrColor.r, bdrColor.g, bdrColor.b, 1)
-            UnsnapTex(t)
-            return t
-        end
-        local bdrT = MkBdrTex()
-        PP.Height(bdrT, bdrSize)
-        PP.Point(bdrT, "TOPLEFT",  border, "TOPLEFT",  0, 0)
-        PP.Point(bdrT, "TOPRIGHT", border, "TOPRIGHT", 0, 0)
-        local bdrB = MkBdrTex()
-        PP.Height(bdrB, bdrSize)
-        PP.Point(bdrB, "BOTTOMLEFT",  border, "BOTTOMLEFT",  0, 0)
-        PP.Point(bdrB, "BOTTOMRIGHT", border, "BOTTOMRIGHT", 0, 0)
-        local bdrL = MkBdrTex()
-        PP.Width(bdrL, bdrSize)
-        PP.Point(bdrL, "TOPLEFT",    border, "TOPLEFT",    0, 0)
-        PP.Point(bdrL, "BOTTOMLEFT", border, "BOTTOMLEFT", 0, 0)
-        local bdrR = MkBdrTex()
-        PP.Width(bdrR, bdrSize)
-        PP.Point(bdrR, "TOPRIGHT",    border, "TOPRIGHT",    0, 0)
-        PP.Point(bdrR, "BOTTOMRIGHT", border, "BOTTOMRIGHT", 0, 0)
-        border._texs = { bdrT, bdrB, bdrL, bdrR }
+        PP.CreateBorder(border, bdrColor.r, bdrColor.g, bdrColor.b, 1, bdrSize)
         if bdrSize == 0 then border:Hide() end
 
         -- Absorb bar (player only, uses shield.tga like the real addon)
@@ -2066,15 +2015,7 @@ initFrame:SetScript("OnEvent", function(self)
             border:SetPoint("TOPRIGHT", barArea, "TOPRIGHT", 0, 0)
             border:SetHeight(borderH)
             if bs > 0 then
-                if border._texs then
-                    for _, t in ipairs(border._texs) do
-                        t:SetColorTexture(bc.r, bc.g, bc.b, 1)
-                    end
-                    PP.Height(border._texs[1], bs)
-                    PP.Height(border._texs[2], bs)
-                    PP.Width(border._texs[3], bs)
-                    PP.Width(border._texs[4], bs)
-                end
+                PP.UpdateBorder(border, bs, bc.r, bc.g, bc.b, 1)
                 border:Show()
             else
                 border:Hide()
@@ -2310,28 +2251,20 @@ initFrame:SetScript("OnEvent", function(self)
             pf:SetScale(combinedScale)
 
             -- Recalculate border sizes after scale change so they stay pixel-perfect
-            if border and border._texs then
+            if border then
                 local bs2 = ds.borderSize or 1
-                PP.Height(border._texs[1], bs2)
-                PP.Height(border._texs[2], bs2)
-                PP.Width(border._texs[3], bs2)
-                PP.Width(border._texs[4], bs2)
+                PP.SetBorderSize(border, bs2)
             end
             if castbar then
-                if castbar._cbBdrL then PP.Width(castbar._cbBdrL, 1) end
-                if castbar._cbBdrR then PP.Width(castbar._cbBdrR, 1) end
-                if castbar._cbBdrB then PP.Height(castbar._cbBdrB, 1) end
+                if castbar._ppBorders then PP.SetBorderSize(castbar, 1) end
                 if castFill then
                     castFill:ClearAllPoints()
                     PP.Point(castFill, "TOPLEFT", castbar, "TOPLEFT", 1, 0)
                     PP.Point(castFill, "BOTTOMLEFT", castbar, "BOTTOMLEFT", 1, 1)
                 end
             end
-            if castIconFrame and castIconFrame._iconBdrs then
-                PP.Height(castIconFrame._iconBdrs[1], 1)
-                PP.Height(castIconFrame._iconBdrs[2], 1)
-                PP.Width(castIconFrame._iconBdrs[3], 1)
-                PP.Width(castIconFrame._iconBdrs[4], 1)
+            if castIconFrame then
+                PP.SetBorderSize(castIconFrame, 1)
                 if castIconFrame._iconTex then
                     castIconFrame._iconTex:ClearAllPoints()
                     PP.Point(castIconFrame._iconTex, "TOPLEFT", castIconFrame, "TOPLEFT", 1, -1)
@@ -5166,10 +5099,10 @@ initFrame:SetScript("OnEvent", function(self)
                 if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
                 return t
             end
-            local ht = MkHL(); PP.Height(ht, 2); ht:SetPoint("TOPLEFT", hlAnchorFrame, "TOPLEFT"); ht:SetPoint("TOPRIGHT", hlAnchorFrame, "TOPRIGHT")
-            local hb = MkHL(); PP.Height(hb, 2); hb:SetPoint("BOTTOMLEFT", hlAnchorFrame, "BOTTOMLEFT"); hb:SetPoint("BOTTOMRIGHT", hlAnchorFrame, "BOTTOMRIGHT")
-            local hl = MkHL(); PP.Width(hl, 2); hl:SetPoint("TOPLEFT", ht, "BOTTOMLEFT"); hl:SetPoint("BOTTOMLEFT", hb, "TOPLEFT")
-            local hr = MkHL(); PP.Width(hr, 2); hr:SetPoint("TOPRIGHT", ht, "BOTTOMRIGHT"); hr:SetPoint("BOTTOMRIGHT", hb, "TOPRIGHT")
+            local ht = MkHL(); ht:SetHeight(2); ht:SetPoint("TOPLEFT", hlAnchorFrame, "TOPLEFT"); ht:SetPoint("TOPRIGHT", hlAnchorFrame, "TOPRIGHT")
+            local hb = MkHL(); hb:SetHeight(2); hb:SetPoint("BOTTOMLEFT", hlAnchorFrame, "BOTTOMLEFT"); hb:SetPoint("BOTTOMRIGHT", hlAnchorFrame, "BOTTOMRIGHT")
+            local hl = MkHL(); hl:SetWidth(2); hl:SetPoint("TOPLEFT", ht, "BOTTOMLEFT"); hl:SetPoint("BOTTOMLEFT", hb, "TOPLEFT")
+            local hr = MkHL(); hr:SetWidth(2); hr:SetPoint("TOPRIGHT", ht, "BOTTOMRIGHT"); hr:SetPoint("BOTTOMRIGHT", hb, "TOPRIGHT")
             btn._hlTextures = { ht, hb, hl, hr }
             local function ShowHL() for _, t in ipairs(btn._hlTextures) do t:Show() end end
             local function HideHL() for _, t in ipairs(btn._hlTextures) do t:Hide() end end
@@ -5463,10 +5396,10 @@ initFrame:SetScript("OnEvent", function(self)
                 if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
                 return t
             end
-            local ht = MkHL(); PP.Height(ht, 2); ht:SetPoint("TOPLEFT", hlAnchorFrame, "TOPLEFT"); ht:SetPoint("TOPRIGHT", hlAnchorFrame, "TOPRIGHT")
-            local hb = MkHL(); PP.Height(hb, 2); hb:SetPoint("BOTTOMLEFT", hlAnchorFrame, "BOTTOMLEFT"); hb:SetPoint("BOTTOMRIGHT", hlAnchorFrame, "BOTTOMRIGHT")
-            local hl = MkHL(); PP.Width(hl, 2); hl:SetPoint("TOPLEFT", ht, "BOTTOMLEFT"); hl:SetPoint("BOTTOMLEFT", hb, "TOPLEFT")
-            local hr = MkHL(); PP.Width(hr, 2); hr:SetPoint("TOPRIGHT", ht, "BOTTOMRIGHT"); hr:SetPoint("BOTTOMRIGHT", hb, "TOPRIGHT")
+            local ht = MkHL(); ht:SetHeight(2); ht:SetPoint("TOPLEFT", hlAnchorFrame, "TOPLEFT"); ht:SetPoint("TOPRIGHT", hlAnchorFrame, "TOPRIGHT")
+            local hb = MkHL(); hb:SetHeight(2); hb:SetPoint("BOTTOMLEFT", hlAnchorFrame, "BOTTOMLEFT"); hb:SetPoint("BOTTOMRIGHT", hlAnchorFrame, "BOTTOMRIGHT")
+            local hl = MkHL(); hl:SetWidth(2); hl:SetPoint("TOPLEFT", ht, "BOTTOMLEFT"); hl:SetPoint("BOTTOMLEFT", hb, "TOPLEFT")
+            local hr = MkHL(); hr:SetWidth(2); hr:SetPoint("TOPRIGHT", ht, "BOTTOMRIGHT"); hr:SetPoint("BOTTOMRIGHT", hb, "TOPRIGHT")
             btn._hlTextures = { ht, hb, hl, hr }
             local function ShowHL() for _, t in ipairs(btn._hlTextures) do t:Show() end end
             local function HideHL() for _, t in ipairs(btn._hlTextures) do t:Hide() end end
@@ -5914,10 +5847,10 @@ initFrame:SetScript("OnEvent", function(self)
                 if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
                 return t
             end
-            local ht = MkHL(); PP.Height(ht, 2); ht:SetPoint("TOPLEFT", hlAnchorFrame, "TOPLEFT"); ht:SetPoint("TOPRIGHT", hlAnchorFrame, "TOPRIGHT")
-            local hb = MkHL(); PP.Height(hb, 2); hb:SetPoint("BOTTOMLEFT", hlAnchorFrame, "BOTTOMLEFT"); hb:SetPoint("BOTTOMRIGHT", hlAnchorFrame, "BOTTOMRIGHT")
-            local hl = MkHL(); PP.Width(hl, 2); hl:SetPoint("TOPLEFT", ht, "BOTTOMLEFT"); hl:SetPoint("BOTTOMLEFT", hb, "TOPLEFT")
-            local hr = MkHL(); PP.Width(hr, 2); hr:SetPoint("TOPRIGHT", ht, "BOTTOMRIGHT"); hr:SetPoint("BOTTOMRIGHT", hb, "TOPRIGHT")
+            local ht = MkHL(); ht:SetHeight(2); ht:SetPoint("TOPLEFT", hlAnchorFrame, "TOPLEFT"); ht:SetPoint("TOPRIGHT", hlAnchorFrame, "TOPRIGHT")
+            local hb = MkHL(); hb:SetHeight(2); hb:SetPoint("BOTTOMLEFT", hlAnchorFrame, "BOTTOMLEFT"); hb:SetPoint("BOTTOMRIGHT", hlAnchorFrame, "BOTTOMRIGHT")
+            local hl = MkHL(); hl:SetWidth(2); hl:SetPoint("TOPLEFT", ht, "BOTTOMLEFT"); hl:SetPoint("BOTTOMLEFT", hb, "TOPLEFT")
+            local hr = MkHL(); hr:SetWidth(2); hr:SetPoint("TOPRIGHT", ht, "BOTTOMRIGHT"); hr:SetPoint("BOTTOMRIGHT", hb, "TOPRIGHT")
             btn._hlTextures = { ht, hb, hl, hr }
             local function ShowHL() for _, t in ipairs(btn._hlTextures) do t:Show() end end
             local function HideHL() for _, t in ipairs(btn._hlTextures) do t:Hide() end end

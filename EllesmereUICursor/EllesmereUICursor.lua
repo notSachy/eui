@@ -1007,12 +1007,6 @@ function ECL:OnInitialize()
 end
 
 function ECL:OnEnable()
-    -- Minimap button (shared across all Ellesmere addons â€” first to load wins)
-    -- Minimap button (handled by parent addon)
-    if not _EllesmereUI_MinimapRegistered and EllesmereUI and EllesmereUI.CreateMinimapButton then
-        EllesmereUI.CreateMinimapButton()
-    end
-
     f = CreateFrame("Frame", "EllesmereUICursorFrame", UIParent)
     f:SetFrameStrata("TOOLTIP")
     f:SetFrameLevel(9999)

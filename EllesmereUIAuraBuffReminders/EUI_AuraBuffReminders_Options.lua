@@ -427,10 +427,10 @@ initFrame:SetScript("OnEvent", function(self)
             if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
             return t
         end
-        local ht = MkHL(); PP.Height(ht, 2); ht:SetPoint("TOPLEFT", btn, "TOPLEFT"); ht:SetPoint("TOPRIGHT", btn, "TOPRIGHT")
-        local hb = MkHL(); PP.Height(hb, 2); hb:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT"); hb:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT")
-        local hl = MkHL(); PP.Width(hl, 2); hl:SetPoint("TOPLEFT", ht, "BOTTOMLEFT"); hl:SetPoint("BOTTOMLEFT", hb, "TOPLEFT")
-        local hr = MkHL(); PP.Width(hr, 2); hr:SetPoint("TOPRIGHT", ht, "BOTTOMRIGHT"); hr:SetPoint("BOTTOMRIGHT", hb, "TOPRIGHT")
+        local ht = MkHL(); ht:SetHeight(2); ht:SetPoint("TOPLEFT", btn, "TOPLEFT"); ht:SetPoint("TOPRIGHT", btn, "TOPRIGHT")
+        local hb = MkHL(); hb:SetHeight(2); hb:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT"); hb:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT")
+        local hl = MkHL(); hl:SetWidth(2); hl:SetPoint("TOPLEFT", ht, "BOTTOMLEFT"); hl:SetPoint("BOTTOMLEFT", hb, "TOPLEFT")
+        local hr = MkHL(); hr:SetWidth(2); hr:SetPoint("TOPRIGHT", ht, "BOTTOMRIGHT"); hr:SetPoint("BOTTOMRIGHT", hb, "TOPRIGHT")
         btn._hlTextures = { ht, hb, hl, hr }
         local function ShowHL() for _, t in ipairs(btn._hlTextures) do t:Show() end end
         local function HideHL() for _, t in ipairs(btn._hlTextures) do t:Hide() end end
@@ -596,7 +596,7 @@ initFrame:SetScript("OnEvent", function(self)
                 local div = rowFrame:CreateTexture(nil, "ARTWORK")
                 div:SetColorTexture(1, 1, 1, 0.06)
                 if div.SetSnapToPixelGrid then div:SetSnapToPixelGrid(false); div:SetTexelSnappingBias(0) end
-                PP.Width(div, 1)
+                div:SetWidth(1)
                 local xPos = d * colW
                 PP.Point(div, "TOP", rowFrame, "TOPLEFT", xPos, 0)
                 PP.Point(div, "BOTTOM", rowFrame, "BOTTOMLEFT", xPos, 0)
@@ -1739,7 +1739,7 @@ initFrame:SetScript("OnEvent", function(self)
                 bg:SetColorTexture(0, 0, 0, alpha)
                 local div = emptyRow:CreateTexture(nil, "ARTWORK")
                 div:SetColorTexture(1, 1, 1, 0.06)
-                PP.Width(div, 1)
+                div:SetWidth(1)
                 PP.Point(div, "TOP", emptyRow, "TOP", 0, 0)
                 PP.Point(div, "BOTTOM", emptyRow, "BOTTOM", 0, 0)
                 local emptyFS = emptyRow:CreateFontString(nil, "OVERLAY")
@@ -1773,7 +1773,7 @@ initFrame:SetScript("OnEvent", function(self)
                 -- Center divider
                 local div = row:CreateTexture(nil, "ARTWORK")
                 div:SetColorTexture(1, 1, 1, 0.06)
-                PP.Width(div, 1)
+                div:SetWidth(1)
                 PP.Point(div, "TOP", row, "TOP", 0, 0)
                 PP.Point(div, "BOTTOM", row, "BOTTOM", 0, 0)
                 return row

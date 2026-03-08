@@ -1057,29 +1057,9 @@ local frameCache = CreateFramePool("Frame", UIParent, nil, nil, false, function(
     end
     local function AddBorder(parent)
         local PP = EllesmereUI and EllesmereUI.PP
-        local function MkBorderTex()
-            local tex = parent:CreateTexture(nil, "OVERLAY", nil, 5)
-            tex:SetColorTexture(0, 0, 0, 1)
-            if PP then PP.DisablePixelSnap(tex) end
-            return tex
+        if PP then
+            PP.CreateBorder(parent, 0, 0, 0, 1, 1, "OVERLAY", 5)
         end
-        local s = PP and PP.Scale(1) or 1
-        local t = MkBorderTex()
-        t:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
-        t:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
-        t:SetHeight(s)
-        local b = MkBorderTex()
-        b:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", 0, 0)
-        b:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", 0, 0)
-        b:SetHeight(s)
-        local l = MkBorderTex()
-        l:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
-        l:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", 0, 0)
-        l:SetWidth(s)
-        local r = MkBorderTex()
-        r:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
-        r:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", 0, 0)
-        r:SetWidth(s)
     end
     local BORDER_TEX = "Interface\\AddOns\\EllesmereUINameplates\\Media\\border-colorless.png"
     local BORDER_TEX_SIMPLE = "Interface\\AddOns\\EllesmereUINameplates\\Media\\border-simple.png"
@@ -1261,7 +1241,7 @@ local frameCache = CreateFramePool("Frame", UIParent, nil, nil, false, function(
     do local PP = EllesmereUI and EllesmereUI.PP
         if PP then PP.DisablePixelSnap(plate.castLeftBorder) end
     end
-    plate.castLeftBorder:SetWidth(PP and PP.Scale(1) or 1)
+    plate.castLeftBorder:SetWidth(1)
     plate.castLeftBorder:SetPoint("TOPLEFT", plate.cast, "TOPLEFT", 0, 0)
     plate.castLeftBorder:SetPoint("BOTTOMLEFT", plate.cast, "BOTTOMLEFT", 0, 0)
     -- Icon frame hangs outside the cast bar's left edge.
@@ -1696,12 +1676,6 @@ kickWatcher:SetScript("OnEvent", function(self, event)
                 end
             end
         end
-        -- Minimap button (shared across all Ellesmere addons â€” first to load wins)
-        if event == "PLAYER_LOGIN" and not _EllesmereUI_MinimapRegistered then
-            if EllesmereUI and EllesmereUI.CreateMinimapButton then
-                EllesmereUI.CreateMinimapButton()
-            end
-        end
         -- Blizzard options panel is registered centrally in EllesmereUI.lua
         RefreshKickAbility()
     end
@@ -2085,11 +2059,17 @@ local function UpdateClassPowerOnPlate(plate)
         return
     end
 
-    local scaledW = CP_PIP_W * cpScale
-    local scaledH = CP_PIP_H * cpScale
-    local scaledGap = GetClassPowerGap() * cpScale
-    local totalW = maxP * scaledW + (maxP - 1) * scaledGap
-    local startX = -totalW / 2 + scaledW / 2
+    local scaledW = PP.Scale(CP_PIP_W * cpScale)
+    local scaledH = PP.Scale(CP_PIP_H * cpScale)
+    local scaledGap = PP.Scale(GetClassPowerGap() * cpScale)
+    -- Pre-compute each pip's left-edge X in group-local coords.
+    -- Position by BOTTOMLEFT/TOPLEFT to avoid half-pixel center offsets.
+    local pipPositions = {}
+    for idx = 1, maxP do
+        pipPositions[idx] = PP.Scale((idx - 1) * (scaledW + scaledGap))
+    end
+    local groupW = pipPositions[maxP] + scaledW
+    local halfGroup = PP.Scale(groupW / 2)
 
     local _, pClass = UnitClass("player")
     local cpColor = CP_DEFAULT_COLOR
@@ -2102,13 +2082,16 @@ local function UpdateClassPowerOnPlate(plate)
 
     local emptyCol = GetClassPowerEmptyColor()
 
+    local leftAnchor = (anchorPoint == "BOTTOM") and "BOTTOMLEFT" or "TOPLEFT"
+
     for i = 1, #plate._cpPips do
         local pip = plate._cpPips[i]
         if i <= maxP then
             pip:ClearAllPoints()
             PP.Size(pip, scaledW, scaledH)
-            PP.Point(pip, anchorPoint, anchorFrame, anchorRelPoint,
-                startX + (i - 1) * (scaledW + scaledGap) + cpXOff, yDir * cpYOff)
+            local pipLeftX = PP.Scale(pipPositions[i] - halfGroup + cpXOff)
+            pip:SetPoint(leftAnchor, anchorFrame, anchorRelPoint,
+                pipLeftX, PP.Scale(yDir * cpYOff))
 
             -- Background texture behind each pip
             local bg = pip._bg
@@ -4602,6 +4585,15 @@ end
 local npAddon = EllesmereUI.Lite.NewAddon("EllesmereUINameplatesInit")
 function npAddon:OnInitialize()
     InitDB()
+    -- Append SharedMedia textures to runtime tables so SM texture keys resolve at runtime
+    if EllesmereUI.AppendSharedMediaTextures then
+        EllesmereUI.AppendSharedMediaTextures(
+            ns.healthBarTextureNames,
+            ns.healthBarTextureOrder,
+            nil,
+            ns.healthBarTextures
+        )
+    end
 end
 function npAddon:OnEnable()
     SetupAuraCVars()

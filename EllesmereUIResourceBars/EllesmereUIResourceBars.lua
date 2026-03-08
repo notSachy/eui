@@ -345,6 +345,10 @@ local DEFAULTS = {
             timerSize     = 11,
             timerX        = 0,
             timerY        = 0,
+            showSpellText = true,
+            spellTextSize = 11,
+            spellTextX    = 0,
+            spellTextY    = 0,
             scale         = 1.0,
             iconAttach    = true,
             unlockPos     = nil,
@@ -463,50 +467,20 @@ local function MakePixelBorder(parent, r, g, b, a, size)
     bf:SetAllPoints(parent)
     bf:SetFrameLevel(parent:GetFrameLevel() + 1)
 
-    local function MkEdge()
-        local t = bf:CreateTexture(nil, "OVERLAY", nil, 7)
-        t:SetColorTexture(r, g, b, alpha)
-        PP.DisablePixelSnap(t)
-        return t
-    end
-    local eT = MkEdge()
-    PP.Height(eT, sz)
-    PP.Point(eT, "TOPLEFT",  bf, "TOPLEFT",  0, 0)
-    PP.Point(eT, "TOPRIGHT", bf, "TOPRIGHT", 0, 0)
-    local eB = MkEdge()
-    PP.Height(eB, sz)
-    PP.Point(eB, "BOTTOMLEFT",  bf, "BOTTOMLEFT",  0, 0)
-    PP.Point(eB, "BOTTOMRIGHT", bf, "BOTTOMRIGHT", 0, 0)
-    -- Vertical edges inset by size to avoid corner overlap
-    local eL = MkEdge()
-    PP.Width(eL, sz)
-    PP.Point(eL, "TOPLEFT",    eT, "BOTTOMLEFT",  0, 0)
-    PP.Point(eL, "BOTTOMLEFT", eB, "TOPLEFT",     0, 0)
-    local eR = MkEdge()
-    PP.Width(eR, sz)
-    PP.Point(eR, "TOPRIGHT",    eT, "BOTTOMRIGHT",  0, 0)
-    PP.Point(eR, "BOTTOMRIGHT", eB, "TOPRIGHT",     0, 0)
+    -- Use the unified PP border system (raw integer sizes, never scaled)
+    PP.CreateBorder(bf, r, g, b, alpha, sz, "OVERLAY", 7)
 
     return {
         _frame = bf,
-        edges = { eT, eB, eL, eR },
+        edges = bf._ppBorders,
         SetColor = function(self, cr, cg, cb, ca)
-            local na = ca or 1
-            for _, e in ipairs(self.edges) do
-                e:SetColorTexture(cr, cg, cb, na)
-                PP.DisablePixelSnap(e)
-            end
+            PP.SetBorderColor(bf, cr, cg, cb, ca or 1)
         end,
         SetSize = function(self, newSz)
-            PP.Height(eT, newSz)
-            PP.Height(eB, newSz)
-            PP.Width(eL, newSz)
-            PP.Width(eR, newSz)
+            PP.SetBorderSize(bf, newSz)
         end,
         SetShown = function(self, shown)
-            for _, e in ipairs(self.edges) do
-                if shown then e:Show() else e:Hide() end
-            end
+            if shown then PP.ShowBorder(bf) else PP.HideBorder(bf) end
         end,
     }
 end
@@ -2229,6 +2203,48 @@ _G._ERB_BarTextures     = BAR_TEXTURES
 _G._ERB_BarTextureOrder = BAR_TEXTURE_ORDER
 _G._ERB_BarTextureNames = BAR_TEXTURE_NAMES
 
+-------------------------------------------------------------------------------
+--  Append SharedMedia statusbar textures to both texture tables
+--  (deferred to OnInitialize so all addons have registered their textures)
+-------------------------------------------------------------------------------
+local function AppendSharedMediaTextures()
+    local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+    if not LSM then return end
+    local smTextures = LSM:HashTable("statusbar")
+    if not smTextures then return end
+
+    -- Collect and sort SharedMedia texture names alphabetically
+    local sorted = {}
+    for name in pairs(smTextures) do
+        -- Skip any that duplicate our built-in keys
+        local lk = name:lower():gsub("%s+", "-")
+        if not CAST_BAR_TEXTURES[lk] and not BAR_TEXTURES[lk] then
+            sorted[#sorted + 1] = name
+        end
+    end
+    table.sort(sorted)
+
+    if #sorted > 0 then
+        -- Add separator + SharedMedia entries to cast bar textures
+        CAST_BAR_TEXTURE_ORDER[#CAST_BAR_TEXTURE_ORDER + 1] = "---"
+        for _, name in ipairs(sorted) do
+            local key = "sm:" .. name
+            CAST_BAR_TEXTURES[key] = smTextures[name]
+            CAST_BAR_TEXTURE_ORDER[#CAST_BAR_TEXTURE_ORDER + 1] = key
+            CAST_BAR_TEXTURE_NAMES[key] = name
+        end
+
+        -- Add separator + SharedMedia entries to bar textures
+        BAR_TEXTURE_ORDER[#BAR_TEXTURE_ORDER + 1] = "---"
+        for _, name in ipairs(sorted) do
+            local key = "sm:" .. name
+            BAR_TEXTURES[key] = smTextures[name]
+            BAR_TEXTURE_ORDER[#BAR_TEXTURE_ORDER + 1] = key
+            BAR_TEXTURE_NAMES[key] = name
+        end
+    end
+end
+
 
 -------------------------------------------------------------------------------
 --  Player Cast Bar
@@ -2536,6 +2552,17 @@ BuildCastBar = function()
         timerText:Show()
     else
         timerText:Hide()
+    end
+
+    -- Spell name text
+    local nameText = castBarFrame._nameText
+    if cb.showSpellText then
+        SetRBFont(nameText, GetRBFont(), cb.spellTextSize or 11)
+        nameText:ClearAllPoints()
+        nameText:SetPoint("LEFT", bar, "LEFT", 4 + (cb.spellTextX or 0), cb.spellTextY or 0)
+        nameText:Show()
+    else
+        nameText:Hide()
     end
 
     -- Hide pips when not empowering
@@ -3015,14 +3042,11 @@ function ERB:OnInitialize()
     _G._ERB_Apply = function() ERB:ApplyAll() end
     _G._ERB_GetSecondaryResource = GetSecondaryResource
     _G._ERB_PowerColors = POWER_COLORS
+
+    AppendSharedMediaTextures()
 end
 
 function ERB:OnEnable()
-    -- Minimap button (handled by parent addon)
-    if not _EllesmereUI_MinimapRegistered and EllesmereUI and EllesmereUI.CreateMinimapButton then
-        EllesmereUI.CreateMinimapButton()
-    end
-
     local eventFrame = CreateFrame("Frame")
     eventFrame:RegisterUnitEvent("UNIT_HEALTH", "player")
     eventFrame:RegisterUnitEvent("UNIT_MAXHEALTH", "player")

@@ -1575,30 +1575,19 @@ end
 local function EnsureBorders(btn)
     if btn._eabBorders then return btn._eabBorders end
     local PP = EllesmereUI and EllesmereUI.PP
-    local b = {}
-    for i = 1, 4 do
-        b[i] = btn:CreateTexture(nil, "OVERLAY", nil, -1)
-        b[i]:SetColorTexture(0, 0, 0, 1)
-        if PP then PP.DisablePixelSnap(b[i]) end
+    if PP then
+        PP.CreateBorder(btn, 0, 0, 0, 1, 1, "OVERLAY", -1)
+        btn._eabBorders = btn._ppBorders
     end
-    btn._eabBorders = b
-    PP.Point(b[1], "TOPLEFT", btn, "TOPLEFT", 0, 0)
-    PP.Point(b[1], "TOPRIGHT", btn, "TOPRIGHT", 0, 0)
-    PP.Point(b[2], "BOTTOMLEFT", btn, "BOTTOMLEFT", 0, 0)
-    PP.Point(b[2], "BOTTOMRIGHT", btn, "BOTTOMRIGHT", 0, 0)
-    PP.Point(b[3], "TOPLEFT", b[1], "BOTTOMLEFT", 0, 0)
-    PP.Point(b[3], "BOTTOMLEFT", b[2], "TOPLEFT", 0, 0)
-    PP.Point(b[4], "TOPRIGHT", b[1], "BOTTOMRIGHT", 0, 0)
-    PP.Point(b[4], "BOTTOMRIGHT", b[2], "TOPRIGHT", 0, 0)
-    return b
+    return btn._eabBorders
 end
 
 local function ApplyButtonBorders(btn, on, cr, cg, cb, ca, sz, zoom)
     MakeButtonSquare(btn)
+    local PP = EllesmereUI and EllesmereUI.PP
     if not on then
         if btn._eabBorders then
-            local b = btn._eabBorders
-            if b[1]:IsShown() then b[1]:Hide(); b[2]:Hide(); b[3]:Hide(); b[4]:Hide() end
+            PP.HideBorder(btn)
         end
         btn._eabBorderKey = nil
     else
@@ -1606,22 +1595,14 @@ local function ApplyButtonBorders(btn, on, cr, cg, cb, ca, sz, zoom)
         local stateKey = cr * 1000000 + cg * 10000 + cb * 100 + ca + sz * 0.001 + zoom * 10000000 + es * 0.0001
         if btn._eabBorderKey == stateKey then return end
         btn._eabBorderKey = stateKey
-        local b = EnsureBorders(btn)
-        for i = 1, 4 do
-            b[i]:SetColorTexture(cr, cg, cb, ca)
-            local PP = EllesmereUI and EllesmereUI.PP
-            if PP then PP.DisablePixelSnap(b[i]) end
-            if not (btn._eabShapeMask and btn._eabShapeMask:IsShown()) then b[i]:Show() end
+        EnsureBorders(btn)
+        PP.UpdateBorder(btn, sz, cr, cg, cb, ca)
+        local b = btn._eabBorders
+        if b then
+            if not (btn._eabShapeMask and btn._eabShapeMask:IsShown()) then
+                PP.ShowBorder(btn)
+            end
         end
-        -- Snap border size to physical pixels at the button's effective scale
-        local bdrMult = PP.perfect / es
-        local snappedSz = sz
-        if bdrMult ~= 1 and sz ~= 0 then
-            local y = bdrMult > 1 and bdrMult or -bdrMult
-            snappedSz = sz - sz % (sz < 0 and y or -y)
-        end
-        b[1]:SetHeight(snappedSz); b[2]:SetHeight(snappedSz)
-        b[3]:SetWidth(snappedSz); b[4]:SetWidth(snappedSz)
     end
     if zoom > 0 then
         local icon = btn.icon or btn.Icon
@@ -1758,7 +1739,7 @@ local function ApplyShapeToButton(btn, shape, brdOn, brdR, brdG, brdB, brdA, brd
         end
         -- Show square borders
         if btn._eabBorders then
-            for i = 1, 4 do btn._eabBorders[i]:Show() end
+            PP.ShowBorder(btn)
         end
         -- Re-enable Blizzard's Border texture (was hidden for custom shapes)
         if btn.Border then
@@ -1891,7 +1872,7 @@ local function ApplyShapeToButton(btn, shape, brdOn, brdR, brdG, brdB, brdA, brd
 
     -- Hide square borders
     if btn._eabBorders then
-        for i = 1, 4 do btn._eabBorders[i]:Hide() end
+        PP.HideBorder(btn)
     end
 
     -- Shape border texture
@@ -2063,6 +2044,9 @@ function EAB:ApplyScaleForBar(barKey)
     local scale = s.barScale or 1.0
     if scale < 0.1 then scale = 0.1 end
     frame:SetScale(scale)
+    -- Re-snap borders after scale change so they stay pixel-perfect
+    local PP = EllesmereUI and EllesmereUI.PP
+    if PP and PP.ResnapAllBorders then PP.ResnapAllBorders() end
 end
 
 -- Same as ApplyScaleForBar but preserves the bar's visual center.
@@ -2102,6 +2086,9 @@ function EAB:ApplyScalePreserveCenter(barKey)
     else
         frame:SetScale(scale)
     end
+    -- Re-snap borders after scale change so they stay pixel-perfect
+    local PP = EllesmereUI and EllesmereUI.PP
+    if PP and PP.ResnapAllBorders then PP.ResnapAllBorders() end
 end
 
 function EAB:ApplyPaddingForBar(barKey)
@@ -2293,7 +2280,7 @@ function EAB:ApplyAlwaysShowButtons(barKey)
                 btn._eabSlotBG:SetShown(visible)
             end
             if btn._eabBorders and not (btn._eabShapeMask and btn._eabShapeMask:IsShown()) then
-                for j = 1, 4 do btn._eabBorders[j]:SetShown(visible) end
+                btn._eabBorders:SetShown(visible)
             end
             if btn._eabShapeBorder then
                 btn._eabShapeBorder:SetShown(visible and btn._eabShapeBorder._eabWantsShow == true)
@@ -3443,11 +3430,22 @@ local function UpdateKeybinds()
                             ClearOverrideBindings(bind)
                             local bindName = bind:GetName()
                             if bindName then
+                                -- Only override a key if no other addon has already
+                                -- claimed it with an override binding (e.g. OPie rings).
+                                -- GetBindingAction with checkOverride=true returns the
+                                -- current override action; if it's a CLICK on a frame
+                                -- that isn't ours, another addon owns it — skip.
                                 if key1 then
-                                    SetOverrideBindingClick(bind, false, key1, bindName, clickType)
+                                    local current = GetBindingAction(key1, true)
+                                    if not current or current == "" or current == bindingAction or current:find(bindName) then
+                                        SetOverrideBindingClick(bind, false, key1, bindName, clickType)
+                                    end
                                 end
                                 if key2 then
-                                    SetOverrideBindingClick(bind, false, key2, bindName, clickType)
+                                    local current = GetBindingAction(key2, true)
+                                    if not current or current == "" or current == bindingAction or current:find(bindName) then
+                                        SetOverrideBindingClick(bind, false, key2, bindName, clickType)
+                                    end
                                 end
                             end
                         end
@@ -3634,7 +3632,7 @@ local function OnGridChange()
                     if btn._eabSlotBG then btn._eabSlotBG:Show() end
                     -- Show borders during drag
                     if btn._eabBorders and not (btn._eabShapeMask and btn._eabShapeMask:IsShown()) then
-                        for j = 1, 4 do btn._eabBorders[j]:Show() end
+                        btn._eabBorders:Show()
                     end
                     if btn._eabShapeBorder and btn._eabShapeBorder._eabWantsShow then
                         btn._eabShapeBorder:Show()
@@ -3728,14 +3726,6 @@ local function RestoreBarPositions()
     end
 end
 
--------------------------------------------------------------------------------
---  Minimap Button (handled by parent addon)
--------------------------------------------------------------------------------
-local function RegisterMinimapButton()
-    if not _EllesmereUI_MinimapRegistered and EllesmereUI and EllesmereUI.CreateMinimapButton then
-        EllesmereUI.CreateMinimapButton()
-    end
-end
 
 -------------------------------------------------------------------------------
 --  Unlock Mode Integration
@@ -3904,6 +3894,50 @@ function EAB:OnInitialize()
         print("[EAB] ACTIONBUTTON1 keys: " .. tostring(k1) .. ", " .. tostring(k2))
         if k1 then
             print("[EAB] GetBindingAction(" .. k1 .. "): " .. tostring(GetBindingAction(k1, true)))
+        end
+    end
+
+    SLASH_EABBORDER1 = "/eabborder"
+    SlashCmdList["EABBORDER"] = function()
+        local PP = EllesmereUI and EllesmereUI.PP
+        local p = function(...) print("|cffff8800[Border]|r", ...) end
+        p("--- PP state ---")
+        p("mult=", PP and PP.mult, "perfect=", PP and PP.perfect)
+        p("UIParent:GetScale()=", UIParent:GetScale())
+        p("UIParent:GetEffectiveScale()=", UIParent:GetEffectiveScale())
+        p("ppUIScale=", EllesmereUIDB and EllesmereUIDB.ppUIScale)
+        p("physH=", PP and PP.physicalHeight)
+        p("--- ActionButton1 ---")
+        local btn = ActionButton1
+        if not btn then p("ActionButton1 not found") return end
+        p("btn size:", btn:GetWidth(), "x", btn:GetHeight())
+        p("btn scale:", btn:GetScale(), "effectiveScale:", btn:GetEffectiveScale())
+        p("_ppBorders:", tostring(btn._ppBorders))
+        p("_ppBorderSize:", tostring(btn._ppBorderSize))
+        p("_eabBorders:", tostring(btn._eabBorders))
+        local border = btn._ppBorders
+        if border then
+            p("border frame size:", border:GetWidth(), "x", border:GetHeight())
+            p("border frame scale:", border:GetScale())
+            local bc = btn._ppBorderColor
+            if bc then
+                p("border color:", bc[1], bc[2], bc[3], bc[4])
+            else
+                p("NO _ppBorderColor stored")
+            end
+            p("borderSize stored:", tostring(btn._ppBorderSize))
+            p("expected thickness (size*mult):", PP and btn._ppBorderSize and (btn._ppBorderSize * PP.mult))
+            p("expected thickness (size*perfect/es):", PP and btn._ppBorderSize and border.GetEffectiveScale and (btn._ppBorderSize * PP.perfect / border:GetEffectiveScale()))
+            -- Check individual texture strips
+            if border._top then
+                p("top height:", border._top:GetHeight())
+                p("top PixelSnapDisabled:", tostring(border._top.PixelSnapDisabled))
+            end
+            if border._left then
+                p("left width:", border._left:GetWidth())
+            end
+        else
+            p("NO _ppBorders on button")
         end
     end
 end
@@ -4465,9 +4499,6 @@ function EAB:FinishSetup()
         end
     end
 
-    -- Register minimap button
-    RegisterMinimapButton()
-
     -- Register with unlock mode (deferred to ensure EllesmereUI is loaded)
     C_Timer_After(0.5, RegisterWithUnlockMode)
 end
@@ -4495,12 +4526,6 @@ local REP_COLORS = {
     [8] = { r = 0.35, g = 0.30, b = 0.80 },  -- Exalted
     [9] = { r = 0.80, g = 0.65, b = 0.20 },  -- Paragon
     [10] = { r = 0.20, g = 0.70, b = 0.85 }, -- Renown
-}
-
-local BAR_BACKDROP = {
-    bgFile = "Interface\\BUTTONS\\WHITE8X8",
-    edgeFile = "Interface\\BUTTONS\\WHITE8X8",
-    edgeSize = 1,
 }
 
 local function ApplyDataBarLayout(barKey)

@@ -270,7 +270,7 @@ local function BuildDropdownMenu(ddBtn, menuW, order, values, getValue, setValue
         -- Divider support: "---" key inserts a thin separator line
         if key == "---" then
             local div = innerContainer:CreateTexture(nil, "ARTWORK")
-            PP.Height(div, 1)
+            div:SetHeight(1)
             div:SetColorTexture(1, 1, 1, 0.10)
             div:SetPoint("TOPLEFT", innerContainer, "TOPLEFT", 1, -mH - 4)
             div:SetPoint("TOPRIGHT", innerContainer, "TOPRIGHT", -1, -mH - 4)
@@ -1386,7 +1386,7 @@ function WidgetFactory:SectionHeader(parent, text, yOffset)
     sep:SetColorTexture(BORDER_COLOR.r, BORDER_COLOR.g, BORDER_COLOR.b, 0.02)
     PP.DisablePixelSnap(sep)
     if splitParent then
-        PP.Height(sep, 1)
+        sep:SetHeight(1)
         PP.Point(sep, "LEFT", splitParent, "LEFT", CONTENT_PAD, 0)
         PP.Point(sep, "RIGHT", splitParent, "RIGHT", -CONTENT_PAD, 0)
         PP.Point(sep, "BOTTOM", frame, "BOTTOM", 0, 0)
@@ -3184,7 +3184,7 @@ function WidgetFactory:TripleRow(parent, yOffset, leftCfg, midCfg, rightCfg, spl
         local div = frame:CreateTexture(nil, "ARTWORK")
         div:SetColorTexture(1, 1, 1, 0.06)
         if div.SetSnapToPixelGrid then div:SetSnapToPixelGrid(false); div:SetTexelSnappingBias(0) end
-        PP.Width(div, 1)
+        div:SetWidth(1)
         PP.Point(div, "TOP", rgn, "TOPRIGHT", 0, 0)
         PP.Point(div, "BOTTOM", rgn, "BOTTOMRIGHT", 0, 0)
     end
@@ -4173,14 +4173,14 @@ local function BuildSegmentedControl(cfg)
         local segTop = btn:CreateTexture(nil, "ARTWORK", nil, 7)
         segTop:SetColorTexture(INACTIVE_R, INACTIVE_G, INACTIVE_B, INACTIVE_A)
         PP.DisablePixelSnap(segTop)
-        PP.Height(segTop, 1)
+        segTop:SetHeight(1)
         PP.Point(segTop, "TOPLEFT", btn, "TOPLEFT", 0, 0)
         PP.Point(segTop, "TOPRIGHT", btn, "TOPRIGHT", 0, 0)
 
         local segBot = btn:CreateTexture(nil, "ARTWORK", nil, 7)
         segBot:SetColorTexture(INACTIVE_R, INACTIVE_G, INACTIVE_B, INACTIVE_A)
         PP.DisablePixelSnap(segBot)
-        PP.Height(segBot, 1)
+        segBot:SetHeight(1)
         PP.Point(segBot, "BOTTOMLEFT", btn, "BOTTOMLEFT", 0, 0)
         PP.Point(segBot, "BOTTOMRIGHT", btn, "BOTTOMRIGHT", 0, 0)
 
@@ -4188,14 +4188,14 @@ local function BuildSegmentedControl(cfg)
         local segLeft = btn:CreateTexture(nil, "ARTWORK", nil, 7)
         segLeft:SetColorTexture(INACTIVE_R, INACTIVE_G, INACTIVE_B, INACTIVE_A)
         PP.DisablePixelSnap(segLeft)
-        PP.Width(segLeft, 1)
+        segLeft:SetWidth(1)
         PP.Point(segLeft, "TOPLEFT", segTop, "BOTTOMLEFT", 0, 0)
         PP.Point(segLeft, "BOTTOMLEFT", segBot, "TOPLEFT", 0, 0)
 
         local segRight = btn:CreateTexture(nil, "ARTWORK", nil, 7)
         segRight:SetColorTexture(INACTIVE_R, INACTIVE_G, INACTIVE_B, INACTIVE_A)
         PP.DisablePixelSnap(segRight)
-        PP.Width(segRight, 1)
+        segRight:SetWidth(1)
         PP.Point(segRight, "TOPRIGHT", segTop, "BOTTOMRIGHT", 0, 0)
         PP.Point(segRight, "BOTTOMRIGHT", segBot, "TOPRIGHT", 0, 0)
 
@@ -4729,4 +4729,92 @@ EllesmereUI.ShowWidgetTooltip   = ShowWidgetTooltip
 EllesmereUI.HideWidgetTooltip   = HideWidgetTooltip
 EllesmereUI.DisabledTooltip     = DisabledTooltip
 EllesmereUI.BuildSegmentedControl = BuildSegmentedControl
+
+-------------------------------------------------------------------------------
+--  SharedMedia helpers: append LSM fonts/textures to dropdown tables
+--  Called from each options file after building its local font/texture tables.
+-------------------------------------------------------------------------------
+
+-- Eagerly build the SM font name→path lookup so ResolveFontName works
+-- immediately after deferred init (before any options page is opened).
+do
+    local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+    if LSM then
+        local smFonts = LSM:HashTable("font")
+        if smFonts then
+            local lut = {}
+            for name, path in pairs(smFonts) do lut[name] = path end
+            EllesmereUI._smFontPaths = lut
+        end
+    end
+end
+
+--- Append LibSharedMedia-3.0 fonts to a fontValues/fontOrder pair.
+--- fontValues: { [key] = { text = "Name", font = "path" }, ... }
+--- fontOrder:  { key1, key2, ... }
+--- opts (optional table):
+---   keyByName   = true  → use display name as key (UnitFrames style)
+---   runtimePaths = tbl  → also write name→path into this table (for runtime lookup)
+--- Adds a "---" separator then sorted SharedMedia fonts at the end.
+local function AppendSharedMediaFonts(fontValues, fontOrder, opts)
+    local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+    if not LSM then return end
+    local smFonts = LSM:HashTable("font")
+    if not smFonts then return end
+
+    local keyByName    = opts and opts.keyByName
+    local runtimePaths = opts and opts.runtimePaths
+
+    local sorted = {}
+    for name, path in pairs(smFonts) do
+        local key = keyByName and name or path
+        if not fontValues[key] then
+            sorted[#sorted + 1] = { name = name, path = path, key = key }
+        end
+    end
+    if #sorted == 0 then return end
+    table.sort(sorted, function(a, b) return a.name < b.name end)
+
+    fontOrder[#fontOrder + 1] = "---"
+    for _, entry in ipairs(sorted) do
+        fontValues[entry.key] = { text = entry.name, font = entry.path }
+        fontOrder[#fontOrder + 1] = entry.key
+        if runtimePaths then runtimePaths[entry.name] = entry.path end
+    end
+end
+
+--- Append LibSharedMedia-3.0 statusbar textures to a values/order/names triplet.
+--- values: { [key] = "Display Name", ... }  (dropdown display text)
+--- order:  { key1, key2, ... }
+--- names:  optional { [key] = "Display Name" } (for texture lookup tables)
+--- texLookup: optional { [key] = "texture path" } (for texture path lookup)
+--- Adds a "---" separator then sorted SharedMedia textures at the end.
+local function AppendSharedMediaTextures(values, order, names, texLookup)
+    local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+    if not LSM then return end
+    local smTextures = LSM:HashTable("statusbar")
+    if not smTextures then return end
+
+    local sorted = {}
+    for name, path in pairs(smTextures) do
+        local key = "sm:" .. name
+        if not values[key] then
+            sorted[#sorted + 1] = { name = name, key = key, path = path }
+        end
+    end
+    if #sorted == 0 then return end
+    table.sort(sorted, function(a, b) return a.name < b.name end)
+
+    order[#order + 1] = "---"
+    for _, entry in ipairs(sorted) do
+        values[entry.key] = entry.name
+        order[#order + 1] = entry.key
+        if names then names[entry.key] = entry.name end
+        if texLookup then texLookup[entry.key] = entry.path end
+    end
+end
+
+EllesmereUI.AppendSharedMediaFonts    = AppendSharedMediaFonts
+EllesmereUI.AppendSharedMediaTextures = AppendSharedMediaTextures
+
 end  -- end deferred init

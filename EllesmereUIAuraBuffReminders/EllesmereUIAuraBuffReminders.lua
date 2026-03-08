@@ -1,4 +1,4 @@
-﻿-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
 --  EllesmereUIAuraBuffReminders.lua
 --  Complete AuraBuff Reminders: Raid Buffs, Auras, Consumables
 --  Clickable SecureActionButton icons with combat-aware tracking
@@ -75,7 +75,7 @@ local function SetABRFont(fs, font, size)
 end
 
 -------------------------------------------------------------------------------
---  ShortLabel Ã¢â‚¬â€ shorten buff/aura names for icon text display
+--  ShortLabel â€” shorten buff/aura names for icon text display
 -------------------------------------------------------------------------------
 local LABEL_OVERRIDES = {
     ["Defensive Stance"]        = "Stance",
@@ -136,7 +136,7 @@ local function InHeroicOrMythicContent()
 end
 
 -------------------------------------------------------------------------------
---  Midnight Season 1 Ã¢â‚¬â€ Dungeon & Raid Instance Names
+--  Midnight Season 1 â€” Dungeon & Raid Instance Names
 -------------------------------------------------------------------------------
 local TALENT_REMINDER_ZONES = {
     { name="The Voidspire",              type="raid" },
@@ -166,7 +166,7 @@ end
 
 -------------------------------------------------------------------------------
 --  Aura query helpers (secret-value safe)
---  Uses C_UnitAuras.GetPlayerAuraBySpellID for player checks Ã¢â‚¬â€ takes a known
+--  Uses C_UnitAuras.GetPlayerAuraBySpellID for player checks â€” takes a known
 --  (non-secret) spell ID and returns nil or an AuraData table.  The table
 --  reference itself is never secret, only its fields, so "if result then" is
 --  safe even in combat.
@@ -198,7 +198,7 @@ local NON_SECRET_SPELL_IDS = {
     [462854]=true, [474754]=true,
     -- Alternate buff IDs (talent variants that provide the same effect)
     [432661]=true, [432778]=true,
-    -- Paladin Auras Ã¢â‚¬â€ Devotion Aura (465) is still ContextuallySecret as of
+    -- Paladin Auras â€” Devotion Aura (465) is still ContextuallySecret as of
     -- Midnight 12.0; removed from whitelist so the reminder hides in combat.
     -- Blessing of the Bronze Auras
     [381732]=true, [381741]=true, [381746]=true, [381748]=true,
@@ -273,7 +273,7 @@ local function PlayerHasAuraByID(spellIDs)
                     if not secret then
                         return true   -- live non-secret data says buff is present
                     end
-                    -- Secret value Ã¢â‚¬â€ API confirms aura exists but won't reveal data
+                    -- Secret value â€” API confirms aura exists but won't reveal data
                     return true
                 end
                 -- result == nil: API says "not found" OR spell is contextually
@@ -281,7 +281,7 @@ local function PlayerHasAuraByID(spellIDs)
                 -- the pre-combat snapshot as a fallback.
                 if inCombat and _preCombatAuraCache[id] then return true end
             else
-                -- pcall failed Ã¢â‚¬â€ API restricted; use snapshot in combat
+                -- pcall failed â€” API restricted; use snapshot in combat
                 if inCombat and _preCombatAuraCache[id] then return true end
             end
         end
@@ -352,7 +352,7 @@ local function _unitHasBuff(u, spellIDs)
 end
 
 -- Like _unitHasBuff but only returns true if the buff's source is the player.
--- Used for Beacon of Light, Beacon of Faith, Earth Shield (orbit) Ã¢â‚¬â€ we need
+-- Used for Beacon of Light, Beacon of Faith, Earth Shield (orbit) â€” we need
 -- to verify it's OUR buff, not another Paladin's/Shaman's.
 -- Works in combat for non-secret spell IDs via GetUnitAuraBySpellID (direct
 -- lookup, no iteration).  Falls back to GetAuraDataByIndex iteration OOC.
@@ -365,7 +365,7 @@ local function _unitHasBuffFromPlayer(u, spellIDs)
     -- Fast path: direct lookup for whitelisted IDs
     for id in pairs(idLookup) do
         if NON_SECRET_SPELL_IDS[id] then
-            -- Direct lookup Ã¢â‚¬â€ works on any unit, in or out of combat, for
+            -- Direct lookup â€” works on any unit, in or out of combat, for
             -- non-secret spell IDs.  Player uses GetPlayerAuraBySpellID
             -- (faster), everyone else uses GetUnitAuraBySpellID.
             local ok, aura
@@ -433,7 +433,7 @@ SnapshotOwnOnRaidBuffs = function()
 end
 
 -- Like PlayerHasAuraByID but only returns true if the buff's source is the
--- player themselves.  Used for Devotion Aura Ã¢â‚¬â€ Holy Paladins need their OWN
+-- player themselves.  Used for Devotion Aura â€” Holy Paladins need their OWN
 -- aura active for Aura Mastery, and Lightsmith Prot Paladins need their own
 -- aura for amplification.  Another paladin's Devotion Aura on the player
 -- does NOT satisfy this check.
@@ -479,7 +479,7 @@ local function AnyGroupMemberMissingBuff(spellIDs)
 end
 
 -- Check if the buff exists on ANY group/raid member (any source).
--- Used for Symbiotic Relationship Ã¢â‚¬â€ just needs to exist on someone.
+-- Used for Symbiotic Relationship â€” just needs to exist on someone.
 local function BuffExistsOnAnyGroupMember(spellIDs)
     if _unitHasBuff("player", spellIDs) then return true end
     if IsInRaid() then
@@ -546,7 +546,7 @@ end
 
 
 -------------------------------------------------------------------------------
---  SPELL DATA Ã¢â‚¬â€ Raid Buffs (all non-secret in 12.0, work in combat)
+--  SPELL DATA â€” Raid Buffs (all non-secret in 12.0, work in combat)
 -------------------------------------------------------------------------------
 local RAID_BUFFS = {
     { key="motw",   class="DRUID",   name="Mark of the Wild",       castSpell=1126,   buffIDs={1126,432661},    check="raid" },
@@ -560,10 +560,10 @@ local RAID_BUFFS = {
 }
 
 -------------------------------------------------------------------------------
---  SPELL DATA Ã¢â‚¬â€ Auras (some non-secret, some still OOC-only)
+--  SPELL DATA â€” Auras (some non-secret, some still OOC-only)
 -------------------------------------------------------------------------------
 local AURAS = {
-    -- Symbiotic Relationship: non-secret (474754) Ã¢â‚¬â€ player-only check
+    -- Symbiotic Relationship: non-secret (474754) â€” player-only check
     -- (applies to both player and target; if player has it, target does too)
     { key="symbiotic",  class="DRUID",   name="Symbiotic Relationship", castSpell=474750, buffIDs={474754},
       check="player", combatOk=true, requireInstanceGroup=true },
@@ -575,26 +575,26 @@ local AURAS = {
     -- Shadowform: NOT on non-secret list, OOC only
     { key="shadowform", class="PRIEST",  name="Shadowform",        castSpell=232698, buffIDs={232698},
       check="player", specs={258}, combatOk=false },
-    -- Devotion Aura: still ContextuallySecret (465) Ã¢â‚¬â€ hide in combat
+    -- Devotion Aura: still ContextuallySecret (465) â€” hide in combat
     -- Must check self-cast: Holy Paladins need their OWN aura for Aura Mastery,
     -- Lightsmith Prot Paladins need their own aura for amplification.
     -- Another paladin's Devotion Aura does NOT satisfy this.
     { key="devo_aura",  class="PALADIN", name="Devotion Aura",     castSpell=465,    buffIDs={465},
       check="playerSelfCast", combatOk=false },
-    -- Beacon of Light: non-secret (53563) Ã¢â‚¬â€ must verify source is player
+    -- Beacon of Light: non-secret (53563) â€” must verify source is player
     { key="bol",        class="PALADIN", name="Beacon of Light",   castSpell=53563,  buffIDs={53563},
       check="ownOnRaid", combatOk=true },
-    -- Beacon of Faith: non-secret (156910) Ã¢â‚¬â€ must verify source is player
+    -- Beacon of Faith: non-secret (156910) â€” must verify source is player
     { key="bof",        class="PALADIN", name="Beacon of Faith",   castSpell=156910, buffIDs={156910},
       check="ownOnRaid", combatOk=true, requireInstanceGroup=true },
-    -- Source of Magic: non-secret (369459) Ã¢â‚¬" applied to a specific healer,
+    -- Source of Magic: non-secret (369459) â€" applied to a specific healer,
     -- not the caster; check if player's cast exists on any group member.
     { key="som",        class="EVOKER",  name="Source of Magic",   castSpell=369459, buffIDs={369459},
       check="ownOnRaid", combatOk=true, requireInstanceGroup=true },
 }
 
 -------------------------------------------------------------------------------
---  SPELL DATA Ã¢â‚¬â€ Consumables (OOC only, not during keystones)
+--  SPELL DATA â€” Consumables (OOC only, not during keystones)
 -------------------------------------------------------------------------------
 -- Rogue Poisons (all non-secret in 12.0 but we treat as consumable = OOC check)
 local ROGUE_POISONS = {
@@ -667,7 +667,7 @@ local WEAPON_ENCHANT_ITEMS = {
     {itemID=220156, name="Bubbling Wax",           weaponType="NEUTRAL", icon=133778},
 }
 
--- Flask Items (Midnight) Ã¢â‚¬â€ each flask has multiple item IDs across quality ranks + fleeting variants
+-- Flask Items (Midnight) â€” each flask has multiple item IDs across quality ranks + fleeting variants
 local FLASK_ITEMS = {
     { key="blood_knights",         buffID=1235110, name="Flask of the Blood Knights",
       items={241324, 241325, 245931, 245930} },
@@ -706,7 +706,7 @@ local FOOD_ITEMS = {
     { key="braised_blood_hunter",  itemID=242276, name="Braised Blood Hunter" },
 }
 
--- Weapon Enchant dropdown choices (name Ã¢â€ â€™ best itemID lookup at runtime)
+-- Weapon Enchant dropdown choices (name â†’ best itemID lookup at runtime)
 local WEAPON_ENCHANT_CHOICES = {
     { key="thalassian_phoenix_oil",  name="Thalassian Phoenix Oil" },
     { key="smugglers_enchanted_edge", name="Smuggler's Enchanted Edge" },
@@ -727,7 +727,7 @@ local INKY_BLACK_ITEM = 124640
 local INKY_BLACK_BUFF = {124640}  -- The buff from Inky Black Potion
 
 -------------------------------------------------------------------------------
---  Helpers: Well Fed / Flask buff detection (by name, not spell ID Ã¢â‚¬â€ secret)
+--  Helpers: Well Fed / Flask buff detection (by name, not spell ID â€” secret)
 -------------------------------------------------------------------------------
 local function PlayerHasBuffByName(buffName)
     for i = 1, 40 do
@@ -870,7 +870,7 @@ for i, entry in ipairs(GLOW_TYPES) do
 end
 
 -------------------------------------------------------------------------------
---  Glow Engines Ã¢â‚¬â€ provided by shared EllesmereUI_Glows.lua
+--  Glow Engines â€” provided by shared EllesmereUI_Glows.lua
 -------------------------------------------------------------------------------
 local _G_Glows = EllesmereUI.Glows
 
@@ -974,12 +974,12 @@ local db  -- set at PLAYER_LOGIN
 local euiPanelOpen = false
 
 -------------------------------------------------------------------------------
---  Middle-click dismiss Ã¢â‚¬â€ hide a reminder until the next loading screen
+--  Middle-click dismiss â€” hide a reminder until the next loading screen
 -------------------------------------------------------------------------------
 local _dismissedUntilLoad = {}  -- [dismissKey] = true
 
 -------------------------------------------------------------------------------
---  Icon Pool Ã¢â‚¬â€ SecureActionButton based for click-to-cast
+--  Icon Pool â€” SecureActionButton based for click-to-cast
 -------------------------------------------------------------------------------
 local ICON_SIZE = 40
 local iconAnchor
@@ -992,7 +992,7 @@ local talentIconPool = {}
 local talentActiveIcons = {}
 
 -------------------------------------------------------------------------------
---  Combat Icon Pool Ã¢â‚¬â€ non-secure frames for visual-only display during combat
+--  Combat Icon Pool â€” non-secure frames for visual-only display during combat
 --  Parented to a separate combatAnchor (not iconAnchor) so Show/Hide is
 --  never blocked by combat lockdown.
 -------------------------------------------------------------------------------
@@ -1001,7 +1001,7 @@ local combatIconPool = {}
 local combatActiveIcons = {}
 
 -------------------------------------------------------------------------------
---  Cursor-attached combat icons Ã¢â‚¬â€ "important" buffs shown at the cursor
+--  Cursor-attached combat icons â€” "important" buffs shown at the cursor
 --  when cursorAttach is enabled.  Anchors to EllesmereUICursorFrame
 --  (the cursor circle addon's tracking frame) for zero-cost positioning.
 -------------------------------------------------------------------------------
@@ -1025,17 +1025,7 @@ local function GetOrCreateCombatIcon(index)
     icon:SetAllPoints(); icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
     f._icon = icon
     local PP = EllesmereUI and EllesmereUI.PP
-    local function mkBorder(a1, a2, isH)
-        local t = f:CreateTexture(nil, "OVERLAY", nil, 7)
-        t:SetColorTexture(0, 0, 0, 1)
-        if PP then PP.DisablePixelSnap(t)
-        elseif t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
-        PP.Point(t, a1, f, a1, 0, 0)
-        PP.Point(t, a2, f, a2, 0, 0)
-        if isH then PP.Height(t, 1) else PP.Width(t, 1) end
-    end
-    mkBorder("TOPLEFT","TOPRIGHT",true); mkBorder("BOTTOMLEFT","BOTTOMRIGHT",true)
-    mkBorder("TOPLEFT","BOTTOMLEFT",false); mkBorder("TOPRIGHT","BOTTOMRIGHT",false)
+    if PP then PP.CreateBorder(f, 0, 0, 0, 1, 1, "OVERLAY", 7) end
     local text = f:CreateFontString(nil, "OVERLAY")
     text:SetPoint("TOP", f, "BOTTOM", 0, -2)
     SetABRFont(text, ResolveFontPath(), 11)
@@ -1095,7 +1085,7 @@ local function LayoutCombatIcons()
 end
 
 -------------------------------------------------------------------------------
---  Cursor Icon Pool Ã¢â‚¬â€ same visual style as combat icons, parented to
+--  Cursor Icon Pool â€” same visual style as combat icons, parented to
 --  cursorAnchor which follows the cursor frame.
 -------------------------------------------------------------------------------
 local function GetOrCreateCursorIcon(index)
@@ -1109,17 +1099,7 @@ local function GetOrCreateCursorIcon(index)
     icon:SetAllPoints(); icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
     f._icon = icon
     local PP = EllesmereUI and EllesmereUI.PP
-    local function mkBorder(a1, a2, isH)
-        local t = f:CreateTexture(nil, "OVERLAY", nil, 7)
-        t:SetColorTexture(0, 0, 0, 1)
-        if PP then PP.DisablePixelSnap(t)
-        elseif t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
-        PP.Point(t, a1, f, a1, 0, 0)
-        PP.Point(t, a2, f, a2, 0, 0)
-        if isH then PP.Height(t, 1) else PP.Width(t, 1) end
-    end
-    mkBorder("TOPLEFT","TOPRIGHT",true); mkBorder("BOTTOMLEFT","BOTTOMRIGHT",true)
-    mkBorder("TOPLEFT","BOTTOMLEFT",false); mkBorder("TOPRIGHT","BOTTOMRIGHT",false)
+    if PP then PP.CreateBorder(f, 0, 0, 0, 1, 1, "OVERLAY", 7) end
     local text = f:CreateFontString(nil, "OVERLAY")
     text:SetPoint("TOP", f, "BOTTOM", 0, -2)
     SetABRFont(text, ResolveFontPath(), 11)
@@ -1246,20 +1226,8 @@ local function GetOrCreateIcon(index)
     local icon = btn:CreateTexture(nil, "ARTWORK")
     icon:SetAllPoints(); icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
     btn._icon = icon
-
-    -- 1px black border
     local PP = EllesmereUI and EllesmereUI.PP
-    local function mkBorder(a1, a2, isH)
-        local t = btn:CreateTexture(nil, "OVERLAY", nil, 7)
-        t:SetColorTexture(0, 0, 0, 1)
-        if PP then PP.DisablePixelSnap(t)
-        elseif t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
-        PP.Point(t, a1, btn, a1, 0, 0)
-        PP.Point(t, a2, btn, a2, 0, 0)
-        if isH then PP.Height(t, 1) else PP.Width(t, 1) end
-    end
-    mkBorder("TOPLEFT","TOPRIGHT",true); mkBorder("BOTTOMLEFT","BOTTOMRIGHT",true)
-    mkBorder("TOPLEFT","BOTTOMLEFT",false); mkBorder("TOPRIGHT","BOTTOMRIGHT",false)
+    if PP then PP.CreateBorder(btn, 0, 0, 0, 1, 1, "OVERLAY", 7) end
 
     -- Text label below icon
     local text = btn:CreateFontString(nil, "OVERLAY")
@@ -1286,17 +1254,7 @@ local function GetOrCreateTalentIcon(index)
     icon:SetAllPoints(); icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
     btn._icon = icon
     local PP = EllesmereUI and EllesmereUI.PP
-    local function mkBorder(a1, a2, isH)
-        local t = btn:CreateTexture(nil, "OVERLAY", nil, 7)
-        t:SetColorTexture(0, 0, 0, 1)
-        if PP then PP.DisablePixelSnap(t)
-        elseif t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
-        PP.Point(t, a1, btn, a1, 0, 0)
-        PP.Point(t, a2, btn, a2, 0, 0)
-        if isH then PP.Height(t, 1) else PP.Width(t, 1) end
-    end
-    mkBorder("TOPLEFT","TOPRIGHT",true); mkBorder("BOTTOMLEFT","BOTTOMRIGHT",true)
-    mkBorder("TOPLEFT","BOTTOMLEFT",false); mkBorder("TOPRIGHT","BOTTOMRIGHT",false)
+    if PP then PP.CreateBorder(btn, 0, 0, 0, 1, 1, "OVERLAY", 7) end
     local text = btn:CreateFontString(nil, "OVERLAY")
     text:SetPoint("TOP", btn, "BOTTOM", 0, -2)
     SetABRFont(text, ResolveFontPath(), 11)
@@ -1623,7 +1581,7 @@ if not inKeystone then
                     end
                 end
 
-                -- Shaman Shields (OOC only Ã¢â‚¬â€ LS, WS are not non-secret)
+                -- Shaman Shields (OOC only â€” LS, WS are not non-secret)
                 -- Earth Shield is handled separately below (combat-safe).
                 for _, shield in ipairs(SHAMAN_SHIELDS) do
                     if shield.key ~= "es" and co.enabled[shield.key] and Known(shield.castSpell) then
@@ -1729,7 +1687,7 @@ if not inKeystone then
             end
         end
 
-        -- Flask (OOC only, not during keystones Ã¢â‚¬â€ buff is secret)
+        -- Flask (OOC only, not during keystones â€” buff is secret)
         if co.enabled.flask then
             if not PlayerHasFlaskBuff() then
                 local preferredKey = co.preferredFlask or "last_used"
@@ -1748,7 +1706,7 @@ if not inKeystone then
             end
         end
 
-        -- Food / Well Fed (OOC only, not during keystones Ã¢â‚¬â€ buff is secret)
+        -- Food / Well Fed (OOC only, not during keystones â€” buff is secret)
         if co.enabled.food then
             if not PlayerHasWellFed() then
                 local preferredKey = co.preferredFood or "last_used"
@@ -1797,7 +1755,7 @@ if not inKeystone then
         end -- end inInstance
     end -- end not inCombat
 
-    -- Earth Shield (elemental orbit) Ã¢â‚¬â€ safe in combat, spell IDs 974 and
+    -- Earth Shield (elemental orbit) â€” safe in combat, spell IDs 974 and
     -- 383648 are non-secret.  Uses GetUnitAuraBySpellID for group checks.
     -- Other shaman shields (LS, WS) remain OOC-only above.
     if specialsActive and playerClass == "SHAMAN" then
@@ -2159,11 +2117,6 @@ mainFrame:SetScript("OnEvent", function(_, e, arg1, arg2)
             db.profile.raidBuffs.enabled.som = nil
         end
 
-        -- Minimap button (shared across all Ellesmere addons Ã¢â‚¬â€ first to load wins)
-        -- Minimap button (handled by parent addon)
-        if not _EllesmereUI_MinimapRegistered and EllesmereUI and EllesmereUI.CreateMinimapButton then
-            EllesmereUI.CreateMinimapButton()
-        end
 
         -- Expose globals for options
         _G._EABR_AceDB = db
@@ -2213,7 +2166,7 @@ mainFrame:SetScript("OnEvent", function(_, e, arg1, arg2)
 
         -- Create cursor-attached anchor for important buffs.
         -- Parents to EllesmereUICursorFrame if it exists (the cursor circle
-        -- addon's tracking frame Ã¢â‚¬â€ already has an OnUpdate for cursor position).
+        -- addon's tracking frame â€” already has an OnUpdate for cursor position).
         -- Falls back to UIParent center if cursor addon isn't loaded.
         local cursorParent = _G.EllesmereUICursorFrame or UIParent
         cursorAnchor = CreateFrame("Frame", "EABR_CursorAnchor", cursorParent)
@@ -2349,7 +2302,7 @@ mainFrame:RegisterUnitEvent("UNIT_EXITED_VEHICLE", "player")
 mainFrame:RegisterEvent("PLAYER_MOUNT_DISPLAY_CHANGED")
 
 -------------------------------------------------------------------------------
---  /eabr debug Ã¢â‚¬â€ prints full diagnostic state to chat
+--  /eabr debug â€” prints full diagnostic state to chat
 -------------------------------------------------------------------------------
 SLASH_EABRDEBUG1 = "/eabrdebug"
 SlashCmdList["EABRDEBUG"] = function()
@@ -2357,7 +2310,7 @@ SlashCmdList["EABRDEBUG"] = function()
     local p = function(...) print("|cff0cd29f[EABR Debug]|r", ...) end
     p("--- AuraBuff Reminders Debug ---")
 
-    if not db then p("|cffff4444db is nil Ã¢â‚¬â€ PLAYER_LOGIN never fired or AceDB failed|r"); return end
+    if not db then p("|cffff4444db is nil â€” PLAYER_LOGIN never fired or AceDB failed|r"); return end
 
     local playerClass = GetPlayerClass()
     local specID = GetSpecID()
@@ -2455,7 +2408,7 @@ SlashCmdList["EABRDEBUG"] = function()
                     if aura.check ~= "mineOnRaid" and aura.check ~= "ownOnRaid" and aura.check ~= "playerSelfCast" then
                         isMissing = not PlayerHasAuraByID(aura.buffIDs)
                     end
-                    status = isMissing and "|cffff4444MISSING Ã¢â‚¬â€ should show icon|r" or "buff present"
+                    status = isMissing and "|cffff4444MISSING â€” should show icon|r" or "buff present"
                 end
             end
             p("  " .. aura.key .. " (" .. aura.name .. "): " .. status)
@@ -2489,14 +2442,14 @@ SlashCmdList["EABRDEBUG"] = function()
         local hasMH = GetWeaponEnchantInfo()
         p("  MH enchant present:", tostring(hasMH))
     elseif inCombat then
-        p("  (skipped Ã¢â‚¬â€ in combat)")
+        p("  (skipped â€” in combat)")
     end
 
     p("--- End Debug ---")
 end
 
 -------------------------------------------------------------------------------
---  /eabrcombat Ã¢â‚¬â€ targeted combat aura API debug
+--  /eabrcombat â€” targeted combat aura API debug
 --  Run this IN COMBAT with Devotion Aura active to diagnose the issue.
 -------------------------------------------------------------------------------
 SLASH_EABRCOMBAT1 = "/eabrcombat"
@@ -2592,7 +2545,7 @@ SlashCmdList["EABRCOMBAT"] = function()
 end
 
 -------------------------------------------------------------------------------
---  /eabrlog Ã¢â‚¬â€ toggle live UNIT_AURA payload logging during combat
+--  /eabrlog â€” toggle live UNIT_AURA payload logging during combat
 -------------------------------------------------------------------------------
 SLASH_EABRLOG1 = "/eabrlog"
 SlashCmdList["EABRLOG"] = function()

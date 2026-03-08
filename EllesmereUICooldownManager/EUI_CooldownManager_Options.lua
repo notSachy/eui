@@ -253,13 +253,15 @@ initFrame:SetScript("OnEvent", function(self)
                 cb:SetColorTexture(0.2, 0.2, 0.2, 0.8)
             end
             -- Checkbox border
+            local cbPx = PP.Scale(1)
             for edge = 1, 4 do
                 local t = item:CreateTexture(nil, "OVERLAY", nil, 7)
                 t:SetColorTexture(0.4, 0.4, 0.4, 0.6)
-                if edge == 1 then t:SetPoint("TOPLEFT", cb, "TOPLEFT"); t:SetPoint("TOPRIGHT", cb, "TOPRIGHT"); t:SetHeight(1)
-                elseif edge == 2 then t:SetPoint("BOTTOMLEFT", cb, "BOTTOMLEFT"); t:SetPoint("BOTTOMRIGHT", cb, "BOTTOMRIGHT"); t:SetHeight(1)
-                elseif edge == 3 then t:SetPoint("TOPLEFT", cb, "TOPLEFT"); t:SetPoint("BOTTOMLEFT", cb, "BOTTOMLEFT"); t:SetWidth(1)
-                else t:SetPoint("TOPRIGHT", cb, "TOPRIGHT"); t:SetPoint("BOTTOMRIGHT", cb, "BOTTOMRIGHT"); t:SetWidth(1)
+                if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
+                if edge == 1 then t:SetPoint("TOPLEFT", cb, "TOPLEFT"); t:SetPoint("TOPRIGHT", cb, "TOPRIGHT"); t:SetHeight(cbPx)
+                elseif edge == 2 then t:SetPoint("BOTTOMLEFT", cb, "BOTTOMLEFT"); t:SetPoint("BOTTOMRIGHT", cb, "BOTTOMRIGHT"); t:SetHeight(cbPx)
+                elseif edge == 3 then t:SetPoint("TOPLEFT", cb, "TOPLEFT"); t:SetPoint("BOTTOMLEFT", cb, "BOTTOMLEFT"); t:SetWidth(cbPx)
+                else t:SetPoint("TOPRIGHT", cb, "TOPRIGHT"); t:SetPoint("BOTTOMRIGHT", cb, "BOTTOMRIGHT"); t:SetWidth(cbPx)
                 end
             end
 
@@ -557,22 +559,14 @@ initFrame:SetScript("OnEvent", function(self)
                         sbt:SetVertexColor(cr, cg, cb, brdColor.a or 1)
                     end
                 elseif brdSize > 0 then
-                    -- Square borders
+                    -- Square borders via unified PP system
                     local cr, cg, cb, ca = brdColor.r, brdColor.g, brdColor.b, brdColor.a or 1
                     if brdClassColor then
                         local _, ct = UnitClass("player")
                         if ct then local cc = RAID_CLASS_COLORS[ct]; if cc then cr, cg, cb = cc.r, cc.g, cc.b end end
                     end
-                    local edges = {}
-                    for e = 1, 4 do
-                        local t = bf:CreateTexture(nil, "OVERLAY", nil, 7)
-                        t:SetColorTexture(cr, cg, cb, ca); UnsnapTex(t)
-                        edges[e] = t
-                    end
-                    edges[1]:SetHeight(brdSize); edges[1]:SetPoint("TOPLEFT"); edges[1]:SetPoint("TOPRIGHT")
-                    edges[2]:SetHeight(brdSize); edges[2]:SetPoint("BOTTOMLEFT"); edges[2]:SetPoint("BOTTOMRIGHT")
-                    edges[3]:SetWidth(brdSize); edges[3]:SetPoint("TOPLEFT", edges[1], "BOTTOMLEFT"); edges[3]:SetPoint("BOTTOMLEFT", edges[2], "TOPLEFT")
-                    edges[4]:SetWidth(brdSize); edges[4]:SetPoint("TOPRIGHT", edges[1], "BOTTOMRIGHT"); edges[4]:SetPoint("BOTTOMRIGHT", edges[2], "TOPRIGHT")
+                    local PP = EllesmereUI and EllesmereUI.PP
+                    if PP then PP.CreateBorder(bf, cr, cg, cb, ca, brdSize, "OVERLAY", 7) end
                 end
 
                 -- Selection / hover highlight
@@ -1356,11 +1350,11 @@ initFrame:SetScript("OnEvent", function(self)
                     -- Icon border in preview
                     local bSz = bd.iconBorderSize or 0
                     if bSz > 0 then
-                        local pvIconBorder = CreateFrame("Frame", nil, pvFrame, "BackdropTemplate")
+                        local pvIconBorder = CreateFrame("Frame", nil, pvFrame)
                         pvIconBorder:SetFrameLevel(pvFrame:GetFrameLevel() + 3)
                         pvIconBorder:SetAllPoints(pvIcon)
-                        pvIconBorder:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = bSz })
-                        pvIconBorder:SetBackdropBorderColor(bd.borderR or 0, bd.borderG or 0, bd.borderB or 0, 1)
+                        local PP = EllesmereUI and EllesmereUI.PP
+                        if PP then PP.CreateBorder(pvIconBorder, bd.borderR or 0, bd.borderG or 0, bd.borderB or 0, 1, bSz) end
                     end
                 end
 
@@ -1389,10 +1383,10 @@ initFrame:SetScript("OnEvent", function(self)
                     t:Hide()
                     pvHlEdges[e] = t
                 end
-                PP.Height(pvHlEdges[1], 2); pvHlEdges[1]:SetPoint("TOPLEFT"); pvHlEdges[1]:SetPoint("TOPRIGHT")
-                PP.Height(pvHlEdges[2], 2); pvHlEdges[2]:SetPoint("BOTTOMLEFT"); pvHlEdges[2]:SetPoint("BOTTOMRIGHT")
-                PP.Width(pvHlEdges[3], 2); pvHlEdges[3]:SetPoint("TOPLEFT"); pvHlEdges[3]:SetPoint("BOTTOMLEFT")
-                PP.Width(pvHlEdges[4], 2); pvHlEdges[4]:SetPoint("TOPRIGHT"); pvHlEdges[4]:SetPoint("BOTTOMRIGHT")
+                pvHlEdges[1]:SetHeight(2); pvHlEdges[1]:SetPoint("TOPLEFT"); pvHlEdges[1]:SetPoint("TOPRIGHT")
+                pvHlEdges[2]:SetHeight(2); pvHlEdges[2]:SetPoint("BOTTOMLEFT"); pvHlEdges[2]:SetPoint("BOTTOMRIGHT")
+                pvHlEdges[3]:SetWidth(2); pvHlEdges[3]:SetPoint("TOPLEFT"); pvHlEdges[3]:SetPoint("BOTTOMLEFT")
+                pvHlEdges[4]:SetWidth(2); pvHlEdges[4]:SetPoint("TOPRIGHT"); pvHlEdges[4]:SetPoint("BOTTOMRIGHT")
 
                 -- Click to assign buff
                 pvFrame:EnableMouse(true)
@@ -1432,7 +1426,17 @@ initFrame:SetScript("OnEvent", function(self)
             return math.abs(y)
         end
 
-        -- Texture dropdown values (same pattern as resource bars cast bar)
+        -- Append SharedMedia textures to runtime ns tables (for bar rendering)
+        if EllesmereUI.AppendSharedMediaTextures then
+            EllesmereUI.AppendSharedMediaTextures(
+                ns.TBB_TEXTURE_NAMES or {},
+                ns.TBB_TEXTURE_ORDER or {},
+                nil,
+                ns.TBB_TEXTURES
+            )
+        end
+
+        -- Texture dropdown values (built from ns tables, now including SM entries)
         local texValues = {}
         local texOrder = {}
         do
@@ -2354,6 +2358,12 @@ initFrame:SetScript("OnEvent", function(self)
         pf:SetSize(localParentW, initH)
         PP.Point(pf, "TOPLEFT", parent, "TOPLEFT", PAD / previewScale, yOff / previewScale)
 
+        -- Pixel-snap helper for the preview's effective scale
+        local function Snap(val)
+            local s = pf:GetEffectiveScale()
+            return math.floor(val * s + 0.5) / s
+        end
+
         -- Bar background texture (shown when barBgEnabled)
         local pvBarBg = pf:CreateTexture(nil, "BACKGROUND", nil, -8)
         pvBarBg:SetColorTexture(0, 0, 0, 0.4)  -- default; updated in refresh
@@ -2389,7 +2399,7 @@ initFrame:SetScript("OnEvent", function(self)
         local insertLine = pf:CreateTexture(nil, "OVERLAY", nil, 7)
         local eg = EllesmereUI.ELLESMERE_GREEN
         insertLine:SetColorTexture(eg.r, eg.g, eg.b, 0.9)
-        PP.Width(insertLine, 2)
+        insertLine:SetWidth(2)
         insertLine:Hide()
 
         -- Animation: each slot has _targetOffX, _currentOffX; lerped inside drag OnUpdate
@@ -2734,17 +2744,9 @@ initFrame:SetScript("OnEvent", function(self)
             slot._tex = sIcon  -- alias for shape system compatibility
 
             local sEdges = {}
-            for e = 1, 4 do
-                local t = slot:CreateTexture(nil, "OVERLAY", nil, 7)
-                t:SetColorTexture(0, 0, 0, 1)
-                if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
-                sEdges[e] = t
-            end
-            sEdges[1]:SetPoint("TOPLEFT"); sEdges[1]:SetPoint("TOPRIGHT"); PP.Height(sEdges[1], 1)
-            sEdges[2]:SetPoint("BOTTOMLEFT"); sEdges[2]:SetPoint("BOTTOMRIGHT"); PP.Height(sEdges[2], 1)
-            sEdges[3]:SetPoint("TOPLEFT"); sEdges[3]:SetPoint("BOTTOMLEFT"); PP.Width(sEdges[3], 1)
-            sEdges[4]:SetPoint("TOPRIGHT"); sEdges[4]:SetPoint("BOTTOMRIGHT"); PP.Width(sEdges[4], 1)
-            slot._edges = sEdges
+            local PP = EllesmereUI and EllesmereUI.PP
+            if PP then PP.CreateBorder(slot, 0, 0, 0, 1, 1, "OVERLAY", 7) end
+            slot._edges = sEdges  -- kept empty for compat; borders managed by PP
 
             -- Hover highlight (2px accent border, same as nameplate preview)
             local eg = EllesmereUI.ELLESMERE_GREEN
@@ -2756,10 +2758,11 @@ initFrame:SetScript("OnEvent", function(self)
                 t:Hide()
                 hlEdges[e] = t
             end
-            EllesmereUI.PP.Height(hlEdges[1], 2); hlEdges[1]:SetPoint("TOPLEFT"); hlEdges[1]:SetPoint("TOPRIGHT")
-            EllesmereUI.PP.Height(hlEdges[2], 2); hlEdges[2]:SetPoint("BOTTOMLEFT"); hlEdges[2]:SetPoint("BOTTOMRIGHT")
-            EllesmereUI.PP.Width(hlEdges[3], 2); hlEdges[3]:SetPoint("TOPLEFT", hlEdges[1], "BOTTOMLEFT"); hlEdges[3]:SetPoint("BOTTOMLEFT", hlEdges[2], "TOPLEFT")
-            EllesmereUI.PP.Width(hlEdges[4], 2); hlEdges[4]:SetPoint("TOPRIGHT", hlEdges[1], "BOTTOMRIGHT"); hlEdges[4]:SetPoint("BOTTOMRIGHT", hlEdges[2], "TOPRIGHT")
+            local hlPx = Snap(2)
+            hlEdges[1]:SetHeight(hlPx); hlEdges[1]:SetPoint("TOPLEFT"); hlEdges[1]:SetPoint("TOPRIGHT")
+            hlEdges[2]:SetHeight(hlPx); hlEdges[2]:SetPoint("BOTTOMLEFT"); hlEdges[2]:SetPoint("BOTTOMRIGHT")
+            hlEdges[3]:SetWidth(hlPx); hlEdges[3]:SetPoint("TOPLEFT", hlEdges[1], "BOTTOMLEFT"); hlEdges[3]:SetPoint("BOTTOMLEFT", hlEdges[2], "TOPLEFT")
+            hlEdges[4]:SetWidth(hlPx); hlEdges[4]:SetPoint("TOPRIGHT", hlEdges[1], "BOTTOMRIGHT"); hlEdges[4]:SetPoint("BOTTOMRIGHT", hlEdges[2], "TOPRIGHT")
             slot._hlEdges = hlEdges
 
             -- Stack count text (mirrors _stackText on real CDM icons)
@@ -3173,17 +3176,7 @@ initFrame:SetScript("OnEvent", function(self)
         local addBg = addBtn:CreateTexture(nil, "BACKGROUND")
         addBg:SetAllPoints(); addBg:SetColorTexture(0.08, 0.08, 0.08, 0.6)
         if addBg.SetSnapToPixelGrid then addBg:SetSnapToPixelGrid(false); addBg:SetTexelSnappingBias(0) end
-        local addEdges = {}
-        for e = 1, 4 do
-            local t = addBtn:CreateTexture(nil, "OVERLAY", nil, 7)
-            t:SetColorTexture(0.3, 0.3, 0.3, 0.5)
-            if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
-            addEdges[e] = t
-        end
-        addEdges[1]:SetPoint("TOPLEFT"); addEdges[1]:SetPoint("TOPRIGHT"); PP.Height(addEdges[1], 1)
-        addEdges[2]:SetPoint("BOTTOMLEFT"); addEdges[2]:SetPoint("BOTTOMRIGHT"); PP.Height(addEdges[2], 1)
-        addEdges[3]:SetPoint("TOPLEFT"); addEdges[3]:SetPoint("BOTTOMLEFT"); PP.Width(addEdges[3], 1)
-        addEdges[4]:SetPoint("TOPRIGHT"); addEdges[4]:SetPoint("BOTTOMRIGHT"); PP.Width(addEdges[4], 1)
+        if PP then PP.CreateBorder(addBtn, 0.3, 0.3, 0.3, 0.5, 1, "OVERLAY", 7) end
         local addLbl = addBtn:CreateFontString(nil, "OVERLAY")
         addLbl:SetFont(FONT_PATH, 22, GetCDMOptOutline())
         addLbl:SetPoint("CENTER", 0, 1)
@@ -3199,10 +3192,10 @@ initFrame:SetScript("OnEvent", function(self)
             t:Hide()
             addHlEdges[e] = t
         end
-        EllesmereUI.PP.Height(addHlEdges[1], 2); addHlEdges[1]:SetPoint("TOPLEFT"); addHlEdges[1]:SetPoint("TOPRIGHT")
-        EllesmereUI.PP.Height(addHlEdges[2], 2); addHlEdges[2]:SetPoint("BOTTOMLEFT"); addHlEdges[2]:SetPoint("BOTTOMRIGHT")
-        EllesmereUI.PP.Width(addHlEdges[3], 2); addHlEdges[3]:SetPoint("TOPLEFT", addHlEdges[1], "BOTTOMLEFT"); addHlEdges[3]:SetPoint("BOTTOMLEFT", addHlEdges[2], "TOPLEFT")
-        EllesmereUI.PP.Width(addHlEdges[4], 2); addHlEdges[4]:SetPoint("TOPRIGHT", addHlEdges[1], "BOTTOMRIGHT"); addHlEdges[4]:SetPoint("BOTTOMRIGHT", addHlEdges[2], "TOPRIGHT")
+        addHlEdges[1]:SetHeight(2); addHlEdges[1]:SetPoint("TOPLEFT"); addHlEdges[1]:SetPoint("TOPRIGHT")
+        addHlEdges[2]:SetHeight(2); addHlEdges[2]:SetPoint("BOTTOMLEFT"); addHlEdges[2]:SetPoint("BOTTOMRIGHT")
+        addHlEdges[3]:SetWidth(2); addHlEdges[3]:SetPoint("TOPLEFT", addHlEdges[1], "BOTTOMLEFT"); addHlEdges[3]:SetPoint("BOTTOMLEFT", addHlEdges[2], "TOPLEFT")
+        addHlEdges[4]:SetWidth(2); addHlEdges[4]:SetPoint("TOPRIGHT", addHlEdges[1], "BOTTOMRIGHT"); addHlEdges[4]:SetPoint("BOTTOMRIGHT", addHlEdges[2], "TOPRIGHT")
 
         addBtn:SetScript("OnEnter", function()
             local ar, ag, ab = EllesmereUI.GetAccentColor()
@@ -3383,12 +3376,10 @@ initFrame:SetScript("OnEvent", function(self)
                 PP.Point(slot._icon, "BOTTOMRIGHT", slot, "BOTTOMRIGHT", -1, 1)
                 slot._icon:Show()
 
-                for e = 1, 4 do
-                    slot._edges[e]:SetColorTexture(bR, bG, bB, 1)
-                    if slot._edges[e].SetSnapToPixelGrid then slot._edges[e]:SetSnapToPixelGrid(false); slot._edges[e]:SetTexelSnappingBias(0) end
+                if slot._ppBorders then
+                    PP.SetBorderColor(slot, bR, bG, bB, 1)
+                    PP.SetBorderSize(slot, 1)
                 end
-                PP.Height(slot._edges[1], 1); PP.Height(slot._edges[2], 1)
-                PP.Width(slot._edges[3], 1); PP.Width(slot._edges[4], 1)
                 slot._bg:SetColorTexture(bd.bgR or 0.08, bd.bgG or 0.08, bd.bgB or 0.08, bd.bgA or 0.6)
                 if slot._bg.SetSnapToPixelGrid then slot._bg:SetSnapToPixelGrid(false); slot._bg:SetTexelSnappingBias(0) end
 
@@ -3453,8 +3444,7 @@ initFrame:SetScript("OnEvent", function(self)
             addBtn:SetSize(iconSize, iconH); addBtn:ClearAllPoints()
             PP.Point(addBtn, "TOPLEFT", self, "TOPLEFT", addPx, addPy)
             addBtn:SetSize(iconSize, iconH)
-            PP.Height(addEdges[1], 1); PP.Height(addEdges[2], 1)
-            PP.Width(addEdges[3], 1); PP.Width(addEdges[4], 1)
+            if addBtn._ppBorders then PP.SetBorderSize(addBtn, 1) end
             local ar, ag, ab = EllesmereUI.GetAccentColor()
             addLbl:SetTextColor(ar, ag, ab, 0.6)
             addBtn:Show()

@@ -155,61 +155,33 @@ initFrame:SetScript("OnEvent", function(self)
 
     -- Border refreshers ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â re-snap sizes when scale changes
     local _borderRefreshers = {}
-
     --- Pixel-perfect border for preview frames.
-    --- Uses Snap() for sizing (not PixelUtil) and direct SetPoint/SetHeight/SetWidth.
+    --- Uses the unified PP border system (raw integer sizes, never scaled).
     local function MakePreviewBorder(parent, r, g, b, a, size)
-        local Snap = _previewSnap
         local alpha = a or 1
         local sz = size or 1
-        local snappedSz = Snap(sz)
 
         local bf = CreateFrame("Frame", nil, parent)
         bf:SetAllPoints(parent)
         bf:SetFrameLevel(parent:GetFrameLevel() + 2)
 
-        local function MkEdge()
-            local t = bf:CreateTexture(nil, "BORDER", nil, 7)
-            t:SetColorTexture(r, g, b, alpha)
-            UnsnapTex(t)
-            return t
-        end
-        local eT = MkEdge()
-        eT:SetHeight(snappedSz)
-        eT:SetPoint("TOPLEFT",  bf, "TOPLEFT",  0, 0)
-        eT:SetPoint("TOPRIGHT", bf, "TOPRIGHT", 0, 0)
-        local eB = MkEdge()
-        eB:SetHeight(snappedSz)
-        eB:SetPoint("BOTTOMLEFT",  bf, "BOTTOMLEFT",  0, 0)
-        eB:SetPoint("BOTTOMRIGHT", bf, "BOTTOMRIGHT", 0, 0)
-        -- Vertical edges inset between horizontal edges to avoid corner overlap
-        local eL = MkEdge()
-        eL:SetWidth(snappedSz)
-        eL:SetPoint("TOPLEFT",    eT, "BOTTOMLEFT",  0, 0)
-        eL:SetPoint("BOTTOMLEFT", eB, "TOPLEFT",     0, 0)
-        local eR = MkEdge()
-        eR:SetWidth(snappedSz)
-        eR:SetPoint("TOPRIGHT",    eT, "BOTTOMRIGHT",  0, 0)
-        eR:SetPoint("BOTTOMRIGHT", eB, "TOPRIGHT",     0, 0)
-
-        -- Register for scale-change refresh
-        _borderRefreshers[#_borderRefreshers + 1] = function(newSnappedSz)
-            eT:SetHeight(newSnappedSz); eB:SetHeight(newSnappedSz)
-            eL:SetWidth(newSnappedSz);  eR:SetWidth(newSnappedSz)
+        local PP = EllesmereUI and EllesmereUI.PP
+        if PP then
+            PP.CreateBorder(bf, r, g, b, alpha, sz, "BORDER", 7)
         end
 
         return {
-            _frame = bf, edges = { eT, eB, eL, eR },
+            _frame = bf, edges = bf._ppBorders or {},
             SetColor = function(self, cr, cg, cb, ca)
-                for _, e in ipairs(self.edges) do e:SetColorTexture(cr, cg, cb, ca or 1); UnsnapTex(e) end
+                if PP then PP.SetBorderColor(bf, cr, cg, cb, ca or 1) end
             end,
             SetSize = function(self, newSz)
-                local s = Snap(newSz)
-                eT:SetHeight(s); eB:SetHeight(s)
-                eL:SetWidth(s);  eR:SetWidth(s)
+                if PP then PP.SetBorderSize(bf, newSz) end
             end,
             SetShown = function(self, shown)
-                for _, e in ipairs(self.edges) do if shown then e:Show() else e:Hide() end end
+                if PP then
+                    if shown then PP.ShowBorder(bf) else PP.HideBorder(bf) end
+                end
             end,
         }
     end
@@ -316,23 +288,36 @@ initFrame:SetScript("OnEvent", function(self)
             else
                 -- Pips preview update
                 -- pipWidth is the total bar width; divide evenly across pips.
-                -- Any sub-pixel remainder goes into pip width, not spacing.
-                local GamePP = EllesmereUI.PP
-                local totalW = sp.pipWidth
-                local pipSp = sp.pipSpacing
+                -- Snap helpers: round values to the pip container's physical pixel grid
+                local pcScale = pc:GetEffectiveScale()
+                if pcScale <= 0 then pcScale = 1 end
+                -- Round to nearest pixel (for sizes)
+                local function PipSnap(val)
+                    return math.floor(val * pcScale + 0.5) / pcScale
+                end
+                local onePx = 1 / pcScale  -- exactly 1 physical pixel in local coords
+                local totalW = PipSnap(sp.pipWidth)
+                local pipSp = (sp.pipSpacing > 0) and math.max(onePx, PipSnap(sp.pipSpacing)) or 0
+                local snappedPipH = PipSnap(sp.pipHeight)
                 local numPips = 5
-                local baseW = math.floor((totalW - (numPips - 1) * pipSp) / numPips)
-                local remainder = totalW - (numPips - 1) * pipSp - baseW * numPips
+                -- Available width for pips = total minus all gaps
+                local availW = totalW - (numPips - 1) * pipSp
+                -- Base pip width: floor to nearest physical pixel
+                local baseW = math.floor(availW * pcScale / numPips) / pcScale
+                -- Remainder pixels distributed 1px each to the first R pips
+                local leftover = availW - baseW * numPips
+                local extraCount = math.floor(leftover * pcScale + 0.5)
 
-                -- Compute left-edge positions for each pip
+                -- Compute left-edge positions and widths for each pip
                 local pipX = {}
+                local pipW = {}
                 local x0 = 0
                 for i = 1, numPips do
                     pipX[i] = x0
-                    local w = baseW + (i <= remainder and 1 or 0)
-                    x0 = x0 + w + pipSp
+                    pipW[i] = baseW + (i <= extraCount and onePx or 0)
+                    x0 = x0 + pipW[i] + pipSp
                 end
-                pc:SetSize(totalW, pipH)
+                pc:SetSize(totalW, snappedPipH)
 
                 local filledCount
                 if sp.thresholdEnabled then
@@ -344,8 +329,7 @@ initFrame:SetScript("OnEvent", function(self)
                 local tr, tg, tb = sp.thresholdR, sp.thresholdG, sp.thresholdB
 
                 for i, pip in ipairs(_previewFrames.pips) do
-                    local thisPipW = baseW + (i <= remainder and 1 or 0)
-                    pip:SetSize(thisPipW, pipH)
+                    pip:SetSize(pipW[i], snappedPipH)
                     pip:ClearAllPoints()
                     pip:SetPoint("LEFT", pc, "LEFT", pipX[i], 0)
                     if sp.darkTheme then
@@ -420,30 +404,26 @@ initFrame:SetScript("OnEvent", function(self)
 
             -- Full-bar border on container
             if not pc._barBorder then
+                local PP = EllesmereUI and EllesmereUI.PP
                 local bf = CreateFrame("Frame", nil, pc)
                 bf:SetAllPoints(pc)
                 bf:SetFrameLevel(pc:GetFrameLevel() + 2)
-                local function MkE()
-                    local t = bf:CreateTexture(nil, "BORDER", nil, 7)
-                    t:SetColorTexture(sp.borderR, sp.borderG, sp.borderB, sp.borderA)
-                    UnsnapTex(t)
-                    return t
+                if PP then
+                    PP.CreateBorder(bf, sp.borderR, sp.borderG, sp.borderB, sp.borderA, sp.borderSize, "BORDER", 7)
                 end
-                local eT, eB, eL, eR = MkE(), MkE(), MkE(), MkE()
-                eT:SetHeight(sp.borderSize); eT:SetPoint("TOPLEFT"); eT:SetPoint("TOPRIGHT")
-                eB:SetHeight(sp.borderSize); eB:SetPoint("BOTTOMLEFT"); eB:SetPoint("BOTTOMRIGHT")
-                eL:SetWidth(sp.borderSize);  eL:SetPoint("TOPLEFT", eT, "BOTTOMLEFT"); eL:SetPoint("BOTTOMLEFT", eB, "TOPLEFT")
-                eR:SetWidth(sp.borderSize);  eR:SetPoint("TOPRIGHT", eT, "BOTTOMRIGHT"); eR:SetPoint("BOTTOMRIGHT", eB, "TOPRIGHT")
                 pc._barBorder = {
-                    edges = { eT, eB, eL, eR },
+                    _frame = bf,
+                    edges = bf._ppBorders or {},
                     SetSize = function(self, sz)
-                        eT:SetHeight(sz); eB:SetHeight(sz); eL:SetWidth(sz); eR:SetWidth(sz)
+                        if PP then PP.SetBorderSize(bf, sz) end
                     end,
                     SetColor = function(self, cr, cg, cb, ca)
-                        for _, e in ipairs(self.edges) do e:SetColorTexture(cr, cg, cb, ca or 1); UnsnapTex(e) end
+                        if PP then PP.SetBorderColor(bf, cr, cg, cb, ca or 1) end
                     end,
                     SetShown = function(self, shown)
-                        for _, e in ipairs(self.edges) do if shown then e:Show() else e:Hide() end end
+                        if PP then
+                            if shown then PP.ShowBorder(bf) else PP.HideBorder(bf) end
+                        end
                     end,
                 }
             end
@@ -524,9 +504,6 @@ initFrame:SetScript("OnEvent", function(self)
         if not HasClassResource() then return 0 end
         _previewBuilding = true
         local _, classFile = UnitClass("player")
-
-        -- Reset border refreshers for this build
-        _borderRefreshers = {}
 
         local container = CreateFrame("Frame", nil, hdr)
         container:SetSize(hdrW, 100)
@@ -716,20 +693,22 @@ initFrame:SetScript("OnEvent", function(self)
             local function MkEdge()
                 local t = _glowFrame:CreateTexture(nil, "OVERLAY", nil, 7)
                 t:SetColorTexture(c.r, c.g, c.b, 1)
+                if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
                 return t
             end
             _glowFrame._top = MkEdge()
             _glowFrame._bot = MkEdge()
             _glowFrame._lft = MkEdge()
             _glowFrame._rgt = MkEdge()
-            _glowFrame._top:SetHeight(2)
+            local glowPx = PP.Scale(2)
+            _glowFrame._top:SetHeight(glowPx)
             _glowFrame._top:SetPoint("TOPLEFT"); _glowFrame._top:SetPoint("TOPRIGHT")
-            _glowFrame._bot:SetHeight(2)
+            _glowFrame._bot:SetHeight(glowPx)
             _glowFrame._bot:SetPoint("BOTTOMLEFT"); _glowFrame._bot:SetPoint("BOTTOMRIGHT")
-            _glowFrame._lft:SetWidth(2)
+            _glowFrame._lft:SetWidth(glowPx)
             _glowFrame._lft:SetPoint("TOPLEFT", _glowFrame._top, "BOTTOMLEFT")
             _glowFrame._lft:SetPoint("BOTTOMLEFT", _glowFrame._bot, "TOPLEFT")
-            _glowFrame._rgt:SetWidth(2)
+            _glowFrame._rgt:SetWidth(glowPx)
             _glowFrame._rgt:SetPoint("TOPRIGHT", _glowFrame._top, "BOTTOMRIGHT")
             _glowFrame._rgt:SetPoint("BOTTOMRIGHT", _glowFrame._bot, "TOPRIGHT")
         end
@@ -790,7 +769,12 @@ initFrame:SetScript("OnEvent", function(self)
         if not headerY then return end
         local scrollPos = math.max(0, math.abs(headerY) - 40)
         EllesmereUI.SmoothScrollTo(scrollPos)
-        C_Timer.After(0.15, function() PlaySettingGlow(m.target) end)
+        local glowTarget = m.target
+        if m.slotSide and m.target then
+            local region = (m.slotSide == "left") and m.target._leftRegion or m.target._rightRegion
+            if region then glowTarget = region end
+        end
+        C_Timer.After(0.15, function() PlaySettingGlow(glowTarget) end)
     end
 
     CreateHitOverlay = function(element, mappingKey, frameLevelOverride)
@@ -807,10 +791,11 @@ initFrame:SetScript("OnEvent", function(self)
             if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
             return t
         end
-        local ht = MkHL(); PP.Height(ht, 2); ht:SetPoint("TOPLEFT", btn, "TOPLEFT"); ht:SetPoint("TOPRIGHT", btn, "TOPRIGHT")
-        local hb = MkHL(); PP.Height(hb, 2); hb:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT"); hb:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT")
-        local hl = MkHL(); PP.Width(hl, 2); hl:SetPoint("TOPLEFT", ht, "BOTTOMLEFT"); hl:SetPoint("BOTTOMLEFT", hb, "TOPLEFT")
-        local hr = MkHL(); PP.Width(hr, 2); hr:SetPoint("TOPRIGHT", ht, "BOTTOMRIGHT"); hr:SetPoint("BOTTOMRIGHT", hb, "TOPRIGHT")
+        local hlPx = PP.Scale(2)
+        local ht = MkHL(); ht:SetHeight(hlPx); ht:SetPoint("TOPLEFT", btn, "TOPLEFT"); ht:SetPoint("TOPRIGHT", btn, "TOPRIGHT")
+        local hb = MkHL(); hb:SetHeight(hlPx); hb:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT"); hb:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT")
+        local hl = MkHL(); hl:SetWidth(hlPx); hl:SetPoint("TOPLEFT", ht, "BOTTOMLEFT"); hl:SetPoint("BOTTOMLEFT", hb, "TOPLEFT")
+        local hr = MkHL(); hr:SetWidth(hlPx); hr:SetPoint("TOPRIGHT", ht, "BOTTOMRIGHT"); hr:SetPoint("BOTTOMRIGHT", hb, "TOPRIGHT")
         btn._hlTextures = { ht, hb, hl, hr }
         local function ShowHL() for _, t in ipairs(btn._hlTextures) do t:Show() end end
         local function HideHL() for _, t in ipairs(btn._hlTextures) do t:Hide() end end
@@ -2366,6 +2351,22 @@ initFrame:SetScript("OnEvent", function(self)
     local _castBarPreviewFrames = {}
     local _castBarPreviewScale = 1
 
+    -- Shuffled spell icon pool for cast bar preview (same spells as nameplates)
+    local _castBarIconPool = { 136197, 236802, 135808, 136116, 135735, 136048, 135812, 136075 }
+    local _castBarIconIdx = 0
+    local function ShuffleCastBarIcons()
+        _castBarIconIdx = 0
+        for i = #_castBarIconPool, 2, -1 do
+            local j = math.random(i)
+            _castBarIconPool[i], _castBarIconPool[j] = _castBarIconPool[j], _castBarIconPool[i]
+        end
+    end
+    local function NextCastBarIcon()
+        _castBarIconIdx = _castBarIconIdx + 1
+        if _castBarIconIdx > #_castBarIconPool then _castBarIconIdx = 1 end
+        return _castBarIconPool[_castBarIconIdx]
+    end
+
     local function UpdateCastBarPreview()
         local p = DB()
         if not p then return end
@@ -2374,13 +2375,20 @@ initFrame:SetScript("OnEvent", function(self)
 
         if not pf.bar then return end
 
-        local w, h = cb.width, cb.height
+        -- Snap helper: round to the preview container's physical pixel grid
+        local cScale = pf.container:GetEffectiveScale()
+        if cScale <= 0 then cScale = 1 end
+        local function Snap(val)
+            return math.floor(val * cScale + 0.5) / cScale
+        end
+
+        local w, h = Snap(cb.width), Snap(cb.height)
         local bs = cb.borderSize
 
         -- Container size: bar + icon
         local iconW = 0
-        if cb.showIcon then iconW = (cb.iconAttach and h) or (cb.iconSize or h) end
-        pf.container:SetSize(w + iconW + 4, math.max(h, cb.showIcon and ((cb.iconAttach and h) or (cb.iconSize or h)) or h))
+        if cb.showIcon then iconW = Snap((cb.iconAttach and cb.height) or (cb.iconSize or cb.height)) end
+        pf.container:SetSize(w + iconW + Snap(4), math.max(h, cb.showIcon and iconW or h))
         pf.container:ClearAllPoints(); pf.container:SetPoint("CENTER", pf.container:GetParent(), "CENTER", 0, 0)
         -- Bar frame
         pf.barFrame:SetSize(w, h)
@@ -2402,32 +2410,17 @@ initFrame:SetScript("OnEvent", function(self)
             pf.bg:SetColorTexture(cb.bgR, cb.bgG, cb.bgB, cb.bgA)
         end
 
-        -- Border
-        local br, bg2, bb, ba = cb.borderR, cb.borderG, cb.borderB, cb.borderA
-        for _, edge in ipairs({ pf.bT, pf.bB, pf.bL, pf.bR }) do
-            edge:SetColorTexture(br, bg2, bb, ba)
+        -- Border (pixel-perfect via PP)
+        local PP = EllesmereUI.PP
+        if PP and pf.barFrame._ppBorders then
+            PP.UpdateBorder(pf.barFrame, bs, cb.borderR, cb.borderG, cb.borderB, cb.borderA)
         end
-        pf.bT:ClearAllPoints()
-        pf.bT:SetPoint("TOPLEFT", pf.barFrame, "TOPLEFT", 0, 0)
-        pf.bT:SetPoint("TOPRIGHT", pf.barFrame, "TOPRIGHT", 0, 0)
-        pf.bT:SetHeight(bs)
-        pf.bB:ClearAllPoints()
-        pf.bB:SetPoint("BOTTOMLEFT", pf.barFrame, "BOTTOMLEFT", 0, 0)
-        pf.bB:SetPoint("BOTTOMRIGHT", pf.barFrame, "BOTTOMRIGHT", 0, 0)
-        pf.bB:SetHeight(bs)
-        pf.bL:ClearAllPoints()
-        pf.bL:SetPoint("TOPLEFT", pf.bT, "BOTTOMLEFT", 0, 0)
-        pf.bL:SetPoint("BOTTOMLEFT", pf.bB, "TOPLEFT", 0, 0)
-        pf.bL:SetWidth(bs)
-        pf.bR:ClearAllPoints()
-        pf.bR:SetPoint("TOPRIGHT", pf.bT, "BOTTOMRIGHT", 0, 0)
-        pf.bR:SetPoint("BOTTOMRIGHT", pf.bB, "TOPRIGHT", 0, 0)
-        pf.bR:SetWidth(bs)
 
-        -- Status bar
+        -- Status bar inset: snap to container's pixel grid
+        local inset = Snap(bs)
         pf.bar:ClearAllPoints()
-        pf.bar:SetPoint("TOPLEFT", pf.barFrame, "TOPLEFT", bs, -bs)
-        pf.bar:SetPoint("BOTTOMRIGHT", pf.barFrame, "BOTTOMRIGHT", -bs, bs)
+        pf.bar:SetPoint("TOPLEFT", pf.barFrame, "TOPLEFT", inset, -inset)
+        pf.bar:SetPoint("BOTTOMRIGHT", pf.barFrame, "BOTTOMRIGHT", -inset, inset)
         pf.bar:SetValue(_castBarPreviewFill)
 
         -- Bar texture
@@ -2463,7 +2456,7 @@ initFrame:SetScript("OnEvent", function(self)
 
         -- Icon
         if cb.showIcon then
-            local iSize = (cb.iconAttach and h) or (cb.iconSize or h)
+            local iSize = Snap((cb.iconAttach and cb.height) or (cb.iconSize or cb.height))
             pf.iconFrame:SetSize(iSize, iSize)
             pf.iconFrame:ClearAllPoints()
             pf.iconFrame:SetPoint("RIGHT", pf.barFrame, "LEFT", cb.iconX or 0, cb.iconY or 0)
@@ -2474,7 +2467,8 @@ initFrame:SetScript("OnEvent", function(self)
 
         -- Timer text
         if cb.showTimer then
-            SetPVFont(pf.timerText, FONT_PATH, cb.timerSize or 11)            pf.timerText:ClearAllPoints()
+            SetPVFont(pf.timerText, FONT_PATH, cb.timerSize or 11)
+            pf.timerText:ClearAllPoints()
             pf.timerText:SetPoint("RIGHT", pf.bar, "RIGHT", -4 + (cb.timerX or 0), cb.timerY or 0)
             local remaining = 3.0 * (1 - _castBarPreviewFill)
             pf.timerText:SetText(string.format("%.1f", remaining))
@@ -2483,8 +2477,20 @@ initFrame:SetScript("OnEvent", function(self)
             pf.timerText:Hide()
         end
 
-        -- Update header height: hardcoded 80px preview area
-        EllesmereUI:UpdateContentHeaderHeight(80)
+        -- Spell name text
+        if cb.showSpellText then
+            SetPVFont(pf.spellText, FONT_PATH, cb.spellTextSize or 11)
+            pf.spellText:ClearAllPoints()
+            pf.spellText:SetPoint("LEFT", pf.bar, "LEFT", 4 + (cb.spellTextX or 0), cb.spellTextY or 0)
+            pf.spellText:SetText("Spell Name")
+            pf.spellText:Show()
+        else
+            pf.spellText:Hide()
+        end
+
+        -- Update header height: 80px preview + optional hint text
+        local hintH = (_previewHintFS and _previewHintFS:IsShown()) and 35 or 0
+        EllesmereUI:UpdateContentHeaderHeight(80 + hintH)
     end
 
     local _castBarPreviewBuilder = function(hdr, hdrW)
@@ -2496,12 +2502,20 @@ initFrame:SetScript("OnEvent", function(self)
         _castBarPreviewScale = previewScale
 
         local container = CreateFrame("Frame", nil, hdr)
-        local w, h = cb.width, cb.height
-        local iconW = 0
-        if cb.showIcon then iconW = (cb.iconAttach and h) or (cb.iconSize or h) end
-        container:SetSize(w + iconW + 4, math.max(h, cb.showIcon and ((cb.iconAttach and h) or (cb.iconSize or h)) or h))
         container:SetPoint("CENTER", hdr, "CENTER", 0, 0)
         container:SetScale(previewScale)
+
+        -- Snap helper: round to the preview container's physical pixel grid
+        local cScale = container:GetEffectiveScale()
+        if cScale <= 0 then cScale = 1 end
+        local function Snap(val)
+            return math.floor(val * cScale + 0.5) / cScale
+        end
+
+        local w, h = Snap(cb.width), Snap(cb.height)
+        local iconW = 0
+        if cb.showIcon then iconW = Snap((cb.iconAttach and cb.height) or (cb.iconSize or cb.height)) end
+        container:SetSize(w + iconW + Snap(4), math.max(h, cb.showIcon and iconW or h))
 
         -- Bar frame (holds bg, border, status bar)
         local barFrame = CreateFrame("Frame", nil, container)
@@ -2525,35 +2539,16 @@ initFrame:SetScript("OnEvent", function(self)
         end
         _castBarPreviewFrames.bg = bg
 
-        -- Border
-        local function MkEdge()
-            local t = barFrame:CreateTexture(nil, "BORDER", nil, 7)
-            t:SetColorTexture(cb.borderR, cb.borderG, cb.borderB, cb.borderA)
-            return t
-        end
-        local bT, bB, bL, bR = MkEdge(), MkEdge(), MkEdge(), MkEdge()
+        -- Border (pixel-perfect via PP)
         local bs = cb.borderSize
-        bT:SetPoint("TOPLEFT", barFrame, "TOPLEFT", 0, 0)
-        bT:SetPoint("TOPRIGHT", barFrame, "TOPRIGHT", 0, 0)
-        bT:SetHeight(bs)
-        bB:SetPoint("BOTTOMLEFT", barFrame, "BOTTOMLEFT", 0, 0)
-        bB:SetPoint("BOTTOMRIGHT", barFrame, "BOTTOMRIGHT", 0, 0)
-        bB:SetHeight(bs)
-        bL:SetPoint("TOPLEFT", bT, "BOTTOMLEFT", 0, 0)
-        bL:SetPoint("BOTTOMLEFT", bB, "TOPLEFT", 0, 0)
-        bL:SetWidth(bs)
-        bR:SetPoint("TOPRIGHT", bT, "BOTTOMRIGHT", 0, 0)
-        bR:SetPoint("BOTTOMRIGHT", bB, "TOPRIGHT", 0, 0)
-        bR:SetWidth(bs)
-        _castBarPreviewFrames.bT = bT
-        _castBarPreviewFrames.bB = bB
-        _castBarPreviewFrames.bL = bL
-        _castBarPreviewFrames.bR = bR
+        local PP = EllesmereUI.PP
+        PP.CreateBorder(barFrame, cb.borderR, cb.borderG, cb.borderB, cb.borderA, bs, "BORDER", 7)
 
-        -- Status bar
+        -- Status bar (inset by border size, snapped to container pixel grid)
+        local inset = Snap(bs)
         local bar = CreateFrame("StatusBar", nil, barFrame)
-        bar:SetPoint("TOPLEFT", barFrame, "TOPLEFT", bs, -bs)
-        bar:SetPoint("BOTTOMRIGHT", barFrame, "BOTTOMRIGHT", -bs, bs)
+        bar:SetPoint("TOPLEFT", barFrame, "TOPLEFT", inset, -inset)
+        bar:SetPoint("BOTTOMRIGHT", barFrame, "BOTTOMRIGHT", -inset, inset)
         bar:SetMinMaxValues(0, 1)
         bar:SetValue(_castBarPreviewFill)
 
@@ -2591,7 +2586,7 @@ initFrame:SetScript("OnEvent", function(self)
         local icon = iconFrame:CreateTexture(nil, "ARTWORK")
         icon:SetAllPoints()
         icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-        icon:SetTexture("Interface\\Icons\\spell_nature_starfall")  -- placeholder icon
+        icon:SetTexture(NextCastBarIcon())
         local iSize = (cb.iconAttach and h) or (cb.iconSize or h)
         iconFrame:SetSize(iSize, iSize)
         iconFrame:SetPoint("RIGHT", barFrame, "LEFT", cb.iconX or 0, cb.iconY or 0)
@@ -2612,8 +2607,61 @@ initFrame:SetScript("OnEvent", function(self)
         end
         _castBarPreviewFrames.timerText = timerText
 
-        -- Return height: hardcoded 80px preview area
-        return 80
+        -- Spell name text
+        local spellText = bar:CreateFontString(nil, "OVERLAY")
+        SetPVFont(spellText, FONT_PATH, cb.spellTextSize or 11)
+        spellText:SetPoint("LEFT", bar, "LEFT", 4 + (cb.spellTextX or 0), cb.spellTextY or 0)
+        spellText:SetJustifyH("LEFT")
+        if cb.showSpellText then
+            spellText:SetText("Spell Name")
+        else
+            spellText:Hide()
+        end
+        _castBarPreviewFrames.spellText = spellText
+
+        -- Create hit overlays for preview click-to-scroll
+        wipe(_hitOverlays)
+        local overlayLevel = container:GetFrameLevel() + 20
+        CreateHitOverlay(barFrame, "castBar", overlayLevel)
+        if cb.showIcon then
+            CreateHitOverlay(iconFrame, "castIcon", overlayLevel + 5)
+        end
+        if cb.showTimer then
+            local ttHit = CreateFrame("Frame", nil, bar)
+            ttHit:SetPoint("TOPLEFT", timerText, "TOPLEFT", -2, 2)
+            ttHit:SetPoint("BOTTOMRIGHT", timerText, "BOTTOMRIGHT", 2, -2)
+            CreateHitOverlay(ttHit, "castTimer", overlayLevel + 5)
+        end
+        if cb.showSpellText then
+            local stHit = CreateFrame("Frame", nil, bar)
+            stHit:SetPoint("TOPLEFT", spellText, "TOPLEFT", -2, 2)
+            stHit:SetPoint("BOTTOMRIGHT", spellText, "BOTTOMRIGHT", 2, -2)
+            CreateHitOverlay(stHit, "castSpellText", overlayLevel + 5)
+        end
+
+        -- Hint text
+        local TOTAL_H = 80
+        _headerBaseH = TOTAL_H
+        local hintShown = not IsPreviewHintDismissed()
+        if hintShown then
+            if not _previewHintFS then
+                local hintHost = CreateFrame("Frame", nil, hdr)
+                hintHost:SetAllPoints(hdr)
+                _previewHintFS = EllesmereUI.MakeFont(hintHost, 11, nil, 1, 1, 1)
+                _previewHintFS:SetAlpha(0.45)
+                _previewHintFS:SetText("Click elements to scroll to and highlight their options")
+            end
+            _previewHintFS:GetParent():SetParent(hdr)
+            _previewHintFS:GetParent():Show()
+            _previewHintFS:ClearAllPoints()
+            _previewHintFS:SetPoint("BOTTOM", hdr, "BOTTOM", 0, 20)
+            _previewHintFS:Show()
+            TOTAL_H = TOTAL_H + 35
+        elseif _previewHintFS then
+            _previewHintFS:Hide()
+        end
+
+        return TOTAL_H
     end
 
     ---------------------------------------------------------------------------
@@ -2624,8 +2672,14 @@ initFrame:SetScript("OnEvent", function(self)
         local y = yOffset
         local _, h
 
+        parent._showRowDivider = true
+
         _castBarPreviewFill = math.random(30, 85) / 100
+        ShuffleCastBarIcons()
         EllesmereUI:SetContentHeader(_castBarPreviewBuilder)
+
+        -- Wipe click mappings (shared with display page)
+        wipe(_clickMappings)
 
         -- Texture dropdown values (same as nameplates)
         local texValues = {}
@@ -2655,9 +2709,10 @@ initFrame:SetScript("OnEvent", function(self)
             UpdateCastBarPreview()
         end
 
-        _, h = W:SectionHeader(parent, "PLAYER CAST BAR", y);  y = y - h
+        local castSection
+        castSection, h = W:SectionHeader(parent, "LAYOUT", y);  y = y - h
 
-        -- Row 1: Enable Player Cast Bar (cog DIRECTIONS: x/y) | Show Icon (cog RESIZE: icon size + x/y)
+        -- Row 1: Enable Player Cast Bar (cog RESIZE: position/scale) | Show Icon (cog RESIZE: icon settings)
         local castEnableRow
         castEnableRow, h = W:DualRow(parent, y,
             { type = "toggle", text = "Enable Player Cast Bar",
@@ -2703,7 +2758,7 @@ initFrame:SetScript("OnEvent", function(self)
                 },
                 footer = { unlockKey = "ERB_CastBar" },
             })
-            local cogBtn = MakeCogBtn(rgn, cogShow, nil, EllesmereUI.DIRECTIONS_ICON)
+            local cogBtn = MakeCogBtn(rgn, cogShow, nil, EllesmereUI.RESIZE_ICON)
             local cogDis = CreateFrame("Frame", nil, rgn)
             cogDis:SetAllPoints(cogBtn)
             cogDis:SetFrameLevel(cogBtn:GetFrameLevel() + 5)
@@ -2795,7 +2850,71 @@ initFrame:SetScript("OnEvent", function(self)
               end }
         );  y = y - h
 
-        -- Row 3: Custom Color (multiSwatch + cog: gradient) | Bar Texture
+        _, h = W:Spacer(parent, y, 16);  y = y - h
+
+        -----------------------------------------------------------------------
+        local displaySection
+        displaySection, h = W:SectionHeader(parent, "DISPLAY", y);  y = y - h
+
+        -- Row 3: Border (cog RESIZE: size) | Show Spark
+        local castBorderRow
+        castBorderRow, h = W:DualRow(parent, y,
+            { type = "colorpicker", text = "Border", hasAlpha = true,
+              disabled = castOff,
+              disabledTooltip = "Enable Player Cast Bar",
+              getValue = function()
+                  local p = DB()
+                  if not p then return 0, 0, 0, 1 end
+                  return p.castBar.borderR, p.castBar.borderG, p.castBar.borderB, p.castBar.borderA
+              end,
+              setValue = function(r, g, b, a)
+                  local p = DB(); if not p then return end
+                  p.castBar.borderR, p.castBar.borderG, p.castBar.borderB, p.castBar.borderA = r, g, b, a
+                  RefreshCast(); EllesmereUI:RefreshPage()
+              end },
+            { type = "toggle", text = "Show Spark",
+              disabled = castOff,
+              disabledTooltip = "Enable Player Cast Bar",
+              getValue = function() local p = DB(); return p and p.castBar.showSpark end,
+              setValue = function(v)
+                  local p = DB(); if not p then return end
+                  p.castBar.showSpark = v; RefreshCast()
+              end }
+        );  y = y - h
+        -- Inline cog (RESIZE) on Border for border size
+        do
+            local rgn = castBorderRow._leftRegion
+            local _, cogShow = EllesmereUI.BuildCogPopup({
+                title = "Border Size",
+                rows = {
+                    { type = "slider", label = "Size", min = 0, max = 4, step = 1,
+                      get = function() local p = DB(); return p and p.castBar.borderSize or 1 end,
+                      set = function(v)
+                          local p = DB(); if not p then return end
+                          p.castBar.borderSize = v; RefreshCast()
+                          EllesmereUI:RefreshPage()
+                      end },
+                },
+            })
+            local cogBtn = MakeCogBtn(rgn, cogShow, nil, EllesmereUI.RESIZE_ICON)
+            local cogDis = CreateFrame("Frame", nil, rgn)
+            cogDis:SetAllPoints(cogBtn)
+            cogDis:SetFrameLevel(cogBtn:GetFrameLevel() + 5)
+            cogDis:EnableMouse(true)
+            cogDis:SetScript("OnEnter", function()
+                EllesmereUI.ShowWidgetTooltip(cogBtn, EllesmereUI.DisabledTooltip("Enable Player Cast Bar"))
+            end)
+            cogDis:SetScript("OnLeave", function() EllesmereUI.HideWidgetTooltip() end)
+            local function UpdateBorderCogDis()
+                local p = DB()
+                if p and not p.castBar.enabled then cogDis:Show() else cogDis:Hide() end
+            end
+            cogBtn:HookScript("OnShow", UpdateBorderCogDis)
+            EllesmereUI.RegisterWidgetRefresh(UpdateBorderCogDis)
+            UpdateBorderCogDis()
+        end
+
+        -- Row 4: Custom Color (multiSwatch + cog: gradient) | Bar Texture
         local castColorRow
         castColorRow, h = W:DualRow(parent, y,
             { type = "multiSwatch", text = "Custom Color",
@@ -2900,29 +3019,72 @@ initFrame:SetScript("OnEvent", function(self)
             EllesmereUI.RegisterWidgetRefresh(UpdateGradientSwatch)
         end
 
-        -- Row 4: Duration Timer (cog RESIZE: timer size + x/y) | Show Spark
-        local timerRow
-        timerRow, h = W:DualRow(parent, y,
-            { type = "toggle", text = "Duration Timer",
+        -- Row 5: Spell Text (cog RESIZE: text size + x/y) | Duration Text (cog RESIZE: timer size + x/y)
+        local textRow
+        textRow, h = W:DualRow(parent, y,
+            { type = "toggle", text = "Spell Text",
+              disabled = castOff,
+              disabledTooltip = "Enable Player Cast Bar",
+              getValue = function() local p = DB(); return p and p.castBar.showSpellText end,
+              setValue = function(v)
+                  local p = DB(); if not p then return end
+                  p.castBar.showSpellText = v; RefreshCast()
+              end },
+            { type = "toggle", text = "Duration Text",
               disabled = castOff,
               disabledTooltip = "Enable Player Cast Bar",
               getValue = function() local p = DB(); return p and p.castBar.showTimer end,
               setValue = function(v)
                   local p = DB(); if not p then return end
                   p.castBar.showTimer = v; RefreshCast()
-              end },
-            { type = "toggle", text = "Show Spark",
-              disabled = castOff,
-              disabledTooltip = "Enable Player Cast Bar",
-              getValue = function() local p = DB(); return p and p.castBar.showSpark end,
-              setValue = function(v)
-                  local p = DB(); if not p then return end
-                  p.castBar.showSpark = v; RefreshCast()
               end }
         );  y = y - h
-        -- Inline cog (RESIZE) on Duration Timer for timer size + x/y
+        -- Inline cog (RESIZE) on Spell Text for text size + x/y
         do
-            local rgn = timerRow._leftRegion
+            local rgn = textRow._leftRegion
+            local _, cogShow = EllesmereUI.BuildCogPopup({
+                title = "Spell Text Settings",
+                rows = {
+                    { type = "slider", label = "Text Size", min = 8, max = 24, step = 1,
+                      get = function() local p = DB(); return p and p.castBar.spellTextSize or 11 end,
+                      set = function(v)
+                          local p = DB(); if not p then return end
+                          p.castBar.spellTextSize = v; RefreshCast()
+                      end },
+                    { type = "slider", label = "X Offset", min = -100, max = 100, step = 1,
+                      get = function() local p = DB(); return p and p.castBar.spellTextX or 0 end,
+                      set = function(v)
+                          local p = DB(); if not p then return end
+                          p.castBar.spellTextX = v; RefreshCast()
+                      end },
+                    { type = "slider", label = "Y Offset", min = -100, max = 100, step = 1,
+                      get = function() local p = DB(); return p and p.castBar.spellTextY or 0 end,
+                      set = function(v)
+                          local p = DB(); if not p then return end
+                          p.castBar.spellTextY = v; RefreshCast()
+                      end },
+                },
+            })
+            local cogBtn = MakeCogBtn(rgn, cogShow, nil, EllesmereUI.RESIZE_ICON)
+            local cogDis = CreateFrame("Frame", nil, rgn)
+            cogDis:SetAllPoints(cogBtn)
+            cogDis:SetFrameLevel(cogBtn:GetFrameLevel() + 5)
+            cogDis:EnableMouse(true)
+            cogDis:SetScript("OnEnter", function()
+                EllesmereUI.ShowWidgetTooltip(cogBtn, EllesmereUI.DisabledTooltip("Enable Player Cast Bar"))
+            end)
+            cogDis:SetScript("OnLeave", function() EllesmereUI.HideWidgetTooltip() end)
+            local function UpdateCogDisSpellText()
+                local p = DB()
+                if p and (not p.castBar.enabled or not p.castBar.showSpellText) then cogDis:Show() else cogDis:Hide() end
+            end
+            cogBtn:HookScript("OnShow", UpdateCogDisSpellText)
+            EllesmereUI.RegisterWidgetRefresh(UpdateCogDisSpellText)
+            UpdateCogDisSpellText()
+        end
+        -- Inline cog (RESIZE) on Duration Text for timer size + x/y
+        do
+            local rgn = textRow._rightRegion
             local _, cogShow = EllesmereUI.BuildCogPopup({
                 title = "Timer Settings",
                 rows = {
@@ -2963,6 +3125,12 @@ initFrame:SetScript("OnEvent", function(self)
             EllesmereUI.RegisterWidgetRefresh(UpdateCogDisTimer)
             UpdateCogDisTimer()
         end
+
+        -- Wire up click mappings for cast bar preview hit overlays
+        _clickMappings.castBar       = { section = castSection, target = classSizeRow }
+        _clickMappings.castIcon      = { section = castSection, target = castEnableRow, slotSide = "right" }
+        _clickMappings.castSpellText = { section = displaySection, target = textRow, slotSide = "left" }
+        _clickMappings.castTimer     = { section = displaySection, target = textRow, slotSide = "right" }
 
         return math.abs(y)
     end

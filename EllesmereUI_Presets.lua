@@ -1,4 +1,4 @@
-﻿-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
 --  EllesmereUI_Presets.lua
 --
 --  Spec assignment popup for the global profile system.
@@ -185,16 +185,16 @@ do
             local BRD_A_SP = 0.15
             local spT = popup:CreateTexture(nil, "BORDER"); spT:SetColorTexture(1, 1, 1, BRD_A_SP)
             if spT.SetSnapToPixelGrid then spT:SetSnapToPixelGrid(false); spT:SetTexelSnappingBias(0) end
-            spT:SetPoint("TOPLEFT", 0, 0); spT:SetPoint("TOPRIGHT", 0, 0); PP.Height(spT, 2)
+            spT:SetPoint("TOPLEFT", 0, 0); spT:SetPoint("TOPRIGHT", 0, 0); spT:SetHeight(2)
             local spB = popup:CreateTexture(nil, "BORDER"); spB:SetColorTexture(1, 1, 1, BRD_A_SP)
             if spB.SetSnapToPixelGrid then spB:SetSnapToPixelGrid(false); spB:SetTexelSnappingBias(0) end
-            spB:SetPoint("BOTTOMLEFT", 0, 0); spB:SetPoint("BOTTOMRIGHT", 0, 0); PP.Height(spB, 2)
+            spB:SetPoint("BOTTOMLEFT", 0, 0); spB:SetPoint("BOTTOMRIGHT", 0, 0); spB:SetHeight(2)
             local spL = popup:CreateTexture(nil, "BORDER"); spL:SetColorTexture(1, 1, 1, BRD_A_SP)
             if spL.SetSnapToPixelGrid then spL:SetSnapToPixelGrid(false); spL:SetTexelSnappingBias(0) end
-            spL:SetPoint("TOPLEFT", spT, "BOTTOMLEFT"); spL:SetPoint("BOTTOMLEFT", spB, "TOPLEFT"); PP.Width(spL, 2)
+            spL:SetPoint("TOPLEFT", spT, "BOTTOMLEFT"); spL:SetPoint("BOTTOMLEFT", spB, "TOPLEFT"); spL:SetWidth(2)
             local spR = popup:CreateTexture(nil, "BORDER"); spR:SetColorTexture(1, 1, 1, BRD_A_SP)
             if spR.SetSnapToPixelGrid then spR:SetSnapToPixelGrid(false); spR:SetTexelSnappingBias(0) end
-            spR:SetPoint("TOPRIGHT", spT, "BOTTOMRIGHT"); spR:SetPoint("BOTTOMRIGHT", spB, "TOPRIGHT"); PP.Width(spR, 2)
+            spR:SetPoint("TOPRIGHT", spT, "BOTTOMRIGHT"); spR:SetPoint("BOTTOMRIGHT", spB, "TOPRIGHT"); spR:SetWidth(2)
 
             -- Title
             local title = popup:CreateFontString(nil, "OVERLAY")
@@ -235,8 +235,8 @@ do
             linkDivider:SetColorTexture(1, 1, 1, 0.18)
             if linkDivider.SetSnapToPixelGrid then linkDivider:SetSnapToPixelGrid(false); linkDivider:SetTexelSnappingBias(0) end
             PP.Point(linkDivider, "LEFT", checkAllBtn, "RIGHT", LINK_GAP / 2, 0)
-            PP.Width(linkDivider, 1)
-            PP.Height(linkDivider, 12)
+            linkDivider:SetWidth(1)
+            linkDivider:SetHeight(12)
 
             local uncheckAllBtn = CreateFrame("Button", nil, popup)
             uncheckAllBtn:SetFrameLevel(popup:GetFrameLevel() + 2)
@@ -296,19 +296,19 @@ do
             local defBrdT = defDDBtn:CreateTexture(nil, "OVERLAY", nil, 7)
             defBrdT:SetColorTexture(1, 1, 1, 0.20)
             if defBrdT.SetSnapToPixelGrid then defBrdT:SetSnapToPixelGrid(false); defBrdT:SetTexelSnappingBias(0) end
-            defBrdT:SetPoint("TOPLEFT"); defBrdT:SetPoint("TOPRIGHT"); PP.Height(defBrdT, 1)
+            defBrdT:SetPoint("TOPLEFT"); defBrdT:SetPoint("TOPRIGHT"); defBrdT:SetHeight(1)
             local defBrdB = defDDBtn:CreateTexture(nil, "OVERLAY", nil, 7)
             defBrdB:SetColorTexture(1, 1, 1, 0.20)
             if defBrdB.SetSnapToPixelGrid then defBrdB:SetSnapToPixelGrid(false); defBrdB:SetTexelSnappingBias(0) end
-            defBrdB:SetPoint("BOTTOMLEFT"); defBrdB:SetPoint("BOTTOMRIGHT"); PP.Height(defBrdB, 1)
+            defBrdB:SetPoint("BOTTOMLEFT"); defBrdB:SetPoint("BOTTOMRIGHT"); defBrdB:SetHeight(1)
             local defBrdL = defDDBtn:CreateTexture(nil, "OVERLAY", nil, 7)
             defBrdL:SetColorTexture(1, 1, 1, 0.20)
             if defBrdL.SetSnapToPixelGrid then defBrdL:SetSnapToPixelGrid(false); defBrdL:SetTexelSnappingBias(0) end
-            defBrdL:SetPoint("TOPLEFT", defBrdT, "BOTTOMLEFT"); defBrdL:SetPoint("BOTTOMLEFT", defBrdB, "TOPLEFT"); PP.Width(defBrdL, 1)
+            defBrdL:SetPoint("TOPLEFT", defBrdT, "BOTTOMLEFT"); defBrdL:SetPoint("BOTTOMLEFT", defBrdB, "TOPLEFT"); defBrdL:SetWidth(1)
             local defBrdR = defDDBtn:CreateTexture(nil, "OVERLAY", nil, 7)
             defBrdR:SetColorTexture(1, 1, 1, 0.20)
             if defBrdR.SetSnapToPixelGrid then defBrdR:SetSnapToPixelGrid(false); defBrdR:SetTexelSnappingBias(0) end
-            defBrdR:SetPoint("TOPRIGHT", defBrdT, "BOTTOMRIGHT"); defBrdR:SetPoint("BOTTOMRIGHT", defBrdB, "TOPRIGHT"); PP.Width(defBrdR, 1)
+            defBrdR:SetPoint("TOPRIGHT", defBrdT, "BOTTOMRIGHT"); defBrdR:SetPoint("BOTTOMRIGHT", defBrdB, "TOPRIGHT"); defBrdR:SetWidth(1)
             popup._defBrdEdges = { defBrdT, defBrdB, defBrdL, defBrdR }
 
             local defDDLbl = defDDBtn:CreateFontString(nil, "OVERLAY")
@@ -358,16 +358,16 @@ do
             defMenuBg:SetColorTexture(0.075, 0.113, 0.141, 0.98)
             local dmT = defMenu:CreateTexture(nil, "OVERLAY", nil, 7); dmT:SetColorTexture(1,1,1,0.20)
             if dmT.SetSnapToPixelGrid then dmT:SetSnapToPixelGrid(false); dmT:SetTexelSnappingBias(0) end
-            dmT:SetPoint("TOPLEFT"); dmT:SetPoint("TOPRIGHT"); PP.Height(dmT, 1)
+            dmT:SetPoint("TOPLEFT"); dmT:SetPoint("TOPRIGHT"); dmT:SetHeight(1)
             local dmB = defMenu:CreateTexture(nil, "OVERLAY", nil, 7); dmB:SetColorTexture(1,1,1,0.20)
             if dmB.SetSnapToPixelGrid then dmB:SetSnapToPixelGrid(false); dmB:SetTexelSnappingBias(0) end
-            dmB:SetPoint("BOTTOMLEFT"); dmB:SetPoint("BOTTOMRIGHT"); PP.Height(dmB, 1)
+            dmB:SetPoint("BOTTOMLEFT"); dmB:SetPoint("BOTTOMRIGHT"); dmB:SetHeight(1)
             local dmL = defMenu:CreateTexture(nil, "OVERLAY", nil, 7); dmL:SetColorTexture(1,1,1,0.20)
             if dmL.SetSnapToPixelGrid then dmL:SetSnapToPixelGrid(false); dmL:SetTexelSnappingBias(0) end
-            dmL:SetPoint("TOPLEFT", dmT, "BOTTOMLEFT"); dmL:SetPoint("BOTTOMLEFT", dmB, "TOPLEFT"); PP.Width(dmL, 1)
+            dmL:SetPoint("TOPLEFT", dmT, "BOTTOMLEFT"); dmL:SetPoint("BOTTOMLEFT", dmB, "TOPLEFT"); dmL:SetWidth(1)
             local dmR = defMenu:CreateTexture(nil, "OVERLAY", nil, 7); dmR:SetColorTexture(1,1,1,0.20)
             if dmR.SetSnapToPixelGrid then dmR:SetSnapToPixelGrid(false); dmR:SetTexelSnappingBias(0) end
-            dmR:SetPoint("TOPRIGHT", dmT, "BOTTOMRIGHT"); dmR:SetPoint("BOTTOMRIGHT", dmB, "TOPRIGHT"); PP.Width(dmR, 1)
+            dmR:SetPoint("TOPRIGHT", dmT, "BOTTOMRIGHT"); dmR:SetPoint("BOTTOMRIGHT", dmB, "TOPRIGHT"); dmR:SetWidth(1)
             popup._defMenu = defMenu
             popup._defMenuItems = {}
 
