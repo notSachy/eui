@@ -2,12 +2,12 @@
 --  EllesmereUICdmBuffBars.lua
 --  Buff Bars: Tracked Buff Bars v2 (per-bar buff tracking with individual
 --  settings) and legacy Buff Bars (disabled). Currently the legacy system is
---  disabled â€” uncomment blocks to re-enable.
+--  disabled uncomment blocks to re-enable.
 --------------------------------------------------------------------------------
 local ADDON_NAME, ns = ...
 
 -- Set to true to enable Tracked Buff Bars functionality
-local TBB_ENABLED = false
+local TBB_ENABLED = true
 
 -- Forward references from main CDM file (set during init)
 local ECME
@@ -147,17 +147,15 @@ local function GetCDMFont()
     return (EllesmereUI and EllesmereUI.GetFontPath and EllesmereUI.GetFontPath("cdm")) or CDM_FONT_FALLBACK
 end
 local function GetCDMOutline()
-    return (EllesmereUI and EllesmereUI.GetFontOutlineFlag and EllesmereUI.GetFontOutlineFlag()) or ""
+    return "OUTLINE"
 end
 local function GetCDMUseShadow()
     return not EllesmereUI or not EllesmereUI.GetFontUseShadow or EllesmereUI.GetFontUseShadow()
 end
 local function SetCDMFont(fs, font, size)
     if not (fs and fs.SetFont) then return end
-    local f = GetCDMOutline()
-    fs:SetFont(font, size, f)
-    if f == "" then fs:SetShadowOffset(1, -1); fs:SetShadowColor(0, 0, 0, 1)
-    else fs:SetShadowOffset(0, 0) end
+    fs:SetFont(font, size, "OUTLINE")
+    fs:SetShadowOffset(0, 0)
 end
 
 local function CreateTrackedBuffBarFrame(parent, idx)
@@ -209,7 +207,7 @@ local function CreateTrackedBuffBarFrame(parent, idx)
     bar._icon = icon
 
     -- Icon border frame (4 edge textures)
-    local iconBorder = CreateFrame("Frame", nil, bar, "BackdropTemplate")
+    local iconBorder = CreateFrame("Frame", nil, bar)
     iconBorder:SetFrameLevel(bar:GetFrameLevel() + 3)
     iconBorder:Hide()
     bar._iconBorder = iconBorder
@@ -351,9 +349,17 @@ local function ApplyTrackedBuffBarSettings(bar, cfg)
                 local bR = cfg.borderR or 0
                 local bG = cfg.borderG or 0
                 local bB = cfg.borderB or 0
-                local bd = { edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = bSz }
-                bar._iconBorder:SetBackdrop(bd)
-                bar._iconBorder:SetBackdropBorderColor(bR, bG, bB, 1)
+                if not bar._iconBorder._ppBorders then
+                    local PP = EllesmereUI and EllesmereUI.PP
+                    if PP then
+                        PP.CreateBorder(bar._iconBorder, bR, bG, bB, 1, bSz)
+                    end
+                else
+                    local PP = EllesmereUI and EllesmereUI.PP
+                    if PP then
+                        PP.UpdateBorder(bar._iconBorder, bSz, bR, bG, bB, 1)
+                    end
+                end
                 bar._iconBorder:ClearAllPoints()
                 bar._iconBorder:SetAllPoints(bar._icon)
                 bar._iconBorder:Show()
@@ -597,7 +603,7 @@ function ns.RegisterTBBUnlockElements()
     end
 end
 
---[[ BUFF BARS: DISABLED (untested â€” uncomment to re-enable)
+--[[ BUFF BARS: DISABLED (untested uncomment to re-enable)
 -------------------------------------------------------------------------------
 --  Buff Bars: Custom aura tracking display
 --  Shows player buffs as horizontal timer bars
@@ -629,24 +635,31 @@ local function CreateBuffBar(parent, idx)
     bg:SetColorTexture(0, 0, 0, p.bgAlpha)
     bar._bg = bg
 
-    -- Border (4 edges)
+    -- Border via unified PP system (outside the bar)
     local PP = EllesmereUI and EllesmereUI.PP
-    bar._edges = {}
-    for i = 1, 4 do
-        local tex = bar:CreateTexture(nil, "OVERLAY", nil, 7)
-        tex:SetColorTexture(0, 0, 0, 1)
-        if PP then PP.DisablePixelSnap(tex)
-        elseif tex.SetSnapToPixelGrid then tex:SetSnapToPixelGrid(false); tex:SetTexelSnappingBias(0) end
-        bar._edges[i] = tex
-    end
+    local borderWrap = CreateFrame("Frame", nil, bar)
+    borderWrap:SetFrameLevel(bar:GetFrameLevel())
+    bar._borderWrap = borderWrap
 
     function bar:ApplyBorder(s, r, g, b, a)
-        local e = self._edges
-        e[1]:ClearAllPoints(); e[1]:SetPoint("TOPLEFT", -s, s); e[1]:SetPoint("TOPRIGHT", s, s); e[1]:SetHeight(s)
-        e[2]:ClearAllPoints(); e[2]:SetPoint("BOTTOMLEFT", -s, -s); e[2]:SetPoint("BOTTOMRIGHT", s, -s); e[2]:SetHeight(s)
-        e[3]:ClearAllPoints(); e[3]:SetPoint("TOPLEFT", -s, s); e[3]:SetPoint("BOTTOMLEFT", -s, -s); e[3]:SetWidth(s)
-        e[4]:ClearAllPoints(); e[4]:SetPoint("TOPRIGHT", s, s); e[4]:SetPoint("BOTTOMRIGHT", s, -s); e[4]:SetWidth(s)
-        for _, edge in ipairs(e) do edge:SetColorTexture(r, g, b, a); edge:Show() end
+        local bw = self._borderWrap
+        if s and s > 0 then
+            bw:ClearAllPoints()
+            if PP then
+                PP.SetOutside(bw, self, s, s)
+            else
+                bw:SetPoint("TOPLEFT", self, "TOPLEFT", -s, s)
+                bw:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", s, -s)
+            end
+            if not bw._ppBorders then
+                if PP then PP.CreateBorder(bw, r, g, b, a or 1, s, "OVERLAY", 7) end
+            else
+                if PP then PP.UpdateBorder(bw, s, r, g, b, a or 1) end
+            end
+            bw:Show()
+        else
+            bw:Hide()
+        end
     end
 
     -- Icon

@@ -1,4 +1,4 @@
--------------------------------------------------------------------------------
+﻿-------------------------------------------------------------------------------
 --  EUI_UnitFrames_Options.lua
 --  Registers the Unit Frames module with EllesmereUI
 --  2 tabs: Multi-Frame Display, Individual Display
@@ -27,7 +27,7 @@ initFrame:SetScript("OnEvent", function(self)
     local frames = ns.frames
     local ReloadFrames = ns.ReloadFrames
     local ResolveFontPath = ns.ResolveFontPath
-    local fontPaths = ns.fontPaths or {}
+    -- fontPaths removed all modules use EllesmereUI.GetFontPath() now
 
     local floor = math.floor
     local abs = math.abs
@@ -87,22 +87,6 @@ initFrame:SetScript("OnEvent", function(self)
             if pv and pv._disabledOverlay then pv._disabledOverlay:Hide() end
         end
     end)
-
-    ---------------------------------------------------------------------------
-    --  Font dropdown values
-    ---------------------------------------------------------------------------
-    local fontValues = {}
-    for name, path in pairs(fontPaths) do
-        fontValues[name] = { text = name, font = path }
-    end
-    local fontOrder = {
-        "Expressway", "Avant Garde", "Arial Bold", "Poppins", "Fira Sans Medium",
-        "---",
-        "Arial Narrow", "Changa", "Cinzel Decorative", "Exo",
-        "Fira Sans Bold", "Fira Sans Light", "Future X Black",
-        "Gotham Narrow Ultra", "Gotham Narrow", "Russo One", "Ubuntu",
-        "Friz Quadrata", "Arial", "Morpheus", "Skurri",
-    }
 
     ---------------------------------------------------------------------------
     --  Individual Display unit selector
@@ -249,6 +233,16 @@ initFrame:SetScript("OnEvent", function(self)
     ---------------------------------------------------------------------------
     --  Health bar texture dropdown values (built from ns tables)
     ---------------------------------------------------------------------------
+    -- Append SharedMedia textures so the dropdown includes SM entries
+    if EllesmereUI.AppendSharedMediaTextures then
+        EllesmereUI.AppendSharedMediaTextures(
+            ns.healthBarTextureNames or {},
+            ns.healthBarTextureOrder or {},
+            nil,
+            ns.healthBarTextures
+        )
+    end
+
     local hbtValues = {}
     local hbtOrder = {}
     do
@@ -275,10 +269,10 @@ initFrame:SetScript("OnEvent", function(self)
                         if hFill then
                             if texPath then
                                 hFill:SetTexture(texPath)
-                                hFill:SetVertexColor(pv._hR or 0.8, pv._hG or 0.2, pv._hB or 0.2, pv._hA or 1)
+                                hFill:SetVertexColor(pv._hR or 0.8, pv._hG or 0.2, pv._hB or 0.2, 1)
                             else
                                 hFill:SetVertexColor(1, 1, 1, 1)
-                                hFill:SetColorTexture(pv._hR or 0.8, pv._hG or 0.2, pv._hB or 0.2, pv._hA or 1)
+                                hFill:SetColorTexture(pv._hR or 0.8, pv._hG or 0.2, pv._hB or 0.2, 1)
                             end
                         end
                         local pFill = pv._powerFill
@@ -344,27 +338,31 @@ initFrame:SetScript("OnEvent", function(self)
     ---------------------------------------------------------------------------
     -- Health bar text dropdown values (no power options)
     local healthTextValues = {
-        ["name"]       = "Name",
-        ["both"]       = "Health Value | Health %",
-        ["curhpshort"] = "Health Value",
-        ["perhp"]      = "Health %",
-        ["none"]       = "None",
+        ["name"]         = "Name",
+        ["perhp"]        = "Health %",
+        ["perhpnosign"]  = "Health % (No Sign)",
+        ["curhpshort"]   = "Health #",
+        ["perhpnum"]     = "Health % | #",
+        ["both"]         = "Health # | %",
+        ["none"]         = "None",
     }
-    local healthTextOrder = { "none", "---", "name", "both", "curhpshort", "perhp" }
+    local healthTextOrder = { "none", "---", "name", "perhp", "perhpnosign", "curhpshort", "perhpnum", "both" }
 
     -- Text bar (BTB) text dropdown values (includes power options)
     local btbTextValues = {
-        ["name"]       = "Name",
-        ["both"]       = "Health Value | Health %",
-        ["curhpshort"] = "Health Value",
-        ["perhp"]      = "Health %",
-        ["perpp"]      = "Power %",
-        ["curpp"]      = "Power Value",
-        ["curhp_curpp"] = "Health | Power Value",
-        ["perhp_perpp"] = "Health | Power %",
-        ["none"]       = "None",
+        ["name"]         = "Name",
+        ["perhp"]        = "Health %",
+        ["perhpnosign"]  = "Health % (No Sign)",
+        ["curhpshort"]   = "Health #",
+        ["perhpnum"]     = "Health % | #",
+        ["both"]         = "Health # | %",
+        ["perpp"]        = "Power %",
+        ["curpp"]        = "Power Value",
+        ["curhp_curpp"]  = "Health | Power Value",
+        ["perhp_perpp"]  = "Health | Power %",
+        ["none"]         = "None",
     }
-    local btbTextOrder = { "none", "---", "name", "both", "curhpshort", "perhp", "perpp", "curpp", "curhp_curpp", "perhp_perpp" }
+    local btbTextOrder = { "none", "---", "name", "perhp", "perhpnosign", "curhpshort", "perhpnum", "both", "perpp", "curpp", "curhp_curpp", "perhp_perpp" }
 
     -- Class theme portrait icons (full-size versions of the sidebar class art)
     -- Always use EllesmereUIUnitFrames path since only that addon ships the -full.png files
@@ -685,7 +683,7 @@ initFrame:SetScript("OnEvent", function(self)
         return 136197, 0
     end
     local _previewCastSpell  -- {icon, name, castTime} -- randomized on tab switch
-    local _previewCastFill   -- 0.4Ã¢â‚¬â€œ0.9 fill for the cast bar
+    local _previewCastFill   -- 0.4 0.9 fill for the cast bar
 
     -- Class-specific common proc/buff icons for player preview (icon IDs)
     local CLASS_BUFF_ICONS = {
@@ -755,10 +753,6 @@ initFrame:SetScript("OnEvent", function(self)
         _previewBuffIcons[2] = buffPool[i2]
     end
 
-    -- Disable WoW's automatic pixel snapping on a texture (prevents sub-pixel jitter vs borders)
-    local function UnsnapTex(tex)
-        if tex.SetSnapToPixelGrid then tex:SetSnapToPixelGrid(false); tex:SetTexelSnappingBias(0) end
-    end
 
     local function BuildUnitPreview(parent, unitKey, side)
         local p = db.profile
@@ -786,12 +780,13 @@ initFrame:SetScript("OnEvent", function(self)
         local initPpIsAtt = (initPpPos == "below" or initPpPos == "above")
         local initPpExtra = initPpIsAtt and powerH or 0
         -- For player, show preview castbar when showPlayerCastbar is on (always locked to frame)
+        -- For target/focus, show when showCastbar is on
         local castbarH
         if unitKey == "player" then
             local pch = settings.playerCastbarHeight
             castbarH = settings.showPlayerCastbar and (pch and pch > 0 and pch or 14) or 0
         else
-            castbarH = settings.castbarHeight or 0
+            castbarH = (settings.showCastbar ~= false) and (settings.castbarHeight or 14) or 0
         end
         local barH = healthH + initPpExtra
         local isAttachedInit = (db.profile.portraitStyle or "attached") == "attached"
@@ -839,7 +834,6 @@ initFrame:SetScript("OnEvent", function(self)
             local portraitBg = portraitFrame:CreateTexture(nil, "BACKGROUND")
             portraitBg:SetAllPoints()
             portraitBg:SetColorTexture(0.082, 0.082, 0.082, 1)
-            UnsnapTex(portraitBg)
             portraitFrame._previewBg = portraitBg
             if side == "left" then
                 PP.Point(portraitFrame, "TOPLEFT", barArea, "TOPLEFT", 0, 0)
@@ -851,15 +845,21 @@ initFrame:SetScript("OnEvent", function(self)
             portraitTex:SetPoint("TOPLEFT", portraitFrame, "TOPLEFT", 0, 0)
             portraitTex:SetPoint("BOTTOMRIGHT", portraitFrame, "BOTTOMRIGHT", 0, 0)
             portraitTex:SetTexCoord(0.15, 0.85, 0.15, 0.85)
-            UnsnapTex(portraitTex)
 
-            -- 3D model for preview (uses player model for all unit previews)
-            local portraitModel = CreateFrame("PlayerModel", nil, portraitFrame)
-            portraitModel:SetPoint("TOPLEFT", portraitFrame, "TOPLEFT", 0, 0)
-            portraitModel:SetPoint("BOTTOMRIGHT", portraitFrame, "BOTTOMRIGHT", 0, 0)
-            portraitModel:SetUnit("player")
-            portraitModel:SetCamera(0)
-            portraitModel:Hide()
+            -- 3D model for preview (lazy-created only when mode is "3d")
+            local portraitModel = nil
+
+            local function EnsurePreviewModel()
+                if portraitModel then return portraitModel end
+                portraitModel = CreateFrame("PlayerModel", nil, portraitFrame)
+                portraitModel:SetPoint("TOPLEFT", portraitFrame, "TOPLEFT", 0, 0)
+                portraitModel:SetPoint("BOTTOMRIGHT", portraitFrame, "BOTTOMRIGHT", 0, 0)
+                portraitModel:SetUnit("player")
+                portraitModel:SetCamera(0)
+                portraitModel:Hide()
+                portraitFrame._previewModel = portraitModel
+                return portraitModel
+            end
 
             local function ApplyPortraitMode()
                 -- Read settings fresh from DB so the closure never goes stale
@@ -876,18 +876,18 @@ initFrame:SetScript("OnEvent", function(self)
                 if mode == "3d" then
                     portraitFrame:Show()
                     portraitTex:Hide()
-                    portraitModel:SetUnit("player")
-                    portraitModel:SetCamera(0)
-                    portraitModel:Show()
+                    local pm = EnsurePreviewModel()
+                    pm:SetUnit("player")
+                    pm:SetCamera(0)
+                    pm:Show()
                 elseif mode == "class" then
                     portraitFrame:Show()
-                    portraitModel:Hide()
+                    if portraitModel then portraitModel:Hide() end
                     portraitTex:Show()
                     local _, ct = UnitClass("player")
                     local cts = curSettings.classThemeStyle or "modern"
                     ApplyClassIconTexture_Preview(portraitTex, ct or "WARRIOR", cts)
                     portraitTex:SetAlpha(0.9)
-                    UnsnapTex(portraitTex)
                     -- Use current portrait frame height for inset (not captured barH)
                     local curBH = portraitFrame:GetHeight()
                     if curBH < 1 then curBH = barH end
@@ -897,12 +897,11 @@ initFrame:SetScript("OnEvent", function(self)
                     PP.Point(portraitTex, "BOTTOMRIGHT", portraitFrame, "BOTTOMRIGHT", -inset, inset)
                 else
                     portraitFrame:Show()
-                    portraitModel:Hide()
+                    if portraitModel then portraitModel:Hide() end
                     portraitTex:Show()
                     SetPortraitTexture(portraitTex, "player")
                     portraitTex:SetTexCoord(0.15, 0.85, 0.15, 0.85)
                     portraitTex:SetAlpha(1)
-                    UnsnapTex(portraitTex)
                     portraitTex:ClearAllPoints()
                     PP.Point(portraitTex, "TOPLEFT", portraitFrame, "TOPLEFT", 0, 0)
                     PP.Point(portraitTex, "BOTTOMRIGHT", portraitFrame, "BOTTOMRIGHT", 0, 0)
@@ -925,8 +924,19 @@ initFrame:SetScript("OnEvent", function(self)
             hR, hG, hB, hA = 0x11/255, 0x11/255, 0x11/255, 0.90
             bgR, bgG, bgB, bgA = 0x4f/255, 0x4f/255, 0x4f/255, 1
         else
-            hA = 1
-            if unitKey == "player" then
+            hA = 0.9
+            -- Check for custom fill color (skipped when class colored is enabled)
+            local cFill = settings.customFillColor
+            local isClassColored = settings.healthClassColored
+            if isClassColored then
+                local _, classToken = UnitClass("player")
+                local cc = RAID_CLASS_COLORS[classToken]
+                if cc then hR, hG, hB = cc.r, cc.g, cc.b
+                else hR, hG, hB = 0.2, 0.6, 0.2 end
+            elseif cFill then
+                hR, hG, hB = cFill.r, cFill.g, cFill.b
+                if cFill.a then hA = cFill.a end
+            elseif unitKey == "player" then
                 local _, classToken = UnitClass("player")
                 local cc = RAID_CLASS_COLORS[classToken]
                 if cc then hR, hG, hB = cc.r, cc.g, cc.b
@@ -936,7 +946,14 @@ initFrame:SetScript("OnEvent", function(self)
             else
                 hR, hG, hB = 0.8, 0.2, 0.2
             end
-            bgR, bgG, bgB, bgA = hR * 0.2, hG * 0.2, hB * 0.2, 0.75
+            -- Check for custom background color
+            local cBg = settings.customBgColor
+            if cBg then
+                bgR, bgG, bgB = cBg.r, cBg.g, cBg.b
+                bgA = cBg.a or 0.75
+            else
+                bgR, bgG, bgB, bgA = hR * 0.2, hG * 0.2, hB * 0.2, 0.75
+            end
         end
 
         -- Health bar
@@ -950,8 +967,8 @@ initFrame:SetScript("OnEvent", function(self)
         else
             healthBgColor:SetAllPoints()
         end
-        healthBgColor:SetColorTexture(bgR, bgG, bgB, bgA)
-        UnsnapTex(healthBgColor)
+        healthBgColor:SetColorTexture(bgR, bgG, bgB, 1)
+        healthBgColor:SetAlpha(bgA)
         if showPortrait and portraitFrame then
             if side == "left" then
                 PP.Point(health, "TOPLEFT", portraitFrame, "TOPRIGHT", 0, 0)
@@ -965,14 +982,13 @@ initFrame:SetScript("OnEvent", function(self)
         local healthBg = health:CreateTexture(nil, "BACKGROUND", nil, -1)
         healthBg:SetAllPoints()
         healthBg:SetColorTexture(0.1, 0.1, 0.1, 0.75)
-        UnsnapTex(healthBg)
 
         local healthFill = health:CreateTexture(nil, "ARTWORK")
         healthFill:SetPoint("TOPLEFT", health, "TOPLEFT", 0, 0)
         healthFill:SetPoint("BOTTOMLEFT", health, "BOTTOMLEFT", 0, 0)
         healthFill:SetWidth(math.floor(frameW * (_previewHealthPct or 0.70) + 0.5))
-        healthFill:SetColorTexture(hR, hG, hB, hA)
-        UnsnapTex(healthFill)
+        healthFill:SetColorTexture(hR, hG, hB, 1)
+        healthFill:SetAlpha(hA)
         pf._healthFill = healthFill
         pf._hR, pf._hG, pf._hB, pf._hA = hR, hG, hB, hA
 
@@ -1010,13 +1026,15 @@ initFrame:SetScript("OnEvent", function(self)
                 else
                     return _previewCreatureNames[unitKey] or unitKey
                 end
-            elseif content == "both" or content == "curhpshort" or content == "perhp" then
+            elseif content == "both" or content == "curhpshort" or content == "perhp" or content == "perhpnosign" or content == "perhpnum" then
                 local maxHP = UnitHealthMax("player") or 1
                 local pct = _previewHealthPct or 0.70
                 local curHP = math.floor(maxHP * pct)
                 local pctInt = math.floor(pct * 100)
                 if content == "curhpshort" then return AbbreviateLargeNumbers(curHP)
                 elseif content == "perhp" then return pctInt .. "%"
+                elseif content == "perhpnosign" then return tostring(pctInt)
+                elseif content == "perhpnum" then return pctInt .. "% | " .. AbbreviateLargeNumbers(curHP)
                 else return AbbreviateLargeNumbers(curHP) .. " | " .. pctInt .. "%" end
             elseif content == "perpp" then
                 local ppPct = _previewPowerPct or 0.85
@@ -1140,16 +1158,34 @@ initFrame:SetScript("OnEvent", function(self)
             PP.Size(power, frameW, powerH)
             local powerBg = power:CreateTexture(nil, "BACKGROUND")
             powerBg:SetAllPoints()
-            powerBg:SetColorTexture(0.2 * 0.3, 0.35 * 0.3, 0.85 * 0.3, 1)
-            UnsnapTex(powerBg)
             pf._powerBg = powerBg
             local powerFill = power:CreateTexture(nil, "ARTWORK")
             powerFill:SetPoint("TOPLEFT", power, "TOPLEFT", 0, 0)
             powerFill:SetPoint("BOTTOMLEFT", power, "BOTTOMLEFT", 0, 0)
             powerFill:SetWidth(math.floor(frameW * (_previewPowerPct or 0.85) + 0.5))
-            powerFill:SetColorTexture(0.2, 0.35, 0.85, 1)
-            UnsnapTex(powerFill)
             pf._powerFill = powerFill
+
+            -- Apply custom power bar colors or default
+            local customPFill = settings.customPowerFillColor
+            local customPBg = settings.customPowerBgColor
+            local pfR, pfG, pfB = 0.2, 0.35, 0.85
+            local pbR, pbG, pbB = pfR * 0.3, pfG * 0.3, pfB * 0.3
+            local pfA = 1.0
+            local pbA = 0.5
+            if customPFill then
+                pfR, pfG, pfB = customPFill.r, customPFill.g, customPFill.b
+                if customPFill.a then pfA = customPFill.a end
+            end
+            if customPBg then
+                pbR, pbG, pbB = customPBg.r, customPBg.g, customPBg.b
+                if customPBg.a then pbA = customPBg.a end
+            else
+                pbR, pbG, pbB = pfR * 0.3, pfG * 0.3, pfB * 0.3
+            end
+            powerBg:SetColorTexture(pbR, pbG, pbB, 1)
+            powerBg:SetAlpha(pbA)
+            powerFill:SetColorTexture(pfR, pfG, pfB, 1)
+            powerFill:SetAlpha(pfA)
             -- Initial anchor based on power position
             if initPpPos == "none" then
                 power:Hide()
@@ -1163,10 +1199,10 @@ initFrame:SetScript("OnEvent", function(self)
                 PP.Point(power, "TOPLEFT", health, "BOTTOMLEFT", 0, 0)
             end
 
-            -- Power percent text overlay in preview
-            local ppOvr = CreateFrame("Frame", nil, power)
-            ppOvr:SetAllPoints()
-            ppOvr:SetFrameLevel(power:GetFrameLevel() + 2)
+            -- Power percent text overlay in preview (parented to pf, above border)
+            local ppOvr = CreateFrame("Frame", nil, pf)
+            ppOvr:SetAllPoints(power)
+            ppOvr:SetFrameLevel(barArea:GetFrameLevel() + 8)
             ppPreviewFS = ppOvr:CreateFontString(nil, "OVERLAY")
             SetPVFont(ppPreviewFS, PREVIEW_FONT, 9)
             ppPreviewFS:Hide()
@@ -1179,10 +1215,13 @@ initFrame:SetScript("OnEvent", function(self)
 
             if texPath then
                 healthFill:SetTexture(texPath)
-                healthFill:SetVertexColor(hR, hG, hB, hA)
+                healthFill:SetVertexColor(hR, hG, hB, 1)
                 if pf._powerFill and powerH > 0 then
                     pf._powerFill:SetTexture(texPath)
-                    pf._powerFill:SetVertexColor(0.2, 0.35, 0.85, 1)
+                    local cpf = settings.customPowerFillColor
+                    local txR, txG, txB = 0.2, 0.35, 0.85
+                    if cpf then txR, txG, txB = cpf.r, cpf.g, cpf.b end
+                    pf._powerFill:SetVertexColor(txR, txG, txB, 1)
                 end
             end
         end
@@ -1211,34 +1250,9 @@ initFrame:SetScript("OnEvent", function(self)
             local cbBg = castbar:CreateTexture(nil, "BACKGROUND")
             cbBg:SetAllPoints(castbar)
             cbBg:SetColorTexture(0, 0, 0, 0.5)
-            UnsnapTex(cbBg)
 
-            -- 1px black borders on left, right, bottom (matching real CreateCastBar)
-            local cbBdrL = castbar:CreateTexture(nil, "OVERLAY")
-            cbBdrL:SetColorTexture(0, 0, 0, 1)
-            PP.Width(cbBdrL, 1)
-            PP.Point(cbBdrL, "TOPLEFT", castbar, "TOPLEFT", 0, 0)
-            PP.Point(cbBdrL, "BOTTOMLEFT", castbar, "BOTTOMLEFT", 0, 0)
-            UnsnapTex(cbBdrL)
-
-            local cbBdrR = castbar:CreateTexture(nil, "OVERLAY")
-            cbBdrR:SetColorTexture(0, 0, 0, 1)
-            PP.Width(cbBdrR, 1)
-            PP.Point(cbBdrR, "TOPRIGHT", castbar, "TOPRIGHT", 0, 0)
-            PP.Point(cbBdrR, "BOTTOMRIGHT", castbar, "BOTTOMRIGHT", 0, 0)
-            UnsnapTex(cbBdrR)
-
-            local cbBdrB = castbar:CreateTexture(nil, "OVERLAY")
-            cbBdrB:SetColorTexture(0, 0, 0, 1)
-            PP.Height(cbBdrB, 1)
-            PP.Point(cbBdrB, "BOTTOMLEFT", castbar, "BOTTOMLEFT", 0, 0)
-            PP.Point(cbBdrB, "BOTTOMRIGHT", castbar, "BOTTOMRIGHT", 0, 0)
-            UnsnapTex(cbBdrB)
-
-            -- Store castbar border refs for scale compensation
-            castbar._cbBdrL = cbBdrL
-            castbar._cbBdrR = cbBdrR
-            castbar._cbBdrB = cbBdrB
+            -- Black borders via unified PP system
+            PP.CreateBorder(castbar, 0, 0, 0, 1, 1, "OVERLAY", 0)
 
             -- Cast fill (inset 1px from left, 1px from bottom to sit inside borders)
             castFill = castbar:CreateTexture(nil, "ARTWORK")
@@ -1246,7 +1260,6 @@ initFrame:SetScript("OnEvent", function(self)
             PP.Point(castFill, "BOTTOMLEFT", castbar, "BOTTOMLEFT", 1, 1)
             PP.Width(castFill, (totalW - 2) * (_previewCastFill or 0.6))
             castFill:SetColorTexture(0.114, 0.655, 0.514, 1)
-            UnsnapTex(castFill)
 
             -- Cast spell name and icon -- class spell for player, generic for enemies
             local castSpellName, castSpellIcon
@@ -1284,26 +1297,14 @@ initFrame:SetScript("OnEvent", function(self)
             local iconBg = castIconFrame:CreateTexture(nil, "BACKGROUND")
             iconBg:SetAllPoints()
             iconBg:SetColorTexture(0, 0, 0, 1)
-            UnsnapTex(iconBg)
-            -- 1px black border edges
-            local function MkIconBdr()
-                local t = castIconFrame:CreateTexture(nil, "OVERLAY", nil, 7)
-                t:SetColorTexture(0, 0, 0, 1)
-                UnsnapTex(t)
-                return t
-            end
-            local ibT = MkIconBdr(); PP.Height(ibT, 1); PP.Point(ibT, "TOPLEFT", castIconFrame, "TOPLEFT", 0, 0); PP.Point(ibT, "TOPRIGHT", castIconFrame, "TOPRIGHT", 0, 0)
-            local ibB = MkIconBdr(); PP.Height(ibB, 1); PP.Point(ibB, "BOTTOMLEFT", castIconFrame, "BOTTOMLEFT", 0, 0); PP.Point(ibB, "BOTTOMRIGHT", castIconFrame, "BOTTOMRIGHT", 0, 0)
-            local ibL = MkIconBdr(); PP.Width(ibL, 1); PP.Point(ibL, "TOPLEFT", castIconFrame, "TOPLEFT", 0, 0); PP.Point(ibL, "BOTTOMLEFT", castIconFrame, "BOTTOMLEFT", 0, 0)
-            local ibR = MkIconBdr(); PP.Width(ibR, 1); PP.Point(ibR, "TOPRIGHT", castIconFrame, "TOPRIGHT", 0, 0); PP.Point(ibR, "BOTTOMRIGHT", castIconFrame, "BOTTOMRIGHT", 0, 0)
+            -- 1px black border via unified PP system
+            PP.CreateBorder(castIconFrame, 0, 0, 0, 1)
             local castIconTex = castIconFrame:CreateTexture(nil, "ARTWORK")
             PP.Point(castIconTex, "TOPLEFT", castIconFrame, "TOPLEFT", 1, -1)
             PP.Point(castIconTex, "BOTTOMRIGHT", castIconFrame, "BOTTOMRIGHT", -1, 1)
             castIconTex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
             castIconTex:SetTexture(castSpellIcon)
-            UnsnapTex(castIconTex)
             castIconFrame._iconTex = castIconTex
-            castIconFrame._iconBdrs = { ibT, ibB, ibL, ibR }
 
             -- Hide initially if player castbar not enabled
             if unitKey == "player" and castbarH <= 0 then
@@ -1345,7 +1346,6 @@ initFrame:SetScript("OnEvent", function(self)
             btbBg = btbFrame:CreateTexture(nil, "BACKGROUND")
             btbBg:SetAllPoints()
             btbBg:SetColorTexture(bgc.r, bgc.g, bgc.b, bga)
-            UnsnapTex(btbBg)
 
             -- BTB borders removed: main frame border now encompasses BTB
 
@@ -1369,13 +1369,12 @@ initFrame:SetScript("OnEvent", function(self)
             btbCenterFS:SetTextColor(1, 1, 1)
             btbCenterFS:SetWordWrap(false)
 
-            -- Class icon texture on BTB preview â€” on a high-level frame so it renders above the border
+            -- Class icon texture on BTB preview on a high-level frame so it renders above the border
             local btbClassIconHolder = CreateFrame("Frame", nil, btbFrame)
             btbClassIconHolder:SetAllPoints(btbTextOvr)
             btbClassIconHolder:SetFrameLevel(barArea:GetFrameLevel() + 12)
             btbClassIconTex = btbClassIconHolder:CreateTexture(nil, "ARTWORK")
             btbClassIconTex:SetTexCoord(0, 1, 0, 1)
-            UnsnapTex(btbClassIconTex)
             btbClassIconTex:Hide()
 
             -- Position BTB texts
@@ -1425,7 +1424,6 @@ initFrame:SetScript("OnEvent", function(self)
                 if ciStyle ~= "none" then
                     local _, classToken = UnitClass("player")
                     if classToken and ApplyClassIconTexture_Preview(btbClassIconTex, classToken, ciStyle) then
-                        UnsnapTex(btbClassIconTex)
                         local ciSz = s.btbClassIconSize or 14
                         PP.Size(btbClassIconTex, ciSz, ciSz)
                         btbClassIconTex:ClearAllPoints()
@@ -1503,14 +1501,12 @@ initFrame:SetScript("OnEvent", function(self)
             cpBgTex:SetAllPoints()
             local initBg = settings.classPowerBgColor or { r=0.082, g=0.082, b=0.082, a=1.0 }
             cpBgTex:SetColorTexture(initBg.r, initBg.g, initBg.b, initBg.a)
-            UnsnapTex(cpBgTex)
             cpPipContainer._bgTex = cpBgTex
             cpPips = {}
             for i = 1, cpMax do
                 local pip = cpPipContainer:CreateTexture(nil, "OVERLAY", nil, 3)
                 pip:SetColorTexture(1, 1, 1, 1)
                 PP.Size(pip, 8, 3)
-                UnsnapTex(pip)
                 cpPips[i] = pip
             end
             -- Color pips: first 3 filled, rest empty (preview)
@@ -1519,17 +1515,15 @@ initFrame:SetScript("OnEvent", function(self)
                 if i <= previewFilled then
                     cpPips[i]:SetColorTexture(cpColor[1], cpColor[2], cpColor[3], 1)
                 end
-                UnsnapTex(cpPips[i])
             end
             cpPipContainer:Hide()  -- shown in Update() if style ~= "none"
 
             -- 1px inset bottom border for "above" position (matches frame border color)
             -- Sublevel 7 so it renders over pip fill textures (sublevel 3)
             local cpBottomBdr = cpPipContainer:CreateTexture(nil, "OVERLAY", nil, 7)
-            PP.Height(cpBottomBdr, 1)
+            cpBottomBdr:SetHeight(1)
             PP.Point(cpBottomBdr, "BOTTOMLEFT", cpPipContainer, "BOTTOMLEFT", 0, 0)
             PP.Point(cpBottomBdr, "BOTTOMRIGHT", cpPipContainer, "BOTTOMRIGHT", 0, 0)
-            UnsnapTex(cpBottomBdr)
             local initBdrC = settings.borderColor or { r = 0, g = 0, b = 0 }
             cpBottomBdr:SetColorTexture(initBdrC.r, initBdrC.g, initBdrC.b, 1)
             cpBottomBdr:Hide()  -- shown only when position is "above"
@@ -1539,7 +1533,7 @@ initFrame:SetScript("OnEvent", function(self)
         -- Border -- plain frame child of barArea with 4 individual edge textures.
         -- BackdropTemplate is avoided: its edgeSize clipping causes sides to vanish
         -- when the frame is small, and its internal snapping can't be disabled.
-        -- Individual textures with UnsnapTex + PixelUtil sizing render reliably.
+        -- Individual textures with PixelUtil sizing render reliably.
         local bdrSize = settings.borderSize or 1
         local bdrColor = settings.borderColor or { r = 0, g = 0, b = 0 }
         local border = CreateFrame("Frame", nil, pf)
@@ -1549,29 +1543,7 @@ initFrame:SetScript("OnEvent", function(self)
         local initBdrBtbAtt = (initBdrBtbPos == "top" or initBdrBtbPos == "bottom")
         border:SetHeight(settings.healthHeight + initPpExtra + (settings.bottomTextBar and initBdrBtbAtt and (settings.bottomTextBarHeight or 16) or 0))
         border:SetFrameLevel(barArea:GetFrameLevel() + 5)
-        local function MkBdrTex()
-            local t = border:CreateTexture(nil, "OVERLAY", nil, 7)
-            t:SetColorTexture(bdrColor.r, bdrColor.g, bdrColor.b, 1)
-            UnsnapTex(t)
-            return t
-        end
-        local bdrT = MkBdrTex()
-        PP.Height(bdrT, bdrSize)
-        PP.Point(bdrT, "TOPLEFT",  border, "TOPLEFT",  0, 0)
-        PP.Point(bdrT, "TOPRIGHT", border, "TOPRIGHT", 0, 0)
-        local bdrB = MkBdrTex()
-        PP.Height(bdrB, bdrSize)
-        PP.Point(bdrB, "BOTTOMLEFT",  border, "BOTTOMLEFT",  0, 0)
-        PP.Point(bdrB, "BOTTOMRIGHT", border, "BOTTOMRIGHT", 0, 0)
-        local bdrL = MkBdrTex()
-        PP.Width(bdrL, bdrSize)
-        PP.Point(bdrL, "TOPLEFT",    border, "TOPLEFT",    0, 0)
-        PP.Point(bdrL, "BOTTOMLEFT", border, "BOTTOMLEFT", 0, 0)
-        local bdrR = MkBdrTex()
-        PP.Width(bdrR, bdrSize)
-        PP.Point(bdrR, "TOPRIGHT",    border, "TOPRIGHT",    0, 0)
-        PP.Point(bdrR, "BOTTOMRIGHT", border, "BOTTOMRIGHT", 0, 0)
-        border._texs = { bdrT, bdrB, bdrL, bdrR }
+        PP.CreateBorder(border, bdrColor.r, bdrColor.g, bdrColor.b, 1, bdrSize)
         if bdrSize == 0 then border:Hide() end
 
         -- Absorb bar (player only, uses shield.tga like the real addon)
@@ -1582,7 +1554,6 @@ initFrame:SetScript("OnEvent", function(self)
             absorbBar:SetStatusBarTexture("Interface\\AddOns\\EllesmereUIUnitFrames\\Media\\shield.tga")
             absorbBar:SetStatusBarColor(1, 1, 1, 0.8)
             absorbBar:SetReverseFill(true)
-            UnsnapTex(absorbBar:GetStatusBarTexture())
             PP.Point(absorbBar, "TOPRIGHT", healthFill, "TOPRIGHT", 0, 0)
             PP.Point(absorbBar, "BOTTOMRIGHT", healthFill, "BOTTOMRIGHT", 0, 0)
             PP.Width(absorbBar, frameW)
@@ -1612,7 +1583,6 @@ initFrame:SetScript("OnEvent", function(self)
                 PP.Point(tex, "BOTTOMRIGHT", bf, "BOTTOMRIGHT", -1, 1)
                 tex:SetTexCoord(0.07, 0.93, 0.07, 0.93)
                 tex:SetTexture(_previewBuffIcons[i] or 135932)
-                UnsnapTex(tex)
                 bf._iconTex = tex
                 buffIcons[i] = bf
                 if not settings.showBuffs then bf:Hide() end
@@ -1676,7 +1646,7 @@ initFrame:SetScript("OnEvent", function(self)
             elseif unitKey == "targettarget" then s = db.profile.totPet
             else s = db.profile.player end
 
-            -- Donor settings for mini frames (border/texture/font inherit from focusâ†’targetâ†’player)
+            -- Donor settings for mini frames (border/texture/font inherit from focus player)
             local isMini = (unitKey == "pet" or unitKey == "boss" or unitKey == "targettarget")
             local ds = s
             if isMini then
@@ -1708,7 +1678,7 @@ initFrame:SetScript("OnEvent", function(self)
             local pvPpPos = noPowerPreview and "none" or (s.powerPosition or "below")
             local pvPpIsAtt = (pvPpPos == "below" or pvPpPos == "above")
             local pvPpExtra = pvPpIsAtt and ph or 0
-            local ch = (unitKey == "player") and (s.showPlayerCastbar and (s.playerCastbarHeight and s.playerCastbarHeight > 0 and s.playerCastbarHeight or 14) or 0) or (s.castbarHeight or 0)
+            local ch = (unitKey == "player") and (s.showPlayerCastbar and (s.playerCastbarHeight and s.playerCastbarHeight > 0 and s.playerCastbarHeight or 14) or 0) or ((s.showCastbar ~= false) and (s.castbarHeight or 14) or 0)
             local bh = hh + pvPpExtra
             -- Class power "above" position adds height above health bar ("top" floats outside)
             local cpStyle = (unitKey == "player") and (s.classPowerStyle or "none") or "none"
@@ -1802,13 +1772,22 @@ initFrame:SetScript("OnEvent", function(self)
             -- Live-update dark mode colors
             do
                 local isDark = db.profile.darkTheme
-                local uHR, uHG, uHB, uHA, uBgR, uBgG, uBgB, uBgA
+                local uHR, uHG, uHB, uBgR, uBgG, uBgB
                 if isDark then
-                    uHR, uHG, uHB, uHA = 0x11/255, 0x11/255, 0x11/255, 0.90
-                    uBgR, uBgG, uBgB, uBgA = 0x4f/255, 0x4f/255, 0x4f/255, 1
+                    uHR, uHG, uHB = 0x11/255, 0x11/255, 0x11/255
+                    uBgR, uBgG, uBgB = 0x4f/255, 0x4f/255, 0x4f/255
                 else
-                    uHA = 1
-                    if unitKey == "player" then
+                    -- Check for custom fill color (skipped when class colored is enabled)
+                    local cFill = s.customFillColor
+                    local isCC = s.healthClassColored
+                    if isCC then
+                        local _, ct = UnitClass("player")
+                        local cc = RAID_CLASS_COLORS[ct]
+                        if cc then uHR, uHG, uHB = cc.r, cc.g, cc.b
+                        else uHR, uHG, uHB = 0.2, 0.6, 0.2 end
+                    elseif cFill then
+                        uHR, uHG, uHB = cFill.r, cFill.g, cFill.b
+                    elseif unitKey == "player" then
                         local _, ct = UnitClass("player")
                         local cc = RAID_CLASS_COLORS[ct]
                         if cc then uHR, uHG, uHB = cc.r, cc.g, cc.b
@@ -1818,9 +1797,15 @@ initFrame:SetScript("OnEvent", function(self)
                     else
                         uHR, uHG, uHB = 0.8, 0.2, 0.2
                     end
-                    uBgR, uBgG, uBgB, uBgA = uHR * 0.2, uHG * 0.2, uHB * 0.2, 0.75
+                    -- Check for custom background color
+                    local cBg = s.customBgColor
+                    if cBg then
+                        uBgR, uBgG, uBgB = cBg.r, cBg.g, cBg.b
+                    else
+                        uBgR, uBgG, uBgB = uHR * 0.2, uHG * 0.2, uHB * 0.2
+                    end
                 end
-                healthFill:SetColorTexture(uHR, uHG, uHB, uHA)
+                healthFill:SetColorTexture(uHR, uHG, uHB, 1)
                 if isDark then
                     healthBgColor:ClearAllPoints()
                     healthBgColor:SetPoint("TOPLEFT", health, "TOPLEFT", math.floor(fw * (_previewHealthPct or 0.70) + 0.5), 0)
@@ -1829,7 +1814,7 @@ initFrame:SetScript("OnEvent", function(self)
                     healthBgColor:ClearAllPoints()
                     healthBgColor:SetAllPoints(health)
                 end
-                healthBgColor:SetColorTexture(uBgR, uBgG, uBgB, uBgA)
+                healthBgColor:SetColorTexture(uBgR, uBgG, uBgB, 1)
                 -- Update bar texture on fill textures
                 do
                     local curTexKey = s.healthBarTexture or db.profile.healthBarTexture or "none"
@@ -1844,20 +1829,34 @@ initFrame:SetScript("OnEvent", function(self)
                         end
                     end
                     if pf._powerFill then
+                        local cpf2 = s.customPowerFillColor
+                        local pvFR, pvFG, pvFB = 0.2, 0.35, 0.85
+                        if cpf2 then pvFR, pvFG, pvFB = cpf2.r, cpf2.g, cpf2.b end
                         if curTexPath then
                             pf._powerFill:SetTexture(curTexPath)
-                            pf._powerFill:SetVertexColor(0.2, 0.35, 0.85, 1)
+                            pf._powerFill:SetVertexColor(pvFR, pvFG, pvFB, 1)
                         else
                             pf._powerFill:SetVertexColor(1, 1, 1, 1)
-                            pf._powerFill:SetColorTexture(0.2, 0.35, 0.85, 1)
+                            pf._powerFill:SetColorTexture(pvFR, pvFG, pvFB, 1)
                         end
                     end
                 end
 
-                -- Apply health bar opacity (fill + bg only, not text)
-                local hbOpacity = s.healthBarOpacity or db.profile.healthBarOpacity or 0.9
-                if healthFill then healthFill:SetAlpha(hbOpacity) end
-                if healthBgColor then healthBgColor:SetAlpha(hbOpacity) end
+                -- Apply health bar alpha from custom color tables
+                local hFillA, hBgA
+                if isDark then
+                    hFillA = 0.90
+                    hBgA   = 1
+                else
+                    hFillA = 0.9
+                    hBgA   = 0.75
+                    local hcf = s.customFillColor
+                    if hcf and hcf.a then hFillA = hcf.a end
+                    local hcb = s.customBgColor
+                    if hcb and hcb.a then hBgA = hcb.a end
+                end
+                if healthFill then healthFill:SetAlpha(hFillA) end
+                if healthBgColor then healthBgColor:SetAlpha(hBgA) end
             end
 
             -- Update text via unified function
@@ -1893,16 +1892,38 @@ initFrame:SetScript("OnEvent", function(self)
                     PP.Width(pf._powerFill, math.floor(pvPw * (_previewPowerPct or 0.85) + 0.5))
                 end
 
-                -- Apply power bar opacity (fill + bg only, not text)
-                local pbOpacity = s.powerBarOpacity or db.profile.powerBarOpacity or 1.0
-                if pf._powerFill then pf._powerFill:SetAlpha(pbOpacity) end
-                if pf._powerBg then pf._powerBg:SetAlpha(pbOpacity) end
+                -- Apply power bar alpha from custom color tables
+                local pFillA = 1.0
+                local pBgA   = 0.5
+                local cpFill = s.customPowerFillColor
+                local cpBg = s.customPowerBgColor
+                if cpFill and cpFill.a then pFillA = cpFill.a end
+                if cpBg and cpBg.a then pBgA = cpBg.a end
+                if pf._powerFill then pf._powerFill:SetAlpha(pFillA) end
+                if pf._powerBg then pf._powerBg:SetAlpha(pBgA) end
+
+                -- Apply custom power bar colors
+                local pvPfR, pvPfG, pvPfB = 0.2, 0.35, 0.85
+                local pvPbR, pvPbG, pvPbB = pvPfR * 0.3, pvPfG * 0.3, pvPfB * 0.3
+                local pvUsePowerColor = s.powerPercentPowerColor ~= false
+                if pvUsePowerColor then
+                    local pType = UnitPowerType("player")
+                    local info = PowerBarColor[pType]
+                    if info then pvPfR, pvPfG, pvPfB = info.r, info.g, info.b end
+                elseif cpFill then
+                    pvPfR, pvPfG, pvPfB = cpFill.r, cpFill.g, cpFill.b
+                end
+                if cpBg then pvPbR, pvPbG, pvPbB = cpBg.r, cpBg.g, cpBg.b
+                else pvPbR, pvPbG, pvPbB = pvPfR * 0.3, pvPfG * 0.3, pvPfB * 0.3 end
+                if pf._powerFill then pf._powerFill:SetColorTexture(pvPfR, pvPfG, pvPfB, 1) end
+                if pf._powerBg then pf._powerBg:SetColorTexture(pvPbR, pvPbG, pvPbB, 1) end
             end
 
             -- Power percent text in preview
             if ppPreviewFS then
                 local ppPos = s.powerPercentText or "none"
-                if ppPos ~= "none" and power and ph > 0 then
+                local ppFmt = s.powerTextFormat or "perpp"
+                if ppPos ~= "none" and ppFmt ~= "none" and power and ph > 0 then
                     local ppSz = s.powerPercentSize or 9
                     local ppOx = s.powerPercentX or 0
                     local ppOy = s.powerPercentY or 0
@@ -1919,11 +1940,29 @@ initFrame:SetScript("OnEvent", function(self)
                         PP.Point(ppPreviewFS, "CENTER", power, "CENTER", ppOx, ppOy)
                     end
                     local ppPctVal = _previewPowerPct or 0.85
-                    ppPreviewFS:SetText(math.floor(ppPctVal * 100) .. "%")
-                    if s.powerPercentPowerColor then
+                    local ppPctRaw = math.floor(ppPctVal * 100)
+                    local ppSuffix = (s.powerShowPercent == false) and "" or "%"
+                    local ppCurFake = "18.2k"
+                    local ppTxt
+                    if ppFmt == "smart" then
+                        ppTxt = ppPctRaw .. ppSuffix  -- preview always shows percent for smart
+                    elseif ppFmt == "curpp" then
+                        ppTxt = ppCurFake
+                    elseif ppFmt == "both" then
+                        ppTxt = ppCurFake .. " | " .. ppPctRaw .. ppSuffix
+                    else  -- "perpp"
+                        ppTxt = ppPctRaw .. ppSuffix
+                    end
+                    ppPreviewFS:SetText(ppTxt)
+                    if s.powerPercentTextPowerColor then
                         ppPreviewFS:SetTextColor(0.2, 0.35, 0.85)
                     else
-                        ppPreviewFS:SetTextColor(1, 1, 1)
+                        local ptc = s.powerTextColor
+                        if ptc then
+                            ppPreviewFS:SetTextColor(ptc.r, ptc.g, ptc.b)
+                        else
+                            ppPreviewFS:SetTextColor(1, 1, 1)
+                        end
                     end
                     ppPreviewFS:Show()
                 else
@@ -1973,7 +2012,6 @@ initFrame:SetScript("OnEvent", function(self)
                     local bgc = s.btbBgColor or { r = 0.2, g = 0.2, b = 0.2 }
                     local bga = s.btbBgOpacity or 1.0
                     btbBg:SetColorTexture(bgc.r, bgc.g, bgc.b, bga)
-                    UnsnapTex(btbBg)
                     ApplyBTBPreviewTexts(s)
                     if not btbFrame:IsShown() then btbFrame:Show() end
                 else
@@ -1987,20 +2025,18 @@ initFrame:SetScript("OnEvent", function(self)
                     castbar:Show()
                     if castFill then
                         castFill:SetWidth(math.floor((tw - 2) * (_previewCastFill or 0.6) + 0.5))
-                        -- Update fill color from per-unit settings
+                        -- Update fill color from per-unit settings (class colored only for player)
                         local fillC
-                        if s.castbarClassColored then
+                        if unitKey == "player" and s.castbarClassColored then
                             local _, classToken = UnitClass("player")
                             if classToken then fillC = RAID_CLASS_COLORS[classToken] end
                         end
                         if not fillC then fillC = s.castbarFillColor end
                         if fillC then
                             castFill:SetColorTexture(fillC.r, fillC.g, fillC.b, 1)
-                            UnsnapTex(castFill)
                         else
                             local gc = db.profile.castbarColor or { r=0.114, g=0.655, b=0.514 }
                             castFill:SetColorTexture(gc.r, gc.g, gc.b, 1)
-                            UnsnapTex(castFill)
                         end
                     end
                     if castIconFrame then
@@ -2058,15 +2094,7 @@ initFrame:SetScript("OnEvent", function(self)
             border:SetPoint("TOPRIGHT", barArea, "TOPRIGHT", 0, 0)
             border:SetHeight(borderH)
             if bs > 0 then
-                if border._texs then
-                    for _, t in ipairs(border._texs) do
-                        t:SetColorTexture(bc.r, bc.g, bc.b, 1)
-                    end
-                    PP.Height(border._texs[1], bs)
-                    PP.Height(border._texs[2], bs)
-                    PP.Width(border._texs[3], bs)
-                    PP.Width(border._texs[4], bs)
-                end
+                PP.UpdateBorder(border, bs, bc.r, bc.g, bc.b, 1)
                 border:Show()
             else
                 border:Hide()
@@ -2115,11 +2143,10 @@ initFrame:SetScript("OnEvent", function(self)
                             cpPips[i]:ClearAllPoints()
                             cpPips[i]:SetSize(w, pipH)
                             cpPips[i]:SetPoint("TOPLEFT", cpPipContainer, "TOPLEFT", leftEdge, 0)
-                            UnsnapTex(cpPips[i])
                             cpPips[i]:Show()
                         end
                     else
-                        -- "top" / "bottom" â€” floating, pixel-perfect sizing
+                        -- "top" / "bottom" floating, pixel-perfect sizing
                         local efs = cpPipContainer:GetEffectiveScale()
                         if efs <= 0 then efs = 1 end
                         local function Snap(v) return math.floor(v * efs + 0.5) / efs end
@@ -2147,7 +2174,6 @@ initFrame:SetScript("OnEvent", function(self)
                             cpPips[i]:ClearAllPoints()
                             cpPips[i]:SetSize(snappedW, snappedH)
                             cpPips[i]:SetPoint("TOPLEFT", cpPipContainer, "TOPLEFT", Snap(x), 0)
-                            UnsnapTex(cpPips[i])
                             cpPips[i]:Show()
                             x = x + snappedW + snappedGap
                         end
@@ -2187,7 +2213,6 @@ initFrame:SetScript("OnEvent", function(self)
                             cpPips[i]:SetColorTexture(cpEmptyCol.r, cpEmptyCol.g, cpEmptyCol.b, cpEmptyCol.a)
                             cpPips[i]:SetAlpha(1)
                         end
-                        UnsnapTex(cpPips[i])
                     end
                     cpPipContainer:Show()
                     if pf._cpPipOv then pf._cpPipOv:Show() end
@@ -2302,28 +2327,20 @@ initFrame:SetScript("OnEvent", function(self)
             pf:SetScale(combinedScale)
 
             -- Recalculate border sizes after scale change so they stay pixel-perfect
-            if border and border._texs then
+            if border then
                 local bs2 = ds.borderSize or 1
-                PP.Height(border._texs[1], bs2)
-                PP.Height(border._texs[2], bs2)
-                PP.Width(border._texs[3], bs2)
-                PP.Width(border._texs[4], bs2)
+                PP.SetBorderSize(border, bs2)
             end
             if castbar then
-                if castbar._cbBdrL then PP.Width(castbar._cbBdrL, 1) end
-                if castbar._cbBdrR then PP.Width(castbar._cbBdrR, 1) end
-                if castbar._cbBdrB then PP.Height(castbar._cbBdrB, 1) end
+                if castbar._ppBorders then PP.SetBorderSize(castbar, 1) end
                 if castFill then
                     castFill:ClearAllPoints()
                     PP.Point(castFill, "TOPLEFT", castbar, "TOPLEFT", 1, 0)
                     PP.Point(castFill, "BOTTOMLEFT", castbar, "BOTTOMLEFT", 1, 1)
                 end
             end
-            if castIconFrame and castIconFrame._iconBdrs then
-                PP.Height(castIconFrame._iconBdrs[1], 1)
-                PP.Height(castIconFrame._iconBdrs[2], 1)
-                PP.Width(castIconFrame._iconBdrs[3], 1)
-                PP.Width(castIconFrame._iconBdrs[4], 1)
+            if castIconFrame then
+                PP.SetBorderSize(castIconFrame, 1)
                 if castIconFrame._iconTex then
                     castIconFrame._iconTex:ClearAllPoints()
                     PP.Point(castIconFrame._iconTex, "TOPLEFT", castIconFrame, "TOPLEFT", 1, -1)
@@ -2611,7 +2628,7 @@ initFrame:SetScript("OnEvent", function(self)
     --  Page Builders
     ---------------------------------------------------------------------------
 
-    -- General tab removed Ã¢â‚¬â€ settings migrated to per-unit DISPLAY section,
+    -- General tab removed settings migrated to per-unit DISPLAY section,
     -- positioning migrated to Unlock Mode.
 
     ---------------------------------------------------------------------------
@@ -2681,7 +2698,7 @@ initFrame:SetScript("OnEvent", function(self)
     end
 
     ---------------------------------------------------------------------------
-    --  WrapGroupCogPopup  Ã¢â‚¬â€œ  overlay for cog-popup settings in multi-edit
+    --  WrapGroupCogPopup overlay for cog-popup settings in multi-edit
     --  Checks at SHOW TIME whether any settingKeys are MIXED.  If so, an
     --  overlay covers the popup with "Click to Sync".  If not, the overlay
     --  is hidden and the popup works normally.  This means syncing one cog
@@ -2763,12 +2780,13 @@ initFrame:SetScript("OnEvent", function(self)
         showCastbar          = { target=true, focus=true },
         showCastIcon         = { target=true, focus=true },
         castbarHeight        = { target=true, focus=true },
+        castbarHideWhenInactive = { player=true, target=true, focus=true },
         castSpellNameSize    = { player=true, target=true, focus=true },
         castSpellNameColor   = { player=true, target=true, focus=true },
         castDurationSize     = { player=true, target=true, focus=true },
         castDurationColor    = { player=true, target=true, focus=true },
         castbarFillColor     = { player=true, target=true, focus=true },
-        castbarClassColored  = { player=true, target=true, focus=true },
+        castbarClassColored  = { player=true },
         showClassPowerBar    = { player=true },
         lockClassPowerToFrame= { player=true },
         classPowerStyle      = { player=true },
@@ -2816,8 +2834,12 @@ initFrame:SetScript("OnEvent", function(self)
         -- Resolve MIXED for display: if multi and MIXED, fall back to eyeball DB
         local function SVal(key, default)
             local v = SGet(key)
-            if v == MIXED then return SDB()[key] or default end
-            return v ~= nil and v or default
+            if v == MIXED then
+                local dv = SDB()[key]
+                return dv ~= nil and dv or default
+            end
+            if v ~= nil then return v end
+            return default
         end
         -- Set that also writes to all supported units (for UNIT_SUPPORTS keys)
         local function SSetSupported(key, val)
@@ -3121,6 +3143,7 @@ initFrame:SetScript("OnEvent", function(self)
               setValue=function(v)
                   db.profile.darkTheme = v
                   ReloadAndUpdate(); UpdateMultiPreview()
+                  EllesmereUI:RefreshPage()
               end },
             { type="dropdown", text="Bar Texture", values=hbtValues, order=hbtOrder,
               getValue=function() return SVal("healthBarTexture", "none") end,
@@ -3148,7 +3171,7 @@ initFrame:SetScript("OnEvent", function(self)
                   end
                   ReloadAndUpdate()
               end },
-            nil);  y = y - h
+            { type="label", text="" });  y = y - h
         SWrap(sharedBorderRow._leftRegion, "borderColor")
         -- Inline cog on Border Color for Highlight Color + Border Size
         do
@@ -3456,20 +3479,15 @@ initFrame:SetScript("OnEvent", function(self)
         SWrap(sharedSizeRow._leftRegion, "healthHeight")
         SWrap(sharedSizeRow._rightRegion, "frameWidth")
 
-        -- Row 2: Bar Opacity + Center Text
-        local sharedOpacityCenterRow
-        sharedOpacityCenterRow, h = W:DualRow(parent, y,
-            { type="slider", text="Bar Opacity", min=0, max=100, step=1,
-              getValue=function() return (SVal("healthBarOpacity", 0.9)) * 100 end,
+        -- Row 2: Class Colored (toggle with inline bg+fill swatches) + Center Text
+        local sharedHealthColorRow
+        sharedHealthColorRow, h = W:DualRow(parent, y,
+            { type="toggle", text="Class Colored",
+              getValue=function() return SVal("healthClassColored", false) end,
               setValue=function(v)
-                  if isMulti then
-                      for _, key in ipairs(GROUP_UNIT_ORDER) do
-                          if groupChecked[key] then UNIT_DB_MAP[key]().healthBarOpacity = v / 100 end
-                      end
-                  else
-                      UNIT_DB_MAP[selectedUnit]().healthBarOpacity = v / 100
-                  end
+                  SSet("healthClassColored", v)
                   ReloadAndUpdate(); UpdateMultiPreview()
+                  EllesmereUI:RefreshPage()
               end },
             { type="dropdown", text="Center Text", values=healthTextValues, order=healthTextOrder,
               getValue=function() return SVal("centerTextContent", "none") end,
@@ -3481,12 +3499,97 @@ initFrame:SetScript("OnEvent", function(self)
                   end
                   ReloadAndUpdate(); UpdateMultiPreview()
               end });  y = y - h
-        SWrap(sharedOpacityCenterRow._leftRegion, "healthBarOpacity")
-        SWrap(sharedOpacityCenterRow._rightRegion, "centerTextContent")
-        local sharedCenterTextRow = sharedOpacityCenterRow
+        SWrap(sharedHealthColorRow._leftRegion, "healthClassColored")
+        SWrap(sharedHealthColorRow._rightRegion, "centerTextContent")
+        -- Inline bg + fill swatches on Class Colored disabled when toggle is ON
+        do
+            local rgn = sharedHealthColorRow._leftRegion
+
+            -- Background swatch
+            local bgSwatch, _ = EllesmereUI.BuildColorSwatch(rgn, rgn:GetFrameLevel() + 2,
+                function()
+                    local c = SGet("customBgColor")
+                    if c == MIXED then c = SDB().customBgColor end
+                    if c then return c.r, c.g, c.b, c.a or 0.75 end
+                    local _, ct = UnitClass("player")
+                    local cc = ct and RAID_CLASS_COLORS[ct]
+                    if cc then return cc.r * 0.2, cc.g * 0.2, cc.b * 0.2, 0.75 end
+                    return 0.04, 0.12, 0.04, 0.75
+                end,
+                function(r, g, b, a)
+                    if isMulti then
+                        for _, key in ipairs(GROUP_UNIT_ORDER) do
+                            if groupChecked[key] then UNIT_DB_MAP[key]().customBgColor = { r=r, g=g, b=b, a=a } end
+                        end
+                    else
+                        UNIT_DB_MAP[selectedUnit]().customBgColor = { r=r, g=g, b=b, a=a }
+                    end
+                    ReloadAndUpdate(); UpdateMultiPreview()
+                end, true, 20)
+            PP.Point(bgSwatch, "RIGHT", rgn._lastInline or rgn._control, "LEFT", -12, 0)
+            rgn._lastInline = bgSwatch
+
+            -- Fill swatch
+            local fillSwatch, _ = EllesmereUI.BuildColorSwatch(rgn, rgn:GetFrameLevel() + 2,
+                function()
+                    local c = SGet("customFillColor")
+                    if c == MIXED then c = SDB().customFillColor end
+                    if c then return c.r, c.g, c.b, c.a or 0.9 end
+                    local _, ct = UnitClass("player")
+                    local cc = ct and RAID_CLASS_COLORS[ct]
+                    if cc then return cc.r, cc.g, cc.b, 0.9 end
+                    return 0.2, 0.6, 0.2, 0.9
+                end,
+                function(r, g, b, a)
+                    if isMulti then
+                        for _, key in ipairs(GROUP_UNIT_ORDER) do
+                            if groupChecked[key] then UNIT_DB_MAP[key]().customFillColor = { r=r, g=g, b=b, a=a } end
+                        end
+                    else
+                        UNIT_DB_MAP[selectedUnit]().customFillColor = { r=r, g=g, b=b, a=a }
+                    end
+                    ReloadAndUpdate(); UpdateMultiPreview()
+                end, true, 20)
+            PP.Point(fillSwatch, "RIGHT", bgSwatch, "LEFT", -4, 0)
+            rgn._lastInline = fillSwatch
+
+            -- Shared disable logic: block both swatches when Class Colored is ON or Dark Mode is ON
+            local function MakeSwatchBlock(swatch, tooltipFn)
+                local blk = CreateFrame("Frame", nil, swatch)
+                blk:SetAllPoints()
+                blk:SetFrameLevel(swatch:GetFrameLevel() + 5)
+                blk:EnableMouse(true)
+                blk:SetScript("OnEnter", function() EllesmereUI.ShowWidgetTooltip(swatch, tooltipFn()) end)
+                blk:SetScript("OnLeave", function() EllesmereUI.HideWidgetTooltip() end)
+                return blk
+            end
+
+            local bgBlock = MakeSwatchBlock(bgSwatch, function()
+                if db.profile.darkTheme then return EllesmereUI.DisabledTooltip("Dark Mode") end
+                return EllesmereUI.DisabledTooltip("Class Colored")
+            end)
+            local fillBlock = MakeSwatchBlock(fillSwatch, function()
+                if db.profile.darkTheme then return EllesmereUI.DisabledTooltip("Dark Mode") end
+                return EllesmereUI.DisabledTooltip("Class Colored")
+            end)
+
+            local function UpdateHealthSwatchDis()
+                local isCC = SVal("healthClassColored", false)
+                local isDark = db.profile.darkTheme
+                local disabled = isCC or isDark
+                bgSwatch:SetAlpha(disabled and 0.3 or 1)
+                fillSwatch:SetAlpha(disabled and 0.3 or 1)
+                if disabled then bgBlock:Show(); fillBlock:Show()
+                else bgBlock:Hide(); fillBlock:Hide() end
+            end
+            bgSwatch:HookScript("OnShow", UpdateHealthSwatchDis)
+            EllesmereUI.RegisterWidgetRefresh(UpdateHealthSwatchDis)
+            UpdateHealthSwatchDis()
+        end
+        local sharedCenterTextRow = sharedHealthColorRow
         -- Cogwheel on Center Text
         do
-            local ctrRgn = sharedOpacityCenterRow._rightRegion
+            local ctrRgn = sharedHealthColorRow._rightRegion
             local _, centerCogShowRaw = EllesmereUI.BuildCogPopup({
                 title = "Center Text Settings",
                 rows = {
@@ -3634,6 +3737,8 @@ initFrame:SetScript("OnEvent", function(self)
         local ppPosOrder = { "below", "above", "---", "detached_bottom", "detached_top", "---", "none" }
         local ppTextValues = { ["none"]="None", ["left"]="Left", ["right"]="Right", ["center"]="Center" }
         local ppTextOrder = { "none", "---", "left", "right", "center" }
+        local ppFmtValues = { ["none"]="None", ["smart"]="Smart Text", ["curpp"]="Power Value", ["perpp"]="Power %", ["both"]="Value | %" }
+        local ppFmtOrder = { "none", "smart", "curpp", "perpp", "both" }
 
         -- Row 1: Height + Position
         local sharedPowerRow1
@@ -3657,13 +3762,13 @@ initFrame:SetScript("OnEvent", function(self)
                 rows = {
                     { type="slider", label="Width", min=0, max=400, step=1,
                       get=function() return SVal("powerWidth", 0) end,
-                      set=function(v) SSet("powerWidth", v); ReloadAndUpdate(); UpdateMultiPreview() end },
+                      set=function(v) SSet("powerWidth", v); UpdateMultiPreview() end },
                     { type="slider", label="X Offset", min=-200, max=200, step=1,
                       get=function() return SVal("powerX", 0) end,
-                      set=function(v) SSet("powerX", v); ReloadAndUpdate(); UpdateMultiPreview() end },
+                      set=function(v) SSet("powerX", v); UpdateMultiPreview() end },
                     { type="slider", label="Y Offset", min=-200, max=200, step=1,
                       get=function() return SVal("powerY", 0) end,
-                      set=function(v) SSet("powerY", v); ReloadAndUpdate(); UpdateMultiPreview() end },
+                      set=function(v) SSet("powerY", v); UpdateMultiPreview() end },
                 },
             })
             local ppPosCogShow = SWrapCog(ppPosCogShowRaw, { "powerWidth", "powerX", "powerY" })
@@ -3685,48 +3790,79 @@ initFrame:SetScript("OnEvent", function(self)
             RegisterWidgetRefresh(_ppPosCogUpdate)
         end
 
-        -- Row 2: Text + Bar Opacity
+        -- Row 2: Power Text (format) + Text Position
         local sharedPowerRow2
         sharedPowerRow2, h = W:DualRow(parent, y,
-            { type="dropdown", text="Text", values=ppTextValues, order=ppTextOrder,
-              getValue=function() return SVal("powerPercentText", "none") end,
-              setValue=function(v) SSet("powerPercentText", v); ReloadAndUpdate(); UpdateMultiPreview() end },
-            { type="slider", text="Bar Opacity", min=0, max=100, step=1,
-              getValue=function() return (SVal("powerBarOpacity", 1.0)) * 100 end,
+            { type="dropdown", text="Power Text", values=ppFmtValues, order=ppFmtOrder,
+              getValue=function() return SVal("powerTextFormat", "perpp") end,
               setValue=function(v)
-                  if isMulti then
-                      for _, key in ipairs(GROUP_UNIT_ORDER) do
-                          if groupChecked[key] then UNIT_DB_MAP[key]().powerBarOpacity = v / 100 end
-                      end
-                  else
-                      UNIT_DB_MAP[selectedUnit]().powerBarOpacity = v / 100
+                  SSet("powerTextFormat", v)
+                  -- Auto-set position to center if user picks a format while position is "none"
+                  if v ~= "none" and SVal("powerPercentText", "none") == "none" then
+                      SSet("powerPercentText", "center")
                   end
+                  -- If format is "none", clear position too
+                  if v == "none" then SSet("powerPercentText", "none") end
                   ReloadAndUpdate(); UpdateMultiPreview()
-              end });  y = y - h
-        SWrap(sharedPowerRow2._leftRegion, "powerPercentText")
-        SWrap(sharedPowerRow2._rightRegion, "powerBarOpacity")
-        -- Cogwheel on Power Bar Text
+                  EllesmereUI:RefreshPage()
+              end },
+            { type="dropdown", text="Text Position", values=ppTextValues, order=ppTextOrder,
+              getValue=function() return SVal("powerPercentText", "none") end,
+              setValue=function(v) SSet("powerPercentText", v); ReloadAndUpdate(); UpdateMultiPreview() end });  y = y - h
+        SWrap(sharedPowerRow2._leftRegion, "powerTextFormat")
+        SWrap(sharedPowerRow2._rightRegion, "powerPercentText")
+        -- Cogwheel on Power Text for Show % toggle
         do
-            local ppRgn = sharedPowerRow2._leftRegion
+            local fmtRgn = sharedPowerRow2._leftRegion
+            local _, fmtCogShowRaw = EllesmereUI.BuildCogPopup({
+                title = "Power Text",
+                rows = {
+                    { type="toggle", label="Show %",
+                      get=function() return SVal("powerShowPercent", true) ~= false end,
+                      set=function(v)
+                          SSet("powerShowPercent", v)
+                          UpdateMultiPreview()
+                      end },
+                },
+            })
+            local fmtCogShow = SWrapCog(fmtCogShowRaw, {"powerShowPercent"})
+            local fmtCogBtn = MakeCogBtn(fmtRgn, fmtCogShow)
+            local function UpdateFmtCogState()
+                local fmt = SVal("powerTextFormat", "perpp")
+                local isNone = (fmt == "none" or fmt == "curpp")
+                fmtCogBtn:SetAlpha(isNone and 0.15 or 0.4)
+                fmtCogBtn:SetEnabled(not isNone)
+            end
+            fmtCogBtn:SetScript("OnEnter", function(self)
+                local fmt = SVal("powerTextFormat", "perpp")
+                if fmt == "none" or fmt == "curpp" then
+                    EllesmereUI.ShowWidgetTooltip(self, EllesmereUI.DisabledTooltip("Show % is only available for formats that display a percentage."))
+                else self:SetAlpha(0.7) end
+            end)
+            fmtCogBtn:SetScript("OnLeave", function(self) UpdateFmtCogState(); EllesmereUI.HideWidgetTooltip() end)
+            fmtCogBtn:SetScript("OnClick", function(self) fmtCogShow(self) end)
+            UpdateFmtCogState()
+            RegisterWidgetRefresh(UpdateFmtCogState)
+        end
+        -- Cogwheel on Text Position for size + x/y offsets
+        do
+            local ppRgn = sharedPowerRow2._rightRegion
             local _, ppCogShowRaw = EllesmereUI.BuildCogPopup({
-                title = "Power Bar Text Settings",
+                title = "Text Position",
                 rows = {
                     { type="slider", label="Size", min=6, max=24, step=1,
                       get=function() return SVal("powerPercentSize", 9) end,
-                      set=function(v) SSet("powerPercentSize", v); ReloadAndUpdate(); UpdateMultiPreview() end },
+                      set=function(v) SSet("powerPercentSize", v); UpdateMultiPreview() end },
                     { type="slider", label="X Offset", min=-50, max=50, step=1,
                       get=function() return SVal("powerPercentX", 0) end,
-                      set=function(v) SSet("powerPercentX", v); ReloadAndUpdate(); UpdateMultiPreview() end },
+                      set=function(v) SSet("powerPercentX", v); UpdateMultiPreview() end },
                     { type="slider", label="Y Offset", min=-50, max=50, step=1,
                       get=function() return SVal("powerPercentY", 0) end,
-                      set=function(v) SSet("powerPercentY", v); ReloadAndUpdate(); UpdateMultiPreview() end },
-                    { type="toggle", label="Power Color",
-                      get=function() return SVal("powerPercentPowerColor", false) end,
-                      set=function(v) SSet("powerPercentPowerColor", v); ReloadAndUpdate(); UpdateMultiPreview() end },
+                      set=function(v) SSet("powerPercentY", v); UpdateMultiPreview() end },
                 },
             })
-            local ppCogShow = SWrapCog(ppCogShowRaw, {"powerPercentSize","powerPercentX","powerPercentY","powerPercentPowerColor"})
-            local ppCogBtn = MakeCogBtn(ppRgn, ppCogShow)
+            local ppCogShow = SWrapCog(ppCogShowRaw, {"powerPercentSize","powerPercentX","powerPercentY"})
+            local ppCogBtn = MakeCogBtn(ppRgn, ppCogShow, nil, EllesmereUI.RESIZE_ICON)
             local function UpdatePPCogState()
                 local isNone = SVal("powerPercentText", "none") == "none"
                 ppCogBtn:SetAlpha(isNone and 0.15 or 0.4)
@@ -3734,13 +3870,170 @@ initFrame:SetScript("OnEvent", function(self)
             end
             ppCogBtn:SetScript("OnEnter", function(self)
                 if SVal("powerPercentText", "none") == "none" then
-                    EllesmereUI.ShowWidgetTooltip(self, EllesmereUI.DisabledTooltip("This option requires a text selection other than none."))
+                    EllesmereUI.ShowWidgetTooltip(self, EllesmereUI.DisabledTooltip("This option requires a text position other than none."))
                 else self:SetAlpha(0.7) end
             end)
             ppCogBtn:SetScript("OnLeave", function(self) UpdatePPCogState(); EllesmereUI.HideWidgetTooltip() end)
             ppCogBtn:SetScript("OnClick", function(self) ppCogShow(self) end)
             UpdatePPCogState()
             RegisterWidgetRefresh(UpdatePPCogState)
+        end
+
+        -- Row 3: Power Colored Fill (toggle with inline bg+fill swatches) + Power Colored Text (toggle with inline text color swatch)
+        local sharedPowerRow3
+        sharedPowerRow3, h = W:DualRow(parent, y,
+            { type="toggle", text="Power Colored Fill",
+              getValue=function() return SVal("powerPercentPowerColor", true) end,
+              setValue=function(v)
+                  -- When turning ON power coloring, clear any custom fill color first
+                  if v then
+                      if isMulti then
+                          for _, key in ipairs(GROUP_UNIT_ORDER) do
+                              if groupChecked[key] then UNIT_DB_MAP[key]().customPowerFillColor = nil end
+                          end
+                      else
+                          UNIT_DB_MAP[selectedUnit]().customPowerFillColor = nil
+                      end
+                  end
+                  SSet("powerPercentPowerColor", v)
+                  UpdateMultiPreview()
+                  EllesmereUI:RefreshPage()
+              end },
+            { type="toggle", text="Power Colored Text",
+              getValue=function() return SVal("powerPercentTextPowerColor", false) end,
+              setValue=function(v)
+                  SSet("powerPercentTextPowerColor", v)
+                  -- When turning ON power text coloring, clear any custom text color
+                  if v then
+                      if isMulti then
+                          for _, key in ipairs(GROUP_UNIT_ORDER) do
+                              if groupChecked[key] then UNIT_DB_MAP[key]().powerTextColor = nil end
+                          end
+                      else
+                          UNIT_DB_MAP[selectedUnit]().powerTextColor = nil
+                      end
+                  end
+                  UpdateMultiPreview()
+                  EllesmereUI:RefreshPage()
+              end });  y = y - h
+        SWrap(sharedPowerRow3._leftRegion, "powerPercentPowerColor")
+        SWrap(sharedPowerRow3._rightRegion, "powerPercentTextPowerColor")
+        -- Inline bg + fill swatches on Power Colored disabled when toggle is ON
+        do
+            local rgn = sharedPowerRow3._leftRegion
+
+            -- Background swatch
+            local bgSwatch, _ = EllesmereUI.BuildColorSwatch(rgn, rgn:GetFrameLevel() + 2,
+                function()
+                    local c = SGet("customPowerBgColor")
+                    if c == MIXED then c = SDB().customPowerBgColor end
+                    if c then return c.r, c.g, c.b, c.a or 0.5 end
+                    return 0, 0, 0, 0.5
+                end,
+                function(r, g, b, a)
+                    if isMulti then
+                        for _, key in ipairs(GROUP_UNIT_ORDER) do
+                            if groupChecked[key] then UNIT_DB_MAP[key]().customPowerBgColor = { r=r, g=g, b=b, a=a } end
+                        end
+                    else
+                        UNIT_DB_MAP[selectedUnit]().customPowerBgColor = { r=r, g=g, b=b, a=a }
+                    end
+                    ReloadAndUpdate(); UpdateMultiPreview()
+                end, true, 20)
+            PP.Point(bgSwatch, "RIGHT", rgn._lastInline or rgn._control, "LEFT", -12, 0)
+            rgn._lastInline = bgSwatch
+
+            -- Fill swatch
+            local fillSwatch, _ = EllesmereUI.BuildColorSwatch(rgn, rgn:GetFrameLevel() + 2,
+                function()
+                    local c = SGet("customPowerFillColor")
+                    if c == MIXED then c = SDB().customPowerFillColor end
+                    if c then return c.r, c.g, c.b, c.a or 1.0 end
+                    local pType = UnitPowerType("player")
+                    local info = PowerBarColor[pType]
+                    if info then return info.r, info.g, info.b, 1.0 end
+                    return 0.2, 0.35, 0.85, 1.0
+                end,
+                function(r, g, b, a)
+                    if isMulti then
+                        for _, key in ipairs(GROUP_UNIT_ORDER) do
+                            if groupChecked[key] then UNIT_DB_MAP[key]().customPowerFillColor = { r=r, g=g, b=b, a=a } end
+                        end
+                    else
+                        UNIT_DB_MAP[selectedUnit]().customPowerFillColor = { r=r, g=g, b=b, a=a }
+                    end
+                    ReloadAndUpdate(); UpdateMultiPreview()
+                end, true, 20)
+            PP.Point(fillSwatch, "RIGHT", bgSwatch, "LEFT", -4, 0)
+            rgn._lastInline = fillSwatch
+
+            local function MakePowerSwatchBlock(swatch, tooltipFn)
+                local blk = CreateFrame("Frame", nil, swatch)
+                blk:SetAllPoints()
+                blk:SetFrameLevel(swatch:GetFrameLevel() + 5)
+                blk:EnableMouse(true)
+                blk:SetScript("OnEnter", function() EllesmereUI.ShowWidgetTooltip(swatch, tooltipFn()) end)
+                blk:SetScript("OnLeave", function() EllesmereUI.HideWidgetTooltip() end)
+                return blk
+            end
+            local bgBlock = MakePowerSwatchBlock(bgSwatch, function()
+                return EllesmereUI.DisabledTooltip("Power Colored Fill")
+            end)
+            local fillBlock = MakePowerSwatchBlock(fillSwatch, function()
+                return EllesmereUI.DisabledTooltip("Power Colored Fill")
+            end)
+
+            local function UpdatePowerBarSwatchDis()
+                local isPowerColored = SVal("powerPercentPowerColor", true)
+                local disabled = isPowerColored
+                bgSwatch:SetAlpha(disabled and 0.3 or 1)
+                fillSwatch:SetAlpha(disabled and 0.3 or 1)
+                if disabled then bgBlock:Show(); fillBlock:Show()
+                else bgBlock:Hide(); fillBlock:Hide() end
+            end
+            bgSwatch:HookScript("OnShow", UpdatePowerBarSwatchDis)
+            EllesmereUI.RegisterWidgetRefresh(UpdatePowerBarSwatchDis)
+            UpdatePowerBarSwatchDis()
+        end
+        -- Inline text color swatch on Power Colored Text -- disabled when toggle is ON
+        do
+            local rgn = sharedPowerRow3._rightRegion
+
+            local textSwatch, _ = EllesmereUI.BuildColorSwatch(rgn, rgn:GetFrameLevel() + 2,
+                function()
+                    local c = SGet("powerTextColor")
+                    if c == MIXED then c = SDB().powerTextColor end
+                    if c then return c.r, c.g, c.b end
+                    return 1, 1, 1
+                end,
+                function(r, g, b)
+                    if isMulti then
+                        for _, key in ipairs(GROUP_UNIT_ORDER) do
+                            if groupChecked[key] then UNIT_DB_MAP[key]().powerTextColor = { r=r, g=g, b=b } end
+                        end
+                    else
+                        UNIT_DB_MAP[selectedUnit]().powerTextColor = { r=r, g=g, b=b }
+                    end
+                    ReloadAndUpdate(); UpdateMultiPreview()
+                end, false, 20)
+            PP.Point(textSwatch, "RIGHT", rgn._lastInline or rgn._control, "LEFT", -12, 0)
+            rgn._lastInline = textSwatch
+
+            local textBlock = CreateFrame("Frame", nil, textSwatch)
+            textBlock:SetAllPoints()
+            textBlock:SetFrameLevel(textSwatch:GetFrameLevel() + 5)
+            textBlock:EnableMouse(true)
+            textBlock:SetScript("OnEnter", function() EllesmereUI.ShowWidgetTooltip(textSwatch, EllesmereUI.DisabledTooltip("Power Colored Text")) end)
+            textBlock:SetScript("OnLeave", function() EllesmereUI.HideWidgetTooltip() end)
+
+            local function UpdatePowerTextSwatchDis()
+                local isTextPowerColored = SVal("powerPercentTextPowerColor", false)
+                textSwatch:SetAlpha(isTextPowerColored and 0.3 or 1)
+                if isTextPowerColored then textBlock:Show() else textBlock:Hide() end
+            end
+            textSwatch:HookScript("OnShow", UpdatePowerTextSwatchDis)
+            EllesmereUI.RegisterWidgetRefresh(UpdatePowerTextSwatchDis)
+            UpdatePowerTextSwatchDis()
         end
 
         _, h = W:Spacer(parent, y, 20); y = y - h
@@ -3751,51 +4044,271 @@ initFrame:SetScript("OnEvent", function(self)
         local sharedCastHeader
         sharedCastHeader, h = W:SectionHeader(parent, "CAST BAR", y); y = y - h
 
-        -- Row 1: Show Target/Focus Cast Bar â€” hidden when single-editing player
-        local _showTargetCast = isMulti or selectedUnit ~= "player"
-        if _showTargetCast then
+        -- Helper: get/set castbar visibility per unit
+        local function GetCastbarEnabled(unitKey)
+            if unitKey == "player" then
+                return UNIT_DB_MAP.player().showPlayerCastbar or false
+            else
+                return UNIT_DB_MAP[unitKey]().showCastbar ~= false
+            end
+        end
+        local function SetCastbarEnabled(unitKey, val)
+            if unitKey == "player" then
+                UNIT_DB_MAP.player().showPlayerCastbar = val
+            else
+                UNIT_DB_MAP[unitKey]().showCastbar = val
+            end
+        end
+
+        -- Helper: build a checkbox dropdown summary label
+        local function CBSummaryLabel(getFn)
+            local names = {}
+            local unitLabels = { player = "Player", target = "Target", focus = "Focus" }
+            local unitOrder = { "player", "target", "focus" }
+            for _, u in ipairs(unitOrder) do
+                if getFn(u) then names[#names + 1] = unitLabels[u] end
+            end
+            if #names == 3 then return "All"
+            elseif #names == 0 then return "None"
+            else return table.concat(names, ", ") end
+        end
+
+        -- Helper: build an inline checkbox dropdown (button + flyout with checkboxes)
+        -- items = { { key, label }, ... }, getFn(key)->bool, setFn(key,bool), onChanged()
+        local function BuildCBDropdown(parentFrame, ddW, fLevel, items, getFn, setFn, onChanged)
+            local ddBtn = CreateFrame("Button", nil, parentFrame)
+            PP.Size(ddBtn, ddW, 30)
+            ddBtn:SetFrameLevel(fLevel)
+            local ddBg = ddBtn:CreateTexture(nil, "BACKGROUND")
+            ddBg:SetAllPoints()
+            ddBg:SetColorTexture(EllesmereUI.DD_BG_R, EllesmereUI.DD_BG_G, EllesmereUI.DD_BG_B, EllesmereUI.DD_BG_A)
+            local ddBrd = EllesmereUI.MakeBorder(ddBtn, 1, 1, 1, EllesmereUI.DD_BRD_A, PP)
+            local ddLbl = ddBtn:CreateFontString(nil, "OVERLAY")
+            local fontPath = EllesmereUI.GetFontPath and EllesmereUI.GetFontPath("options") or "Fonts\\FRIZQT__.TTF"
+            ddLbl:SetFont(fontPath, 13, "")
+            ddLbl:SetTextColor(1, 1, 1, 0.7)
+            ddLbl:SetJustifyH("LEFT")
+            ddLbl:SetWordWrap(false)
+            ddLbl:SetMaxLines(1)
+            ddLbl:SetPoint("LEFT", ddBtn, "LEFT", 12, 0)
+            ddLbl:SetPoint("RIGHT", ddBtn, "RIGHT", -24, 0)
+            local arrow = EllesmereUI.MakeDropdownArrow(ddBtn, 12, PP)
+
+            local menu
+            local function UpdateLabel()
+                ddLbl:SetText(CBSummaryLabel(getFn))
+            end
+            UpdateLabel()
+
+            local function EnsureMenu()
+                if menu then return end
+                local ITEM_H = 28
+                local menuH = 4 + #items * ITEM_H + 4
+                menu = CreateFrame("Frame", nil, UIParent)
+                menu:SetFrameStrata("FULLSCREEN_DIALOG")
+                menu:SetFrameLevel(200)
+                menu:SetClampedToScreen(true)
+                menu:EnableMouse(true)
+                menu:SetSize(ddW, menuH)
+                menu:SetPoint("TOPLEFT", ddBtn, "BOTTOMLEFT", 0, -2)
+                menu:Hide()
+                local mBg = menu:CreateTexture(nil, "BACKGROUND")
+                mBg:SetAllPoints()
+                mBg:SetColorTexture(EllesmereUI.DD_BG_R, EllesmereUI.DD_BG_G, EllesmereUI.DD_BG_B, EllesmereUI.DD_BG_HA or 0.92)
+                EllesmereUI.MakeBorder(menu, 1, 1, 1, EllesmereUI.DD_BRD_A, PP)
+                local ppScale = EllesmereUI.GetPopupScale and EllesmereUI.GetPopupScale() or 1
+                menu:SetScale(ppScale)
+
+                local yOff = -4
+                for _, item in ipairs(items) do
+                    local row = CreateFrame("Button", nil, menu)
+                    row:SetHeight(ITEM_H)
+                    row:SetPoint("TOPLEFT", menu, "TOPLEFT", 1, yOff)
+                    row:SetPoint("TOPRIGHT", menu, "TOPRIGHT", -1, yOff)
+                    row:SetFrameLevel(menu:GetFrameLevel() + 2)
+                    local box = CreateFrame("Frame", nil, row)
+                    box:SetSize(16, 16)
+                    box:SetPoint("LEFT", row, "LEFT", 10, 0)
+                    local boxBg = box:CreateTexture(nil, "BACKGROUND")
+                    boxBg:SetAllPoints()
+                    boxBg:SetColorTexture(0.12, 0.12, 0.14, 1)
+                    local boxBrd = EllesmereUI.MakeBorder(box, 0.4, 0.4, 0.4, 0.6, PP)
+                    local chk = box:CreateTexture(nil, "ARTWORK")
+                    PP.SetInside(chk, box, 2, 2)
+                    chk:SetColorTexture(EllesmereUI.ELLESMERE_GREEN.r, EllesmereUI.ELLESMERE_GREEN.g, EllesmereUI.ELLESMERE_GREEN.b, 1)
+                    local lbl = row:CreateFontString(nil, "OVERLAY")
+                    lbl:SetFont(fontPath, 13, "")
+                    lbl:SetTextColor(0.75, 0.75, 0.75, 1)
+                    lbl:SetPoint("LEFT", box, "RIGHT", 8, 0)
+                    lbl:SetText(item.label)
+                    local hl = row:CreateTexture(nil, "ARTWORK")
+                    hl:SetAllPoints()
+                    hl:SetColorTexture(1, 1, 1, 0)
+                    local function UpdateCheck()
+                        if getFn(item.key) then
+                            chk:Show()
+                            boxBrd:SetColor(EllesmereUI.ELLESMERE_GREEN.r, EllesmereUI.ELLESMERE_GREEN.g, EllesmereUI.ELLESMERE_GREEN.b, 0.8)
+                        else
+                            chk:Hide()
+                            boxBrd:SetColor(0.4, 0.4, 0.4, 0.6)
+                        end
+                    end
+                    UpdateCheck()
+                    row._updateCheck = UpdateCheck
+                    row:SetScript("OnEnter", function() lbl:SetTextColor(1, 1, 1, 1); hl:SetColorTexture(1, 1, 1, 0.04) end)
+                    row:SetScript("OnLeave", function() lbl:SetTextColor(0.75, 0.75, 0.75, 1); hl:SetColorTexture(1, 1, 1, 0) end)
+                    row:SetScript("OnClick", function()
+                        setFn(item.key, not getFn(item.key))
+                        UpdateCheck(); UpdateLabel()
+                        if onChanged then onChanged() end
+                    end)
+                    yOff = yOff - ITEM_H
+                end
+                ddBtn._ddMenu = menu
+            end
+
+            ddBtn:SetScript("OnEnter", function()
+                ddLbl:SetTextColor(1, 1, 1, 1)
+                ddBrd:SetColor(1, 1, 1, EllesmereUI.DD_BRD_HA or 0.25)
+                ddBg:SetColorTexture(EllesmereUI.DD_BG_R, EllesmereUI.DD_BG_G, EllesmereUI.DD_BG_B, EllesmereUI.DD_BG_HA or 0.92)
+            end)
+            ddBtn:SetScript("OnLeave", function()
+                if not (menu and menu:IsShown()) then
+                    ddLbl:SetTextColor(1, 1, 1, 0.7)
+                    ddBrd:SetColor(1, 1, 1, EllesmereUI.DD_BRD_A)
+                    ddBg:SetColorTexture(EllesmereUI.DD_BG_R, EllesmereUI.DD_BG_G, EllesmereUI.DD_BG_B, EllesmereUI.DD_BG_A)
+                end
+            end)
+            ddBtn:SetScript("OnClick", function()
+                EnsureMenu()
+                if menu:IsShown() then menu:Hide() else menu:Show() end
+            end)
+            ddBtn:HookScript("OnHide", function() if menu then menu:Hide() end end)
+
+            local function RefreshAll()
+                UpdateLabel()
+                if menu then
+                    for _, child in pairs({menu:GetChildren()}) do
+                        if child._updateCheck then child._updateCheck() end
+                    end
+                end
+            end
+            return ddBtn, RefreshAll
+        end
+
+        -- Height getter/setter: player -> playerCastbarHeight, target/focus -> castbarHeight
+        local function GetCastbarHeight()
+            local u = isMulti and groupEyeball or selectedUnit
+            if u == "player" then
+                local v = UNIT_DB_MAP.player().playerCastbarHeight or 0
+                return (v <= 0) and 14 or v
+            else
+                return UNIT_DB_MAP[u]().castbarHeight or 14
+            end
+        end
+        local function SetCastbarHeight(v)
+            if isMulti then
+                for _, key in ipairs(GROUP_UNIT_ORDER) do
+                    if groupChecked[key] then
+                        if key == "player" then UNIT_DB_MAP.player().playerCastbarHeight = v
+                        else UNIT_DB_MAP[key]().castbarHeight = v end
+                    end
+                end
+            else
+                if selectedUnit == "player" then UNIT_DB_MAP.player().playerCastbarHeight = v
+                else UNIT_DB_MAP[selectedUnit]().castbarHeight = v end
+            end
+        end
+
+        -- Row 1: Show Cast Bars (checkbox dropdown) | Height (slider)
         local sharedCastRow1
         sharedCastRow1, h = W:DualRow(parent, y,
-            { type="toggle", text="Show Target/Focus Cast Bar",
-              getValue=function()
-                  local v = SGetSupported("showCastbar")
-                  if v == MIXED then return SDB().showCastbar ~= false end
-                  return v ~= false
-              end,
-              setValue=function(v) SSetSupported("showCastbar", v); EllesmereUI:RefreshPage() end },
-            { type="slider", text="Height", min=6, max=40, step=1,
-              getValue=function() return SValSupported("castbarHeight", 14) end,
-              setValue=function(v) SSetSupported("castbarHeight", v) end });  y = y - h
-        SApplySupport(sharedCastRow1._leftRegion, "showCastbar")
-        SApplySupport(sharedCastRow1._rightRegion, "castbarHeight")
+            { type="dropdown", text="Show Cast Bars",
+              values={ __placeholder = "..." }, order={ "__placeholder" },
+              getValue=function() return "__placeholder" end,
+              setValue=function() end },
+            { type="slider", text="Height", min=1, max=40, step=1,
+              getValue=GetCastbarHeight,
+              setValue=function(v) SetCastbarHeight(v); ReloadAndUpdate(); UpdateMultiPreview() end });  y = y - h
 
-        -- Cogwheel on Show Target Cast Bar for Show Icon + Class Colored
+        -- Replace the dummy dropdown with our checkbox dropdown
         do
             local leftRgn = sharedCastRow1._leftRegion
-            local _, targetCastCogRaw = EllesmereUI.BuildCogPopup({
-                title = "Target/Focus Cast Bar",
+            if leftRgn._control then leftRgn._control:Hide() end
+
+            local castbarItems = {
+                { key = "player", label = "Player" },
+                { key = "target", label = "Target" },
+                { key = "focus",  label = "Focus" },
+            }
+            local cbDD, cbDDRefresh = BuildCBDropdown(leftRgn, 170, leftRgn:GetFrameLevel() + 2,
+                castbarItems, GetCastbarEnabled, function(k, v)
+                    SetCastbarEnabled(k, v)
+                    ReloadAndUpdate(); UpdateMultiPreview()
+                    EllesmereUI:RefreshPage()
+                end)
+            PP.Point(cbDD, "RIGHT", leftRgn, "RIGHT", -20, 0)
+            leftRgn._control = cbDD
+            leftRgn._lastInline = nil
+            EllesmereUI.RegisterWidgetRefresh(cbDDRefresh)
+
+            -- Hide While Not Casting helpers
+            local function GetHideInactive(unitKey)
+                local v = UNIT_DB_MAP[unitKey]().castbarHideWhenInactive
+                if v == nil then return (unitKey ~= "target") end
+                return v
+            end
+            local function SetHideInactive(unitKey, val)
+                UNIT_DB_MAP[unitKey]().castbarHideWhenInactive = val
+            end
+
+            -- Cog popup: Hide Idle toggles + Show Icon + Class Colored Player
+            local _, castCogShowRaw = EllesmereUI.BuildCogPopup({
+                title = "Cast Bar Settings",
                 rows = {
+                    { type="toggle", label="Hide Idle Player Cast Bar",
+                      get=function() return GetHideInactive("player") end,
+                      set=function(v) SetHideInactive("player", v); ReloadAndUpdate(); UpdateMultiPreview() end },
+                    { type="toggle", label="Hide Idle Target Cast Bar",
+                      get=function() return GetHideInactive("target") end,
+                      set=function(v) SetHideInactive("target", v); ReloadAndUpdate(); UpdateMultiPreview() end },
+                    { type="toggle", label="Hide Idle Focus Cast Bar",
+                      get=function() return GetHideInactive("focus") end,
+                      set=function(v) SetHideInactive("focus", v); ReloadAndUpdate(); UpdateMultiPreview() end },
                     { type="toggle", label="Show Icon",
                       get=function()
-                          local v = SGetSupported("showCastIcon")
-                          if v == MIXED then return SDB().showCastIcon ~= false end
-                          return v ~= false
+                          local u = isMulti and groupEyeball or selectedUnit
+                          if u == "player" then return UNIT_DB_MAP.player().showPlayerCastIcon ~= false
+                          else return UNIT_DB_MAP[u]().showCastIcon ~= false end
                       end,
-                      set=function(v) SSetSupported("showCastIcon", v) end },
-                    { type="toggle", label="Class Colored",
-                      get=function()
-                          local v = SGetSupported("castbarClassColored")
-                          if v == MIXED then return SDB().castbarClassColored or false end
-                          return v or false
-                      end,
-                      set=function(v) SSetSupported("castbarClassColored", v) end },
+                      set=function(v)
+                          if isMulti then
+                              for _, key in ipairs(GROUP_UNIT_ORDER) do
+                                  if groupChecked[key] then
+                                      if key == "player" then UNIT_DB_MAP.player().showPlayerCastIcon = v
+                                      else UNIT_DB_MAP[key]().showCastIcon = v end
+                                  end
+                              end
+                          else
+                              if selectedUnit == "player" then UNIT_DB_MAP.player().showPlayerCastIcon = v
+                              else UNIT_DB_MAP[selectedUnit]().showCastIcon = v end
+                          end
+                          ReloadAndUpdate(); UpdateMultiPreview()
+                      end },
+                    { type="toggle", label="Class Colored Player",
+                      get=function() return UNIT_DB_MAP.player().castbarClassColored or false end,
+                      set=function(v)
+                          UNIT_DB_MAP.player().castbarClassColored = v
+                          ReloadAndUpdate(); UpdateMultiPreview()
+                      end },
                 },
             })
-            local targetCastCog = SWrapCog(targetCastCogRaw, { "showCastIcon", "castbarClassColored" })
-            MakeCogBtn(leftRgn, targetCastCog)
+            local castCogShow = SWrapCog(castCogShowRaw, { "showCastIcon", "castbarClassColored", "castbarHideWhenInactive" })
+
+            MakeCogBtn(leftRgn, castCogShow)
 
             -- Inline fill color swatch
-            local tcSw = EllesmereUI.BuildColorSwatch(leftRgn, leftRgn:GetFrameLevel() + 5,
+            local cbSw = EllesmereUI.BuildColorSwatch(leftRgn, leftRgn:GetFrameLevel() + 5,
                 function()
                     local c = SGetSupported("castbarFillColor")
                     if c == MIXED then c = SDB().castbarFillColor end
@@ -3814,136 +4327,33 @@ initFrame:SetScript("OnEvent", function(self)
                     end
                     ReloadAndUpdate(); UpdateMultiPreview()
                 end, false, 20)
-            tcSw:SetPoint("RIGHT", leftRgn._lastInline or leftRgn._control, "LEFT", -12, 0)
-            tcSw:SetScript("OnEnter", function(self) EllesmereUI.ShowWidgetTooltip(self, "Fill Color") end)
-            tcSw:SetScript("OnLeave", function() EllesmereUI.HideWidgetTooltip() end)
-            leftRgn._lastInline = tcSw
+            cbSw:SetPoint("RIGHT", leftRgn._lastInline or leftRgn._control, "LEFT", -12, 0)
+            cbSw:SetScript("OnEnter", function(self) EllesmereUI.ShowWidgetTooltip(self, "Fill Color") end)
+            cbSw:SetScript("OnLeave", function() EllesmereUI.HideWidgetTooltip() end)
+            leftRgn._lastInline = cbSw
 
-            -- Blocking overlay: disabled when Show Target Cast Bar is off
-            local tcSwBlock = CreateFrame("Frame", nil, tcSw)
-            tcSwBlock:SetAllPoints()
-            tcSwBlock:SetFrameLevel(tcSw:GetFrameLevel() + 10)
-            tcSwBlock:EnableMouse(true)
-            tcSwBlock:SetScript("OnEnter", function()
-                EllesmereUI.ShowWidgetTooltip(tcSw, EllesmereUI.DisabledTooltip("Show Target/Focus Cast Bar"))
+            -- Blocking overlay: disabled when no cast bars are enabled
+            local cbSwBlock = CreateFrame("Frame", nil, cbSw)
+            cbSwBlock:SetAllPoints()
+            cbSwBlock:SetFrameLevel(cbSw:GetFrameLevel() + 10)
+            cbSwBlock:EnableMouse(true)
+            cbSwBlock:SetScript("OnEnter", function()
+                EllesmereUI.ShowWidgetTooltip(cbSw, EllesmereUI.DisabledTooltip("Show Cast Bars"))
             end)
-            tcSwBlock:SetScript("OnLeave", function() EllesmereUI.HideWidgetTooltip() end)
-            local function UpdateTCSwDisabled()
-                local v = SGetSupported("showCastbar")
-                local enabled = (v == MIXED) and (SDB().showCastbar ~= false) or (v ~= false)
-                if enabled then
-                    tcSw:SetAlpha(1)
-                    tcSwBlock:Hide()
-                else
-                    tcSw:SetAlpha(0.3)
-                    tcSwBlock:Show()
+            cbSwBlock:SetScript("OnLeave", function() EllesmereUI.HideWidgetTooltip() end)
+            local function UpdateCBSwDisabled()
+                local anyOn = false
+                for _, u in ipairs({"player", "target", "focus"}) do
+                    if GetCastbarEnabled(u) then anyOn = true; break end
                 end
+                if anyOn then cbSw:SetAlpha(1); cbSwBlock:Hide()
+                else cbSw:SetAlpha(0.3); cbSwBlock:Show() end
             end
-            UpdateTCSwDisabled()
-            EllesmereUI.RegisterWidgetRefresh(UpdateTCSwDisabled)
+            UpdateCBSwDisabled()
+            EllesmereUI.RegisterWidgetRefresh(UpdateCBSwDisabled)
         end
-        end -- _showTargetCast
 
-        -- Row 2: Show Player Cast Bar â€” hidden when single-editing target/focus
-        local _showPlayerCast = isMulti or selectedUnit == "player"
-        if _showPlayerCast then
-        local sharedCastRow2
-        sharedCastRow2, h = W:DualRow(parent, y,
-            { type="toggle", text="Show Player Cast Bar",
-              getValue=function()
-                  local v = SGetSupported("showPlayerCastbar")
-                  if v == MIXED then return SDB().showPlayerCastbar or false end
-                  return v or false
-              end,
-              setValue=function(v) SSetSupported("showPlayerCastbar", v); EllesmereUI:RefreshPage() end },
-            { type="slider", text="Height", min=1, max=40, step=1,
-              getValue=function()
-                  local v = SGetSupported("playerCastbarHeight")
-                  if v == MIXED then return SDB().playerCastbarHeight or 0 end
-                  local val = v or 0
-                  if val <= 0 then val = 14 end
-                  return val
-              end,
-              setValue=function(v) SSetSupported("playerCastbarHeight", v) end });  y = y - h
-        SApplySupport(sharedCastRow2._leftRegion, "showPlayerCastbar")
-        SApplySupport(sharedCastRow2._rightRegion, "playerCastbarHeight")
-
-        -- Cogwheel on Show Player Cast Bar for Show Icon + Class Colored
-        do
-            local leftRgn = sharedCastRow2._leftRegion
-            local _, playerCastCogRaw = EllesmereUI.BuildCogPopup({
-                title = "Player Cast Bar",
-                rows = {
-                    { type="toggle", label="Show Icon",
-                      get=function()
-                          local v = SGetSupported("showPlayerCastIcon")
-                          if v == MIXED then return SDB().showPlayerCastIcon ~= false end
-                          return v ~= false
-                      end,
-                      set=function(v) SSetSupported("showPlayerCastIcon", v) end },
-                    { type="toggle", label="Class Colored",
-                      get=function()
-                          local v = SGetSupported("castbarClassColored")
-                          if v == MIXED then return SDB().castbarClassColored or false end
-                          return v or false
-                      end,
-                      set=function(v) SSetSupported("castbarClassColored", v) end },
-                },
-            })
-            local playerCastCog = SWrapCog(playerCastCogRaw, { "showPlayerCastIcon", "castbarClassColored" })
-            MakeCogBtn(leftRgn, playerCastCog)
-
-            -- Inline fill color swatch
-            local pcSw = EllesmereUI.BuildColorSwatch(leftRgn, leftRgn:GetFrameLevel() + 5,
-                function()
-                    local c = SGetSupported("castbarFillColor")
-                    if c == MIXED then c = SDB().castbarFillColor end
-                    c = c or { r=1, g=0.7, b=0 }
-                    return c.r, c.g, c.b, 1
-                end,
-                function(r, g, b)
-                    if isMulti then
-                        for _, key in ipairs(GROUP_UNIT_ORDER) do
-                            if groupChecked[key] and (UNIT_SUPPORTS.castbarFillColor or {})[key] then
-                                UNIT_DB_MAP[key]().castbarFillColor = { r=r, g=g, b=b }
-                            end
-                        end
-                    else
-                        UNIT_DB_MAP[selectedUnit]().castbarFillColor = { r=r, g=g, b=b }
-                    end
-                    ReloadAndUpdate(); UpdateMultiPreview()
-                end, false, 20)
-            pcSw:SetPoint("RIGHT", leftRgn._lastInline or leftRgn._control, "LEFT", -12, 0)
-            pcSw:SetScript("OnEnter", function(self) EllesmereUI.ShowWidgetTooltip(self, "Fill Color") end)
-            pcSw:SetScript("OnLeave", function() EllesmereUI.HideWidgetTooltip() end)
-            leftRgn._lastInline = pcSw
-
-            -- Blocking overlay: disabled when Show Player Cast Bar is off
-            local pcSwBlock = CreateFrame("Frame", nil, pcSw)
-            pcSwBlock:SetAllPoints()
-            pcSwBlock:SetFrameLevel(pcSw:GetFrameLevel() + 10)
-            pcSwBlock:EnableMouse(true)
-            pcSwBlock:SetScript("OnEnter", function()
-                EllesmereUI.ShowWidgetTooltip(pcSw, EllesmereUI.DisabledTooltip("Show Player Cast Bar"))
-            end)
-            pcSwBlock:SetScript("OnLeave", function() EllesmereUI.HideWidgetTooltip() end)
-            local function UpdatePCSwDisabled()
-                local v = SGetSupported("showPlayerCastbar")
-                local enabled = (v == MIXED) and (SDB().showPlayerCastbar or false) or (v or false)
-                if enabled then
-                    pcSw:SetAlpha(1)
-                    pcSwBlock:Hide()
-                else
-                    pcSw:SetAlpha(0.3)
-                    pcSwBlock:Show()
-                end
-            end
-            UpdatePCSwDisabled()
-            EllesmereUI.RegisterWidgetRefresh(UpdatePCSwDisabled)
-        end
-        end -- _showPlayerCast
-
-        -- Row 3: Spell Name Size (with inline color swatch) | Duration Size (with inline color swatch)
+        -- Row 2: Spell Name Size (with inline color swatch) | Duration Size (with inline color swatch)
         local castTextRow
         castTextRow, h = W:DualRow(parent, y,
             { type="slider", text="Spell Name Size", min=6, max=20, step=1,
@@ -5140,34 +5550,11 @@ initFrame:SetScript("OnEvent", function(self)
             btn:SetFrameLevel(frameLevelOverride or (anchor:GetFrameLevel() + 20))
             btn:RegisterForClicks("LeftButtonDown")
             local c = EllesmereUI.ELLESMERE_GREEN
-            local behindText = opts and opts.hlBehindText
-            local hlParent, hlAnchorFrame
-            if behindText then
-                local hlFrame = CreateFrame("Frame", nil, element)
-                hlFrame:SetAllPoints()
-                hlFrame:SetFrameLevel(element:GetFrameLevel() + 1)
-                hlParent = hlFrame
-                hlAnchorFrame = element
-            else
-                hlParent = btn
-                hlAnchorFrame = (opts and opts.hlAnchor) or btn
-            end
-            local function MkHL()
-                local t = hlParent:CreateTexture(nil, "OVERLAY", nil, 7)
-                t:SetColorTexture(c.r, c.g, c.b, 1)
-                if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
-                return t
-            end
-            local ht = MkHL(); PP.Height(ht, 2); ht:SetPoint("TOPLEFT", hlAnchorFrame, "TOPLEFT"); ht:SetPoint("TOPRIGHT", hlAnchorFrame, "TOPRIGHT")
-            local hb = MkHL(); PP.Height(hb, 2); hb:SetPoint("BOTTOMLEFT", hlAnchorFrame, "BOTTOMLEFT"); hb:SetPoint("BOTTOMRIGHT", hlAnchorFrame, "BOTTOMRIGHT")
-            local hl = MkHL(); PP.Width(hl, 2); hl:SetPoint("TOPLEFT", ht, "BOTTOMLEFT"); hl:SetPoint("BOTTOMLEFT", hb, "TOPLEFT")
-            local hr = MkHL(); PP.Width(hr, 2); hr:SetPoint("TOPRIGHT", ht, "BOTTOMRIGHT"); hr:SetPoint("BOTTOMRIGHT", hb, "TOPRIGHT")
-            btn._hlTextures = { ht, hb, hl, hr }
-            local function ShowHL() for _, t in ipairs(btn._hlTextures) do t:Show() end end
-            local function HideHL() for _, t in ipairs(btn._hlTextures) do t:Hide() end end
-            HideHL()
-            btn:SetScript("OnEnter", function() ShowHL() end)
-            btn:SetScript("OnLeave", function() HideHL() end)
+            local hlTarget = (opts and opts.hlBehindText) and element or (opts and opts.hlAnchor) or btn
+            local brd = EllesmereUI.PP.CreateBorder(hlTarget, c.r, c.g, c.b, 1, 2, "OVERLAY", 7)
+            brd:Hide()
+            btn:SetScript("OnEnter", function() brd:Show() end)
+            btn:SetScript("OnLeave", function() brd:Hide() end)
             btn:SetScript("OnMouseDown", function() MultiNavigateToSetting(mappingKey) end)
             return btn
         end
@@ -5437,34 +5824,11 @@ initFrame:SetScript("OnEvent", function(self)
             btn:SetFrameLevel(frameLevelOverride or (anchor:GetFrameLevel() + 20))
             btn:RegisterForClicks("LeftButtonDown")
             local c = EllesmereUI.ELLESMERE_GREEN
-            local behindText = opts and opts.hlBehindText
-            local hlParent, hlAnchorFrame
-            if behindText then
-                local hlFrame = CreateFrame("Frame", nil, element)
-                hlFrame:SetAllPoints()
-                hlFrame:SetFrameLevel(element:GetFrameLevel() + 1)
-                hlParent = hlFrame
-                hlAnchorFrame = element
-            else
-                hlParent = btn
-                hlAnchorFrame = (opts and opts.hlAnchor) or btn
-            end
-            local function MkHL()
-                local t = hlParent:CreateTexture(nil, "OVERLAY", nil, 7)
-                t:SetColorTexture(c.r, c.g, c.b, 1)
-                if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
-                return t
-            end
-            local ht = MkHL(); PP.Height(ht, 2); ht:SetPoint("TOPLEFT", hlAnchorFrame, "TOPLEFT"); ht:SetPoint("TOPRIGHT", hlAnchorFrame, "TOPRIGHT")
-            local hb = MkHL(); PP.Height(hb, 2); hb:SetPoint("BOTTOMLEFT", hlAnchorFrame, "BOTTOMLEFT"); hb:SetPoint("BOTTOMRIGHT", hlAnchorFrame, "BOTTOMRIGHT")
-            local hl = MkHL(); PP.Width(hl, 2); hl:SetPoint("TOPLEFT", ht, "BOTTOMLEFT"); hl:SetPoint("BOTTOMLEFT", hb, "TOPLEFT")
-            local hr = MkHL(); PP.Width(hr, 2); hr:SetPoint("TOPRIGHT", ht, "BOTTOMRIGHT"); hr:SetPoint("BOTTOMRIGHT", hb, "TOPRIGHT")
-            btn._hlTextures = { ht, hb, hl, hr }
-            local function ShowHL() for _, t in ipairs(btn._hlTextures) do t:Show() end end
-            local function HideHL() for _, t in ipairs(btn._hlTextures) do t:Hide() end end
-            HideHL()
-            btn:SetScript("OnEnter", function() ShowHL() end)
-            btn:SetScript("OnLeave", function() HideHL() end)
+            local hlTarget = (opts and opts.hlBehindText) and element or (opts and opts.hlAnchor) or btn
+            local brd = EllesmereUI.PP.CreateBorder(hlTarget, c.r, c.g, c.b, 1, 2, "OVERLAY", 7)
+            brd:Hide()
+            btn:SetScript("OnEnter", function() brd:Show() end)
+            btn:SetScript("OnLeave", function() brd:Hide() end)
             btn:SetScript("OnMouseDown", function() NavigateToSetting(mappingKey) end)
             return btn
         end
@@ -5517,7 +5881,7 @@ initFrame:SetScript("OnEvent", function(self)
 
     ---------------------------------------------------------------------------
     --  Mini frame donor settings helper
-    --  Returns the settings table from focus (if enabled) â†’ target â†’ player
+    --  Returns the settings table from focus (if enabled) target player
     ---------------------------------------------------------------------------
     local function GetMiniDonorSettings()
         local ef = db.profile.enabledFrames
@@ -5898,24 +6262,17 @@ initFrame:SetScript("OnEvent", function(self)
             btn:SetFrameLevel(frameLevelOverride or (anchor:GetFrameLevel() + 20))
             btn:RegisterForClicks("LeftButtonDown")
             local c = EllesmereUI.ELLESMERE_GREEN
-            local hlParent = btn
-            local hlAnchorFrame = (opts and opts.hlAnchor) or btn
-            local function MkHL()
-                local t = hlParent:CreateTexture(nil, "OVERLAY", nil, 7)
-                t:SetColorTexture(c.r, c.g, c.b, 1)
-                if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
-                return t
-            end
-            local ht = MkHL(); PP.Height(ht, 2); ht:SetPoint("TOPLEFT", hlAnchorFrame, "TOPLEFT"); ht:SetPoint("TOPRIGHT", hlAnchorFrame, "TOPRIGHT")
-            local hb = MkHL(); PP.Height(hb, 2); hb:SetPoint("BOTTOMLEFT", hlAnchorFrame, "BOTTOMLEFT"); hb:SetPoint("BOTTOMRIGHT", hlAnchorFrame, "BOTTOMRIGHT")
-            local hl = MkHL(); PP.Width(hl, 2); hl:SetPoint("TOPLEFT", ht, "BOTTOMLEFT"); hl:SetPoint("BOTTOMLEFT", hb, "TOPLEFT")
-            local hr = MkHL(); PP.Width(hr, 2); hr:SetPoint("TOPRIGHT", ht, "BOTTOMRIGHT"); hr:SetPoint("BOTTOMRIGHT", hb, "TOPRIGHT")
-            btn._hlTextures = { ht, hb, hl, hr }
-            local function ShowHL() for _, t in ipairs(btn._hlTextures) do t:Show() end end
-            local function HideHL() for _, t in ipairs(btn._hlTextures) do t:Hide() end end
-            HideHL()
-            btn:SetScript("OnEnter", function() ShowHL() end)
-            btn:SetScript("OnLeave", function() HideHL() end)
+            local PP = EllesmereUI.PP
+            -- Use a child container so the hover border doesn't conflict with
+            -- any existing PP border on the target frame.
+            local hlBase = (opts and opts.hlAnchor) or btn
+            local hlCont = CreateFrame("Frame", nil, hlBase)
+            hlCont:SetAllPoints()
+            hlCont:SetFrameLevel(hlBase:GetFrameLevel() + 1)
+            local brd = PP.CreateBorder(hlCont, c.r, c.g, c.b, 1, 2, "OVERLAY", 7)
+            brd:Hide()
+            btn:SetScript("OnEnter", function() brd:Show() end)
+            btn:SetScript("OnLeave", function() brd:Hide() end)
             btn:SetScript("OnMouseDown", function() NavigateToSetting(mappingKey) end)
             return btn
         end
@@ -5939,7 +6296,7 @@ initFrame:SetScript("OnEvent", function(self)
     end
 
     ---------------------------------------------------------------------------
-    --  Unlock Mode page  (stub â€” SelectPage intercepts this before buildPage)
+    --  Unlock Mode page  (stub SelectPage intercepts this before buildPage)
     ---------------------------------------------------------------------------
     local function BuildUnlockPage(pageName, parent, yOffset)
         -- SelectPage() intercepts "Unlock Mode" and fires _openUnlockMode directly.

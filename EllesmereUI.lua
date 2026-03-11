@@ -374,7 +374,7 @@ local function DisablePixelSnap(obj)
 end
 
 -- Create a dropdown arrow texture for dropdown buttons.
--- Uses a 30Ã--30 square canvas image with the arrow centered, anchored via
+-- Uses a 30--30 square canvas image with the arrow centered, anchored via
 -- two-point attachment so it inherits the parent's pixel-aligned bounds.
 local function MakeDropdownArrow(parent, xPad, ppOverride)
     local pp = ppOverride or PP
@@ -389,70 +389,30 @@ local function MakeDropdownArrow(parent, xPad, ppOverride)
 end
 
 local function MakeBorder(parent, r, g, b, a, ppOverride)
-    -- 4 individual 1px textures -- same technique as the UnitFrames preview border.
-    -- Uses SetAllPoints instead of PP.Point for the container frame so
-    -- the border inherits the parent's exact geometry without an extra snapping layer.
-    -- Edge textures are positioned with PixelUtil and have pixel snapping disabled
-    -- AFTER SetColorTexture (WoW re-enables snapping on color/texture changes).
+    -- Wrapper around PP.CreateBorder that returns the legacy MakeBorder API.
     -- ppOverride: pass PanelPP for panel context, defaults to real PP for game context.
     local pp = ppOverride or PP
     local alpha = a or 1
+    r = r or 0; g = g or 0; b = b or 0
     local bf = CreateFrame("Frame", nil, parent)
     bf:SetAllPoints(parent)
     bf:SetFrameLevel(parent:GetFrameLevel() + 1)
+    bf:EnableMouse(false)
 
-    local function MkEdge()
-        local t = bf:CreateTexture(nil, "BORDER", nil, 7)
-        t:SetColorTexture(r, g, b, alpha)
-        -- Disable AFTER SetColorTexture -- WoW re-enables snapping on color changes
-        pp.DisablePixelSnap(t)
-        return t
-    end
-    local eT = MkEdge()
-    pp.Height(eT, 1)
-    pp.Point(eT, "TOPLEFT",  bf, "TOPLEFT",  0, 0)
-    pp.Point(eT, "TOPRIGHT", bf, "TOPRIGHT", 0, 0)
-    local eB = MkEdge()
-    pp.Height(eB, 1)
-    pp.Point(eB, "BOTTOMLEFT",  bf, "BOTTOMLEFT",  0, 0)
-    pp.Point(eB, "BOTTOMRIGHT", bf, "BOTTOMRIGHT", 0, 0)
-    -- Vertical edges inset by 1px top/bottom to avoid overlapping corner pixels
-    -- (prevents brighter corners when border alpha < 1)
-    local eL = MkEdge()
-    pp.Width(eL, 1)
-    pp.Point(eL, "TOPLEFT",    eT, "BOTTOMLEFT",  0, 0)
-    pp.Point(eL, "BOTTOMLEFT", eB, "TOPLEFT",     0, 0)
-    local eR = MkEdge()
-    pp.Width(eR, 1)
-    pp.Point(eR, "TOPRIGHT",    eT, "BOTTOMRIGHT",  0, 0)
-    pp.Point(eR, "BOTTOMRIGHT", eB, "TOPRIGHT",     0, 0)
+    -- Use the unified border system (returns a single BackdropTemplate frame)
+    local brd = PP.CreateBorder(bf, r, g, b, alpha, 1, "BORDER", 7)
 
-    -- Re-snap edges when panel scale changes (re-disable snapping + refresh PixelUtil sizes)
+    -- Re-snap edges when panel scale changes
     if not EllesmereUI._onScaleChanged then EllesmereUI._onScaleChanged = {} end
     EllesmereUI._onScaleChanged[#EllesmereUI._onScaleChanged + 1] = function()
-        for _, t in ipairs({ eT, eB, eL, eR }) do
-            pp.DisablePixelSnap(t)
-        end
-        pp.Height(eT, 1)
-        pp.Height(eB, 1)
-        pp.Width(eL, 1)
-        pp.Width(eR, 1)
+        PP.SetBorderSize(bf, 1)
     end
 
     return {
         _frame = bf,
-        edges = { eT, eB, eL, eR },
+        edges = brd,
         SetColor = function(self, cr, cg, cb, ca)
-            r, g, b, alpha = cr, cg, cb, ca or 1
-            eT:SetColorTexture(r, g, b, alpha)
-            eB:SetColorTexture(r, g, b, alpha)
-            eL:SetColorTexture(r, g, b, alpha)
-            eR:SetColorTexture(r, g, b, alpha)
-            -- Re-disable snapping after color change
-            pp.DisablePixelSnap(eT)
-            pp.DisablePixelSnap(eB)
-            pp.DisablePixelSnap(eL)
-            pp.DisablePixelSnap(eR)
+            PP.SetBorderColor(bf, cr, cg, cb, ca or 1)
         end,
     }
 end
@@ -490,7 +450,7 @@ local function RowBg(frame, parent)
         local div = frame:CreateTexture(nil, "ARTWORK")
         div:SetColorTexture(1, 1, 1, 0.06)
         if div.SetSnapToPixelGrid then div:SetSnapToPixelGrid(false); div:SetTexelSnappingBias(0) end
-        ppp.Width(div, 1)
+        div:SetWidth(1)
         ppp.Point(div, "TOP",    frame, "TOP",    0, 0)
         ppp.Point(div, "BOTTOM", frame, "BOTTOM", 0, 0)
     end
@@ -503,7 +463,7 @@ end
 local function lerp(a, b, t) return a + (b - a) * t end
 
 -------------------------------------------------------------------------------
---  Exports  (shared locals â†’ EllesmereUI table for split files)
+--  Exports  (shared locals EllesmereUI table for split files)
 -------------------------------------------------------------------------------
 -- Visual constants (tables)
 EllesmereUI.ELLESMERE_GREEN = ELLESMERE_GREEN
@@ -624,154 +584,429 @@ EllesmereUI.CLASS_ART_MAP   = CLASS_ART_MAP
 -------------------------------------------------------------------------------
 do
     local GetPhysicalScreenSize = GetPhysicalScreenSize
+    local InCombatLockdown = InCombatLockdown
     local type = type
 
     local PP = {}
     EllesmereUI.PP = PP
 
-    -- Physical screen dimensions (constant for a session, refreshed on scale change)
+    ---------------------------------------------------------------------------
+    --  Core pixel-perfect values
+    ---------------------------------------------------------------------------
     PP.physicalWidth, PP.physicalHeight = GetPhysicalScreenSize()
 
-    -- 768 is WoW's reference height; this gives us the size of 1 physical pixel
-    -- in WoW's coordinate system at scale 1.0
+    -- 768 is WoW's reference height; this gives us the size of 1 physical
+    -- pixel in WoW's coordinate system at scale 1.0
     PP.perfect = 768 / PP.physicalHeight
 
-    -- mult = size of 1 physical pixel in the current UIParent scale
-    -- Recalculated whenever UI scale changes
+    -- mult = size of 1 physical pixel in the current UIParent scale.
+    -- When UIParent scale == perfect, mult == 1 and every integer is
+    -- automatically pixel-perfect with no snapping needed.
     PP.mult = PP.perfect / (UIParent and UIParent:GetScale() or 1)
 
-    -- Recalculate mult (call after UI scale changes)
+    --- Returns the ideal pixel-perfect scale, clamped to WoW's valid range.
+    function PP.PixelBestSize()
+        return max(0.4, min(PP.perfect, 1.15))
+    end
+
+    --- Recalculate mult after a scale or resolution change.
     function PP.UpdateMult()
         PP.physicalWidth, PP.physicalHeight = GetPhysicalScreenSize()
         PP.perfect = 768 / PP.physicalHeight
-        PP.mult = PP.perfect / (UIParent:GetScale() or 1)
+        local uiScale = EllesmereUIDB and EllesmereUIDB.ppUIScale or PP.PixelBestSize()
+        PP.mult = PP.perfect / uiScale
     end
 
-    -- Snap a value to the nearest physical pixel boundary
+    --- Apply a new UI scale. Stores it, sets UIParent, recalculates mult.
+    --- Defers to PLAYER_REGEN_ENABLED if called during combat.
+    function PP.SetUIScale(newScale)
+        if InCombatLockdown() then
+            local deferFrame = CreateFrame("Frame")
+            deferFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+            deferFrame:SetScript("OnEvent", function(self)
+                self:UnregisterAllEvents()
+                PP.SetUIScale(newScale)
+            end)
+            return
+        end
+        if not EllesmereUIDB then EllesmereUIDB = {} end
+        -- Only trigger frame rebuilds when the scale is actually changing.
+        -- On login, Blizzard may reset UIParent scale, so we re-apply the
+        -- stored value -- but if UIParent is already at the correct scale
+        -- the frames are already positioned correctly and rebuilding them
+        -- would shift user-customized positions unnecessarily.
+        local currentScale = UIParent and UIParent:GetScale() or 1
+        local scaleChanged = math.abs(currentScale - newScale) > 0.0001
+        EllesmereUIDB.ppUIScale = newScale
+        UIParent:SetScale(newScale)
+        PP.UpdateMult()
+        -- Rebuild child addon frames only when the scale actually changed.
+        if scaleChanged then
+            if _G._EUF_ReloadFrames then _G._EUF_ReloadFrames() end
+            if _G._ERB_Apply then _G._ERB_Apply() end
+            if _G._EAB_Apply then _G._EAB_Apply() end
+        end
+    end
+
+    ---------------------------------------------------------------------------
+    --  Scale(x)  — snap a value to the nearest physical-pixel boundary.
+    --  Used for frame sizes, positions, and offsets.
+    --
+    --  Divides x into whole-pixel chunks of size `mult`, then truncates
+    --  the fractional remainder so the result lands exactly on a pixel
+    --  boundary.  Positive values floor, negative values ceil, so the
+    --  magnitude always rounds toward zero.
+    ---------------------------------------------------------------------------
     function PP.Scale(x)
         if x == 0 then return 0 end
         local m = PP.mult
         if m == 1 then return x end
-        local y = m > 1 and m or -m
-        return x - x % (x < 0 and y or -y)
+        local pixels = x / m
+        pixels = x > 0 and math.floor(pixels) or math.ceil(pixels)
+        return pixels * m
     end
 
-    -- Pixel-snapped SetSize
+    ---------------------------------------------------------------------------
+    --  SnapForES(x, effectiveScale)
+    --
+    --  Snap a value to a whole number of physical pixels at the given
+    --  effective scale.  Uses the same approach as the border system:
+    --    onePixel = perfect / es   (size of 1 physical pixel in frame coords)
+    --    physPixels = floor(x / onePixel + 0.5)   (round to nearest whole pixel)
+    --    result = physPixels * onePixel
+    --
+    --  This guarantees every element sized through this function is exactly
+    --  N physical pixels, eliminating sub-pixel drift between siblings.
+    ---------------------------------------------------------------------------
+    function PP.SnapForES(x, es)
+        if x == 0 then return 0 end
+        local onePixel = PP.perfect / es
+        local physPixels = math.floor(x / onePixel + 0.5)
+        return physPixels * onePixel
+    end
+
+    ---------------------------------------------------------------------------
+    --  Convenience wrappers — pixel-snapped frame geometry
+    ---------------------------------------------------------------------------
     function PP.Size(frame, w, h)
         local sw = PP.Scale(w)
         frame:SetSize(sw, h and PP.Scale(h) or sw)
     end
 
-    -- Pixel-snapped SetWidth
     function PP.Width(frame, w)
         frame:SetWidth(PP.Scale(w))
     end
 
-    -- Pixel-snapped SetHeight
     function PP.Height(frame, h)
         frame:SetHeight(PP.Scale(h))
     end
 
-    -- Pixel-snapped SetPoint — snaps numeric offset arguments
-    function PP.Point(obj, arg1, arg2, arg3, arg4, arg5)
-        if not arg2 then arg2 = obj:GetParent() end
-        if type(arg2) == "number" then arg2 = PP.Scale(arg2) end
-        if type(arg3) == "number" then arg3 = PP.Scale(arg3) end
-        if type(arg4) == "number" then arg4 = PP.Scale(arg4) end
-        if type(arg5) == "number" then arg5 = PP.Scale(arg5) end
-        obj:SetPoint(arg1, arg2, arg3, arg4, arg5)
+    function PP.Point(obj, anchor, p1, p2, p3, p4)
+        if not p1 then p1 = obj:GetParent() end
+        if type(p1) == "number" then p1 = PP.Scale(p1) end
+        if type(p2) == "number" then p2 = PP.Scale(p2) end
+        if type(p3) == "number" then p3 = PP.Scale(p3) end
+        if type(p4) == "number" then p4 = PP.Scale(p4) end
+        obj:SetPoint(anchor, p1, p2, p3, p4)
     end
 
-    -- Pixel-snapped SetInside (two-point anchoring inside a parent)
     function PP.SetInside(obj, anchor, xOff, yOff)
-        if not anchor then anchor = obj:GetParent() end
-        local x = PP.Scale(xOff or 1)
-        local y = PP.Scale(yOff or 1)
+        anchor = anchor or obj:GetParent()
+        local inset = PP.Scale(xOff or 1)
+        local insetY = PP.Scale(yOff or 1)
         obj:ClearAllPoints()
         PP.DisablePixelSnap(obj)
-        obj:SetPoint("TOPLEFT", anchor, "TOPLEFT", x, -y)
-        obj:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", -x, y)
+        obj:SetPoint("TOPLEFT", anchor, "TOPLEFT", inset, -insetY)
+        obj:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", -inset, insetY)
     end
 
-    -- Pixel-snapped SetOutside (two-point anchoring outside a parent)
     function PP.SetOutside(obj, anchor, xOff, yOff)
-        if not anchor then anchor = obj:GetParent() end
-        local x = PP.Scale(xOff or 1)
-        local y = PP.Scale(yOff or 1)
+        anchor = anchor or obj:GetParent()
+        local outset = PP.Scale(xOff or 1)
+        local outsetY = PP.Scale(yOff or 1)
         obj:ClearAllPoints()
         PP.DisablePixelSnap(obj)
-        obj:SetPoint("TOPLEFT", anchor, "TOPLEFT", -x, y)
-        obj:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", x, -y)
+        obj:SetPoint("TOPLEFT", anchor, "TOPLEFT", -outset, outsetY)
+        obj:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", outset, -outsetY)
     end
 
-    -- Disable WoW's built-in pixel snapping on a texture/statusbar
+    ---------------------------------------------------------------------------
+    --  DisablePixelSnap — prevent WoW's engine from rounding texture
+    --  coordinates to the nearest pixel, which causes blurry edges on
+    --  sub-pixel-sized elements.
+    ---------------------------------------------------------------------------
     function PP.DisablePixelSnap(obj)
         if not obj or obj.PixelSnapDisabled then return end
-        if obj.SetSnapToPixelGrid then
-            obj:SetSnapToPixelGrid(false)
-            obj:SetTexelSnappingBias(0)
-        elseif obj.GetStatusBarTexture then
-            local tex = obj:GetStatusBarTexture()
-            if type(tex) == "table" and tex.SetSnapToPixelGrid then
-                tex:SetSnapToPixelGrid(false)
-                tex:SetTexelSnappingBias(0)
+
+        -- Textures and FontStrings expose SetSnapToPixelGrid directly
+        local target = obj
+        if not obj.SetSnapToPixelGrid and obj.GetStatusBarTexture then
+            -- StatusBars need their inner texture unsnapped instead
+            target = obj:GetStatusBarTexture()
+            if type(target) ~= "table" or not target.SetSnapToPixelGrid then
+                obj.PixelSnapDisabled = true
+                return
             end
+        end
+
+        if target.SetSnapToPixelGrid then
+            target:SetSnapToPixelGrid(false)
+            target:SetTexelSnappingBias(0)
         end
         obj.PixelSnapDisabled = true
     end
 
-    -- Create pixel-perfect 1px borders on a frame (4 edge textures)
-    -- Returns the border table { top, bottom, left, right }
-    function PP.CreateBorder(frame, r, g, b, a)
+    ---------------------------------------------------------------------------
+    --  Global Pixel Snap Prevention
+    --
+    --  WoW re-enables pixel snapping whenever a texture's properties change
+    --  (SetTexture, SetColorTexture, SetVertexColor, SetTexCoord, etc.).
+    --  This hooks the widget metatables so that every texture/statusbar in
+    --  the game automatically has pixel snapping disabled after any property
+    --  change. Without this, manual DisablePixelSnap calls get undone by
+    --  Blizzard's code on spell swaps, page changes, combat transitions, etc.
+    ---------------------------------------------------------------------------
+    local function WatchPixelSnap(frame, snap)
+        if (frame and not frame:IsForbidden()) and frame.PixelSnapDisabled and snap then
+            frame.PixelSnapDisabled = nil
+        end
+    end
+
+    local function HookPixelSnap(object)
+        local mk = getmetatable(object)
+        if not mk then return end
+        mk = mk.__index
+        if not mk or mk.DisabledPixelSnap then return end
+
+        if mk.SetSnapToPixelGrid or mk.SetStatusBarTexture or mk.SetColorTexture
+           or mk.SetVertexColor or mk.CreateTexture or mk.SetTexCoord or mk.SetTexture then
+            if mk.SetSnapToPixelGrid then hooksecurefunc(mk, "SetSnapToPixelGrid", WatchPixelSnap) end
+            if mk.SetStatusBarTexture then hooksecurefunc(mk, "SetStatusBarTexture", PP.DisablePixelSnap) end
+            if mk.SetColorTexture then hooksecurefunc(mk, "SetColorTexture", PP.DisablePixelSnap) end
+            if mk.SetVertexColor then hooksecurefunc(mk, "SetVertexColor", PP.DisablePixelSnap) end
+            if mk.CreateTexture then hooksecurefunc(mk, "CreateTexture", PP.DisablePixelSnap) end
+            if mk.SetTexCoord then hooksecurefunc(mk, "SetTexCoord", PP.DisablePixelSnap) end
+            if mk.SetTexture then hooksecurefunc(mk, "SetTexture", PP.DisablePixelSnap) end
+            mk.DisabledPixelSnap = true
+        end
+    end
+
+    -- Hook all known widget types by creating one of each and hooking its metatable
+    local hookFrame = CreateFrame("Frame")
+    HookPixelSnap(hookFrame)
+    HookPixelSnap(hookFrame:CreateTexture())
+    HookPixelSnap(hookFrame:CreateFontString())
+    HookPixelSnap(hookFrame:CreateMaskTexture())
+
+    -- Enumerate all existing frame types to catch any we missed
+    local hookedTypes = { Frame = true }
+    local enumObj = EnumerateFrames()
+    while enumObj do
+        local objType = enumObj:GetObjectType()
+        if not enumObj:IsForbidden() and not hookedTypes[objType] then
+            HookPixelSnap(enumObj)
+            hookedTypes[objType] = true
+        end
+        enumObj = EnumerateFrames(enumObj)
+    end
+
+    -- Also hook ScrollFrame and StatusBar metatables
+    HookPixelSnap(CreateFrame("ScrollFrame"))
+    do
+        local sb = CreateFrame("StatusBar")
+        sb:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
+        HookPixelSnap(sb)
+        local sbt = sb:GetStatusBarTexture()
+        if sbt then HookPixelSnap(sbt) end
+    end
+
+    ---------------------------------------------------------------------------
+    --  UNIFIED BORDER SYSTEM
+    --
+    --  All borders across every EllesmereUI addon use this single API.
+    --  Uses 4 manual texture strips for pixel-perfect edge rendering.
+    --  Each strip is exactly borderSize * mult UI units thick, which maps
+    --  to exactly borderSize physical pixels. No BackdropTemplate, no
+    --  sub-pixel interpolation.
+    --
+    --  _ppBorders is a container Frame (supports Show/Hide/SetShown).
+    --  The 4 textures are stored as _ppBorders._top, _bottom, _left, _right.
+    --
+    --  API:
+    --    PP.CreateBorder(frame, r, g, b, a, borderSize, drawLayer, subLevel)
+    --    PP.SetBorderSize(frame, borderSize)
+    --    PP.SetBorderColor(frame, r, g, b, a)
+    --    PP.UpdateBorder(frame, borderSize, r, g, b, a)
+    --    PP.HideBorder(frame)
+    --    PP.ShowBorder(frame)
+    ---------------------------------------------------------------------------
+
+    local function SnapBorderTextures(container, frame, borderSize)
+        -- Calculate thickness that maps to exactly N physical pixels in this
+        -- frame's coordinate space, regardless of parent scale chains.
+        --   physPixels = borderSize (always an integer: 1, 2, 3 …)
+        --   1 physical pixel in screen coords = 1 / physicalHeight
+        --   1 physical pixel in frame coords  = (1 / physicalHeight) / effectiveScale
+        --                                     = perfect / (768 * effectiveScale)
+        -- Simplified: perfect / es  gives 1 physical pixel in frame coords.
+        local es = container:GetEffectiveScale()
+        local onePixel = es > 0 and (PP.perfect / es) or PP.mult
+        local t = math.max(onePixel, math.floor((borderSize or 1) + 0.5) * onePixel)
+        local top, bottom, left, right = container._top, container._bottom, container._left, container._right
+
+        -- Top: full width, sits at the top edge
+        top:ClearAllPoints()
+        top:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+        top:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
+        top:SetHeight(t)
+
+        -- Bottom: full width, sits at the bottom edge
+        bottom:ClearAllPoints()
+        bottom:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
+        bottom:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+        bottom:SetHeight(t)
+
+        -- Left: between top and bottom strips
+        left:ClearAllPoints()
+        left:SetPoint("TOPLEFT", top, "BOTTOMLEFT", 0, 0)
+        left:SetPoint("BOTTOMLEFT", bottom, "TOPLEFT", 0, 0)
+        left:SetWidth(t)
+
+        -- Right: between top and bottom strips
+        right:ClearAllPoints()
+        right:SetPoint("TOPRIGHT", top, "BOTTOMRIGHT", 0, 0)
+        right:SetPoint("BOTTOMRIGHT", bottom, "TOPRIGHT", 0, 0)
+        right:SetWidth(t)
+    end
+
+    ---------------------------------------------------------------------------
+    --  Border registry — tracks all border containers for centralized re-snap
+    --  when UI scale or resolution changes. Avoids per-border OnUpdate overhead.
+    ---------------------------------------------------------------------------
+    local allBorders = {}
+    local allBordersN = 0
+
+    local function RegisterBorder(container, frame)
+        allBordersN = allBordersN + 1
+        allBorders[allBordersN] = { container = container, frame = frame }
+    end
+
+    --- Re-snap every registered border. Called on scale/resolution changes.
+    function PP.ResnapAllBorders()
+        for i = 1, allBordersN do
+            local entry = allBorders[i]
+            local c, f = entry.container, entry.frame
+            if c and f then
+                SnapBorderTextures(c, f, f._ppBorderSize or 1)
+            end
+        end
+    end
+
+    function PP.CreateBorder(frame, r, g, b, a, borderSize, drawLayer, subLevel)
         if frame._ppBorders then return frame._ppBorders end
-        r, g, b, a = r or 0, g or 0, b or 0, a or 1
-        local brd = {}
-        for i = 1, 4 do
-            brd[i] = frame:CreateTexture(nil, "OVERLAY", nil, 7)
-            brd[i]:SetColorTexture(r, g, b, a)
-            PP.DisablePixelSnap(brd[i])
+        r = r or 0; g = g or 0; b = b or 0; a = a or 1
+        borderSize = borderSize or 1
+        drawLayer = drawLayer or "OVERLAY"
+        subLevel = subLevel or 1
+
+        local container = CreateFrame("Frame", nil, frame)
+        container:SetAllPoints(frame)
+        -- Don't bump frame level — the textures' drawLayer and subLevel
+        -- control visual stacking. Keeping the container at the parent's
+        -- level avoids covering sibling frames like glow overlays.
+        container:SetFrameLevel(frame:GetFrameLevel())
+
+        local function MakeTex()
+            local tex = container:CreateTexture(nil, drawLayer, nil, subLevel)
+            tex:SetColorTexture(r, g, b, a)
+            PP.DisablePixelSnap(tex)
+            return tex
         end
-        local s = PP.Scale(1)
-        -- top
-        brd[1]:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
-        brd[1]:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
-        brd[1]:SetHeight(s)
-        -- bottom
-        brd[2]:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
-        brd[2]:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
-        brd[2]:SetHeight(s)
-        -- left
-        brd[3]:SetPoint("TOPLEFT", brd[1], "BOTTOMLEFT", 0, 0)
-        brd[3]:SetPoint("BOTTOMLEFT", brd[2], "TOPLEFT", 0, 0)
-        brd[3]:SetWidth(s)
-        -- right
-        brd[4]:SetPoint("TOPRIGHT", brd[1], "BOTTOMRIGHT", 0, 0)
-        brd[4]:SetPoint("BOTTOMRIGHT", brd[2], "TOPRIGHT", 0, 0)
-        brd[4]:SetWidth(s)
-        frame._ppBorders = brd
-        return brd
+
+        container._top = MakeTex()
+        container._bottom = MakeTex()
+        container._left = MakeTex()
+        container._right = MakeTex()
+
+        -- Initial snap (effective scale may not be final yet)
+        SnapBorderTextures(container, frame, borderSize)
+
+        -- Short-lived OnUpdate: re-snap for 2 frames to catch the final
+        -- effective scale after parent frames finish layout, then stop.
+        local ticks = 0
+        container:SetScript("OnUpdate", function(self)
+            ticks = ticks + 1
+            SnapBorderTextures(self, frame, frame._ppBorderSize or 1)
+            if ticks >= 2 then
+                self:SetScript("OnUpdate", nil)
+            end
+        end)
+
+        -- Register for centralized re-snap on scale/resolution changes
+        RegisterBorder(container, frame)
+
+        frame._ppBorders = container
+        frame._ppBorderSize = borderSize
+        frame._ppBorderColor = { r, g, b, a }
+        return container
     end
 
-    -- Update border thickness (e.g. after scale change)
-    function PP.UpdateBorder(frame, r, g, b, a)
-        local brd = frame._ppBorders
-        if not brd then return end
-        local s = PP.Scale(1)
-        brd[1]:SetHeight(s)
-        brd[2]:SetHeight(s)
-        brd[3]:SetWidth(s)
-        brd[4]:SetWidth(s)
-        if r then
-            for i = 1, 4 do brd[i]:SetColorTexture(r, g, b, a or 1) end
-        end
+    function PP.SetBorderSize(frame, borderSize)
+        local container = frame._ppBorders
+        if not container then return end
+        borderSize = borderSize or 1
+        SnapBorderTextures(container, frame, borderSize)
+        frame._ppBorderSize = borderSize
     end
 
-    -- Listen for UI_SCALE_CHANGED and DISPLAY_SIZE_CHANGED to recalculate mult
+    function PP.SetBorderColor(frame, r, g, b, a)
+        local container = frame._ppBorders
+        if not container then return end
+        a = a or 1
+        frame._ppBorderColor = { r, g, b, a }
+        container._top:SetColorTexture(r, g, b, a)
+        container._bottom:SetColorTexture(r, g, b, a)
+        container._left:SetColorTexture(r, g, b, a)
+        container._right:SetColorTexture(r, g, b, a)
+    end
+
+    function PP.UpdateBorder(frame, borderSize, r, g, b, a)
+        if r then PP.SetBorderColor(frame, r, g, b, a) end
+        PP.SetBorderSize(frame, borderSize)
+    end
+
+    function PP.HideBorder(frame)
+        local container = frame._ppBorders
+        if container then container:Hide() end
+    end
+
+    function PP.ShowBorder(frame)
+        local container = frame._ppBorders
+        if container then container:Show() end
+    end
+
+    ---------------------------------------------------------------------------
+    --  Scale change watcher
+    ---------------------------------------------------------------------------
     local scaleWatcher = CreateFrame("Frame")
     scaleWatcher:RegisterEvent("UI_SCALE_CHANGED")
     scaleWatcher:RegisterEvent("DISPLAY_SIZE_CHANGED")
-    scaleWatcher:SetScript("OnEvent", function()
-        PP.UpdateMult()
+    scaleWatcher:SetScript("OnEvent", function(_, event)
+        if event == "DISPLAY_SIZE_CHANGED" then
+            -- Resolution changed — recalculate perfect and re-apply scale
+            PP.physicalWidth, PP.physicalHeight = GetPhysicalScreenSize()
+            PP.perfect = 768 / PP.physicalHeight
+            -- Only auto-update if user explicitly opted into auto scale
+            if EllesmereUIDB and EllesmereUIDB.ppUIScaleAuto == true then
+                PP.SetUIScale(PP.PixelBestSize())
+            else
+                PP.UpdateMult()
+            end
+        else
+            PP.UpdateMult()
+        end
+        -- Re-snap all borders with the new scale values
+        PP.ResnapAllBorders()
     end)
 end
 
@@ -859,50 +1094,13 @@ do
     -- DisablePixelSnap is scale-independent — just reuse PP's version
     PanelPP.DisablePixelSnap = PP.DisablePixelSnap
 
-    -- CreateBorder reimplemented for panel context
-    function PanelPP.CreateBorder(frame, r, g, b, a)
-        if frame._ppBorders then return frame._ppBorders end
-        r, g, b, a = r or 0, g or 0, b or 0, a or 1
-        local brd = {}
-        for i = 1, 4 do
-            brd[i] = frame:CreateTexture(nil, "OVERLAY", nil, 7)
-            brd[i]:SetColorTexture(r, g, b, a)
-            PanelPP.DisablePixelSnap(brd[i])
-        end
-        local s = PanelPP.Scale(1)
-        -- top
-        brd[1]:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
-        brd[1]:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
-        brd[1]:SetHeight(s)
-        -- bottom
-        brd[2]:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
-        brd[2]:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
-        brd[2]:SetHeight(s)
-        -- left
-        brd[3]:SetPoint("TOPLEFT", brd[1], "BOTTOMLEFT", 0, 0)
-        brd[3]:SetPoint("BOTTOMLEFT", brd[2], "TOPLEFT", 0, 0)
-        brd[3]:SetWidth(s)
-        -- right
-        brd[4]:SetPoint("TOPRIGHT", brd[1], "BOTTOMRIGHT", 0, 0)
-        brd[4]:SetPoint("BOTTOMRIGHT", brd[2], "TOPRIGHT", 0, 0)
-        brd[4]:SetWidth(s)
-        frame._ppBorders = brd
-        return brd
-    end
-
-    -- Update border thickness (e.g. after scale change)
-    function PanelPP.UpdateBorder(frame, r, g, b, a)
-        local brd = frame._ppBorders
-        if not brd then return end
-        local s = PanelPP.Scale(1)
-        brd[1]:SetHeight(s)
-        brd[2]:SetHeight(s)
-        brd[3]:SetWidth(s)
-        brd[4]:SetWidth(s)
-        if r then
-            for i = 1, 4 do brd[i]:SetColorTexture(r, g, b, a or 1) end
-        end
-    end
+    -- Panel borders delegate to the unified PP border system
+    PanelPP.CreateBorder  = PP.CreateBorder
+    PanelPP.SetBorderSize = PP.SetBorderSize
+    PanelPP.SetBorderColor = PP.SetBorderColor
+    PanelPP.UpdateBorder  = PP.UpdateBorder
+    PanelPP.HideBorder    = PP.HideBorder
+    PanelPP.ShowBorder    = PP.ShowBorder
 end
 
 -- File-level PanelPP reference for panel layout code outside the do block
@@ -1026,6 +1224,10 @@ EllesmereUI.FONT_ORDER = {
     "Gotham Narrow Ultra", "Gotham Narrow", "Russo One", "Ubuntu", "Homespun",
     "Friz Quadrata", "Arial", "Morpheus", "Skurri",
 }
+-- Display name overrides for the font dropdown (key = FONT_ORDER name)
+EllesmereUI.FONT_DISPLAY_NAMES = {
+    ["Avant Garde"] = "Avant Garde (Naowh)",
+}
 
 -- Get the fonts DB table (lazy-init)
 function EllesmereUI.GetFontsDB()
@@ -1062,6 +1264,9 @@ local function ResolveFontName(fontName)
     if file then
         return MEDIA_PATH .. "fonts\\" .. file
     end
+    -- SharedMedia fonts store their path in FONT_SM_PATHS (populated at init)
+    local smPath = EllesmereUI._smFontPaths and EllesmereUI._smFontPaths[fontName]
+    if smPath then return smPath end
     -- Fallback to Expressway
     return MEDIA_PATH .. "fonts\\Expressway.TTF"
 end
@@ -1498,6 +1703,80 @@ if not EllesmereUI.ResolveThemeColor then
 end
 
 -------------------------------------------------------------------------------
+--  SharedMedia helpers
+--  Append LibSharedMedia-3.0 statusbar textures into a runtime texture table.
+--  Signature: AppendSharedMediaTextures(names, order, castBarNames, textures)
+--    names        – key → display-name string table
+--    order        – ordered array of keys (receives "---" + SM keys appended)
+--    castBarNames – optional secondary names table (may be nil)
+--    textures     – key → texture-path table
+--  Safe to call multiple times; duplicate keys are skipped via the textures
+--  table guard.
+-------------------------------------------------------------------------------
+function EllesmereUI.AppendSharedMediaTextures(names, order, castBarNames, textures)
+    local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+    if not LSM then return end
+    local smTextures = LSM:HashTable("statusbar")
+    if not smTextures then return end
+
+    -- Collect SM texture names not already present, sort alphabetically
+    local sorted = {}
+    for name in pairs(smTextures) do
+        local key = "sm:" .. name
+        if not textures[key] then
+            sorted[#sorted + 1] = name
+        end
+    end
+    if #sorted == 0 then return end
+    table.sort(sorted)
+
+    -- Append separator + entries
+    order[#order + 1] = "---"
+    for _, name in ipairs(sorted) do
+        local key = "sm:" .. name
+        textures[key]      = smTextures[name]
+        names[key]         = name
+        order[#order + 1]  = key
+        if castBarNames then
+            castBarNames[key] = name
+        end
+    end
+end
+
+-------------------------------------------------------------------------------
+--  Append LibSharedMedia-3.0 fonts into a runtime font dropdown table.
+--  Signature: AppendSharedMediaFonts(values, order, opts)
+--    values  – key → { text, font } table (or key → path when keyByName=true)
+--    order   – ordered array of keys
+--    opts    – optional { keyByName = true } — use display name as key
+--  Safe to call multiple times; duplicate keys are skipped.
+-------------------------------------------------------------------------------
+function EllesmereUI.AppendSharedMediaFonts(values, order, opts)
+    local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+    if not LSM then return end
+    local smFonts = LSM:HashTable("font")
+    if not smFonts then return end
+
+    local keyByName = opts and opts.keyByName
+    local sorted = {}
+    for name in pairs(smFonts) do
+        local key = keyByName and name or ("smf:" .. name)
+        if not values[key] then
+            sorted[#sorted + 1] = name
+        end
+    end
+    if #sorted == 0 then return end
+    table.sort(sorted)
+
+    order[#order + 1] = "---"
+    for _, name in ipairs(sorted) do
+        local key = keyByName and name or ("smf:" .. name)
+        values[key] = { text = name, font = smFonts[name] }
+        order[#order + 1] = key
+    end
+end
+
+-------------------------------------------------------------------------------
 --  Deferred file initialization
 --  Heavy UI files (Widgets, Presets, UnlockMode, Options) register their
 --  init functions here at load time but don't execute until the panel opens.
@@ -1559,6 +1838,13 @@ local function WirePopupEscape(popup, dimmer)
         else
             self:SetPropagateKeyboardInput(true)
         end
+    end)
+    -- Release keyboard capture when the popup is dismissed
+    dimmer:HookScript("OnHide", function()
+        popup:EnableKeyboard(false)
+    end)
+    dimmer:HookScript("OnShow", function()
+        popup:EnableKeyboard(true)
     end)
 end
 
@@ -2313,6 +2599,8 @@ local function CreateMainFrame()
     mainFrame:EnableMouse(false)
     mainFrame:SetMovable(true)
     mainFrame:SetScript("OnShow", function()
+        -- Re-sync PanelPP mult in case UIParent scale changed since last open
+        if EllesmereUI.PanelPP then EllesmereUI.PanelPP.UpdateMult() end
         for _, fn in ipairs(_onShowCallbacks) do fn() end
     end)
     mainFrame:SetScript("OnHide", function()
@@ -2494,7 +2782,7 @@ local function CreateMainFrame()
     -- Helper: create a 1px horizontal glow line on a sidebar button (TOP or BOTTOM edge)
     local function MakeNavEdgeLine(btn, edge)
         local g = btn:CreateTexture(nil, "BORDER")
-        PanelPP.Height(g, 1)
+        g:SetHeight(1)
         PanelPP.Point(g, edge .. "LEFT", btn, edge .. "LEFT", 0, 0)
         PanelPP.Point(g, edge .. "RIGHT", btn, edge .. "RIGHT", 0, 0)
         g:SetColorTexture(0.7, 0.7, 0.7, 1)
@@ -3093,7 +3381,7 @@ local function CreateMainFrame()
     PanelPP.DisablePixelSnap(contentHeaderDiv)
     PanelPP.Point(contentHeaderDiv, "BOTTOMLEFT", contentHeaderFrame, "BOTTOMLEFT", 0, 0)
     PanelPP.Point(contentHeaderDiv, "BOTTOMRIGHT", contentHeaderFrame, "BOTTOMRIGHT", 0, 0)
-    PanelPP.Height(contentHeaderDiv, 1)
+    contentHeaderDiv:SetHeight(1)
 
     local function ApplyContentLayout()
         local wasSuppressed = suppressScrollRangeChanged
@@ -3366,7 +3654,7 @@ local function CreateMainFrame()
             if r ~= contentHeaderBg and r ~= contentHeaderDiv then r:Hide(); r:SetParent(nil) end
         end
         contentHeaderFrame:Hide()
-        PanelPP.Height(contentHeaderFrame, 1)
+        contentHeaderFrame:SetHeight(1)
         contentHeaderH = 0
         ApplyContentLayout()
     end
@@ -3391,7 +3679,7 @@ local function CreateMainFrame()
             height   = contentHeaderH,
         }
         contentHeaderFrame:Hide()
-        PanelPP.Height(contentHeaderFrame, 1)
+        contentHeaderFrame:SetHeight(1)
         contentHeaderH = 0
         ApplyContentLayout()
         return true
@@ -3489,7 +3777,7 @@ local function CreateMainFrame()
             if r ~= contentHeaderBg and r ~= contentHeaderDiv then r:Hide() end
         end
         contentHeaderFrame:Hide()
-        PanelPP.Height(contentHeaderFrame, 1)
+        contentHeaderFrame:SetHeight(1)
         contentHeaderH = 0
         ApplyContentLayout()
     end
@@ -4453,6 +4741,10 @@ function EllesmereUI:ResetAllModules()
             config.onReset()
         end
     end
+    -- Clear unlock mode anchor relationships
+    if EllesmereUIDB then
+        EllesmereUIDB.unlockAnchors = nil
+    end
 end
 
 -------------------------------------------------------------------------------
@@ -4485,6 +4777,18 @@ function EllesmereUI:SelectPage(pageName)
             EllesmereUI._unlockReturnPage   = activePage
             C_Timer.After(0, EllesmereUI._openUnlockMode)
         end
+        return
+    end
+
+    -- "Disable Addons" is a fake nav item — close EUI and open the Blizzard addon list.
+    if pageName == "Disable Addons" then
+        if EllesmereUI._mainFrame then EllesmereUI._mainFrame:Hide() end
+        C_Timer.After(0, function()
+            if not AddonList then
+                C_AddOns.LoadAddOn("Blizzard_AddonList")
+            end
+            if AddonList then ShowUIPanel(AddonList) end
+        end)
         return
     end
 
@@ -4997,7 +5301,7 @@ end
 -------------------------------------------------------------------------------
 --  Slash commands
 -------------------------------------------------------------------------------
-EllesmereUI.VERSION = "3.4.5"
+EllesmereUI.VERSION = "4.2"
 
 -- Register this addon's version into a shared global table (taint-free at load time)
 if not _G._EUI_AddonVersions then _G._EUI_AddonVersions = {} end
@@ -5242,6 +5546,17 @@ SlashCmdList.EUIRESETHINT = function()
     print("|cff00ff00[EllesmereUI]|r All hints reset. /reload to see them again.")
 end
 
+-- Debug: wipe saved UI scale so next reload re-snapshots from Blizzard default
+SLASH_EUIRESETSCALE1 = "/euiresetscale"
+SlashCmdList.EUIRESETSCALE = function()
+    if EllesmereUIDB then
+        EllesmereUIDB.ppUIScale = nil
+        EllesmereUIDB.ppUIScaleAuto = nil
+        EllesmereUIDB.blizzUIScale = nil
+    end
+    print("|cff00ff00[EllesmereUI]|r UI scale reset. /reload to re-snapshot from your Blizzard scale.")
+end
+
 -- Open the panel with a specific addon's tab selected
 function EllesmereUI:ShowModule(folderName)
     if InCombatLockdown() then
@@ -5407,7 +5722,8 @@ do
             statsFrame:SetSize(160, 60)
             statsFrame:SetFrameStrata("LOW")
             statsText = statsFrame:CreateFontString(nil, "OVERLAY")
-            statsText:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE")
+            local font = EllesmereUI.ResolveFontName(EllesmereUI.GetFontsDB().global)
+            statsText:SetFont(font, 12, EllesmereUI.GetFontOutlineFlag())
             statsText:SetPoint("TOPLEFT")
             statsText:SetJustifyH("LEFT")
         end
@@ -5446,29 +5762,37 @@ end
 do
     local ICON_PATH = "Interface\\AddOns\\EllesmereUI\\media\\eg-logo.tga"
     local BUTTON_SIZE = 32
-    local MINIMAP_RADIUS = 80
     local btn
+    local currentAngle
 
     local function GetAngle()
-        if not EllesmereUIDB then EllesmereUIDB = {} end
-        return EllesmereUIDB.minimapButtonAngle or 220
+        if currentAngle then return currentAngle end
+        currentAngle = (EllesmereUIDB and EllesmereUIDB.minimapButtonAngle) or 220
+        return currentAngle
     end
 
-    local function SetAngle(angle)
+    local function SaveAngle()
         if not EllesmereUIDB then EllesmereUIDB = {} end
-        EllesmereUIDB.minimapButtonAngle = angle
+        EllesmereUIDB.minimapButtonAngle = currentAngle
     end
 
     local function UpdatePosition()
         if not btn then return end
         local angle = math.rad(GetAngle())
-        -- Compute radius from actual minimap dimensions so it works with any shape/size
         local mw, mh = Minimap:GetWidth(), Minimap:GetHeight()
         local radius = (math.max(mw, mh) / 2) + 5
-        local x = math.cos(angle) * radius
-        local y = math.sin(angle) * radius
         btn:ClearAllPoints()
-        btn:SetPoint("CENTER", Minimap, "CENTER", x, y)
+        btn:SetPoint("CENTER", Minimap, "CENTER", math.cos(angle) * radius, math.sin(angle) * radius)
+    end
+
+    -- Persistent OnUpdate handler for drag (avoids closure creation per drag)
+    local function DragOnUpdate()
+        local mx, my = Minimap:GetCenter()
+        local cx, cy = GetCursorPosition()
+        local scale = Minimap:GetEffectiveScale()
+        cx, cy = cx / scale, cy / scale
+        currentAngle = math.deg(math.atan2(cy - my, cx - mx))
+        UpdatePosition()
     end
 
     function EllesmereUI.CreateMinimapButton()
@@ -5479,9 +5803,9 @@ do
         btn:SetFrameStrata("MEDIUM")
         btn:SetFrameLevel(8)
         btn:SetClampedToScreen(true)
-        btn:RegisterForClicks("LeftButtonUp", "RightButtonUp", "MiddleButtonUp")
-        btn:RegisterForDrag("LeftButton")
         btn:SetMovable(true)
+        btn:RegisterForClicks("anyUp")
+        btn:RegisterForDrag("LeftButton")
 
         -- Background fill (black circle behind the icon)
         local bg = btn:CreateTexture(nil, "BACKGROUND")
@@ -5496,7 +5820,7 @@ do
         icon:SetPoint("CENTER", 0, 0)
         icon:SetTexture(ICON_PATH)
 
-        -- Border overlay (standard minimap button look — offset to compensate for built-in padding)
+        -- Border overlay (standard minimap button look)
         local overlay = btn:CreateTexture(nil, "OVERLAY")
         overlay:SetSize(53, 53)
         overlay:SetPoint("TOPLEFT", btn, "TOPLEFT", 0, 0)
@@ -5505,12 +5829,14 @@ do
         -- Highlight (circular, not square)
         btn:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
 
-        -- Click handler
+        -- Click handler (only fires when mouse-up without drag)
+        local isDragging = false
         btn:SetScript("OnClick", function(_, button)
             if InCombatLockdown() then return end
             if button == "LeftButton" then
                 if EllesmereUI then EllesmereUI:Toggle() end
             elseif button == "RightButton" then
+                if EllesmereUI then EllesmereUI:EnsureLoaded() end
                 if EllesmereUI and EllesmereUI._openUnlockMode then
                     EllesmereUI._openUnlockMode()
                 end
@@ -5523,8 +5849,26 @@ do
             end
         end)
 
+        -- Drag handlers (left-drag repositions around minimap)
+        btn:SetScript("OnDragStart", function(self)
+            if InCombatLockdown() then return end
+            isDragging = true
+            self:LockHighlight()
+            self:SetScript("OnUpdate", DragOnUpdate)
+            GameTooltip:Hide()
+        end)
+
+        btn:SetScript("OnDragStop", function(self)
+            self:SetScript("OnUpdate", nil)
+            self:UnlockHighlight()
+            isDragging = false
+            SaveAngle()
+            UpdatePosition()
+        end)
+
         -- Tooltip
         btn:SetScript("OnEnter", function(self)
+            if isDragging or InCombatLockdown() then return end
             GameTooltip:SetOwner(self, "ANCHOR_LEFT")
             GameTooltip:AddLine("|cff0cd29fEllesmereUI|r")
             GameTooltip:AddLine("|cff0cd29dLeft-click:|r |cffE0E0E0Toggle EllesmereUI|r")
@@ -5533,26 +5877,6 @@ do
             GameTooltip:Show()
         end)
         btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-        -- Drag to reposition around minimap
-        btn:SetScript("OnDragStart", function(self)
-            self:StartMoving()
-            self:SetScript("OnUpdate", function()
-                local mx, my = Minimap:GetCenter()
-                local cx, cy = GetCursorPosition()
-                local scale = Minimap:GetEffectiveScale()
-                cx, cy = cx / scale, cy / scale
-                local angle = math.deg(math.atan2(cy - my, cx - mx))
-                SetAngle(angle)
-                UpdatePosition()
-            end)
-        end)
-        btn:SetScript("OnDragStop", function(self)
-            self:StopMovingOrSizing()
-            self:SetScript("OnUpdate", nil)
-            UpdatePosition()
-        end)
-
         UpdatePosition()
 
         -- Respect saved visibility
@@ -5631,8 +5955,10 @@ initFrame:SetScript("OnEvent", function(self, event)
         local function SpellIDTooltipHook(tooltip, data)
             if not (EllesmereUIDB and EllesmereUIDB.showSpellID) then return end
             if not data or not data.id then return end
+            if not tooltip or not tooltip.GetName then return end
             -- Avoid duplicate lines
-            local name = tooltip:GetName()
+            local ok, name = pcall(tooltip.GetName, tooltip)
+            if not ok or not name then return end
             if name then
                 for i = tooltip:NumLines(), 1, -1 do
                     local fs = _G[name .. "TextLeft" .. i]

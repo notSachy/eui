@@ -30,12 +30,16 @@ local defaults = {
             powerPosition = "below",
             powerWidth = 0,
             powerX = 0,
-            powerY = 0,
+            powerY = -4,
             powerPercentText = "none",
+            powerTextFormat = "perpp",
+            powerShowPercent = true,
             powerPercentSize = 9,
             powerPercentX = 0,
             powerPercentY = 0,
-            powerPercentPowerColor = false,
+            powerPercentPowerColor = true,
+            powerPercentTextPowerColor = false,
+            healthClassColored = false,
             healthDisplay = "both",
             showBuffs = false,
             maxBuffs = 4,
@@ -111,6 +115,7 @@ local defaults = {
             showPlayerAbsorb = false,
             showPlayerCastbar = false,
             showPlayerCastIcon = true,
+            castbarHideWhenInactive = true,
             lockCastbarToFrame = true,
             playerCastbarX = 0,
             playerCastbarY = 0,
@@ -158,15 +163,20 @@ local defaults = {
             powerPosition = "below",
             powerWidth = 0,
             powerX = 0,
-            powerY = 0,
+            powerY = -4,
             powerPercentText = "none",
+            powerTextFormat = "perpp",
+            powerShowPercent = true,
             powerPercentSize = 9,
             powerPercentX = 0,
             powerPercentY = 0,
-            powerPercentPowerColor = false,
+            powerPercentPowerColor = true,
+            powerPercentTextPowerColor = false,
+            healthClassColored = false,
             castbarHeight = 14,
             showCastbar = true,
             showCastIcon = true,
+            castbarHideWhenInactive = false,
             castSpellNameSize = 11,
             castSpellNameColor = { r = 1, g = 1, b = 1 },
             castDurationSize = 11,
@@ -259,11 +269,16 @@ local defaults = {
             frameWidth = 181,
             healthHeight = 46,
             powerHeight = 6,
+            powerY = -4,
             powerPercentText = "none",
+            powerTextFormat = "perpp",
+            powerShowPercent = true,
             powerPercentSize = 9,
             powerPercentX = 0,
             powerPercentY = 0,
-            powerPercentPowerColor = false,
+            powerPercentPowerColor = true,
+            powerPercentTextPowerColor = false,
+            healthClassColored = false,
             castbarHeight = 14,
             maxBuffs = 20,
             maxDebuffs = 20,
@@ -324,15 +339,20 @@ local defaults = {
             powerPosition = "below",
             powerWidth = 0,
             powerX = 0,
-            powerY = 0,
+            powerY = -4,
             powerPercentText = "none",
+            powerTextFormat = "perpp",
+            powerShowPercent = true,
             powerPercentSize = 9,
             powerPercentX = 0,
             powerPercentY = 0,
-            powerPercentPowerColor = false,
+            powerPercentPowerColor = true,
+            powerPercentTextPowerColor = false,
+            healthClassColored = false,
             castbarHeight = 14,
             showCastbar = true,
             showCastIcon = true,
+            castbarHideWhenInactive = true,
             castSpellNameSize = 11,
             castSpellNameColor = { r = 1, g = 1, b = 1 },
             castDurationSize = 11,
@@ -423,12 +443,16 @@ local defaults = {
             powerPosition = "below",
             powerWidth = 0,
             powerX = 0,
-            powerY = 0,
+            powerY = -4,
             powerPercentText = "none",
+            powerTextFormat = "perpp",
+            powerShowPercent = true,
             powerPercentSize = 9,
             powerPercentX = 0,
             powerPercentY = 0,
-            powerPercentPowerColor = false,
+            powerPercentPowerColor = true,
+            powerPercentTextPowerColor = false,
+            healthClassColored = false,
             castbarHeight = 14,
             healthDisplay = "perhp",
             showPortrait = false,
@@ -480,41 +504,16 @@ end
 local MANA_COLOR = { r = 0.204, g = 0.349, b = 0.851 }
 
 local SOLID_BACKDROP = { bgFile = "Interface\\Buttons\\WHITE8X8" }
-local BORDER_BACKDROP = { edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 }
-
-local UF_FONT_DIR = "Interface\\AddOns\\EllesmereUI\\media\\fonts\\"
-local fontPaths = {
-    ["Expressway"]          = UF_FONT_DIR .. "Expressway.TTF",
-    ["Avant Garde"]         = UF_FONT_DIR .. "Avant Garde.ttf",
-    ["Arial Bold"]          = UF_FONT_DIR .. "Arial Bold.TTF",
-    ["Poppins"]             = UF_FONT_DIR .. "Poppins.ttf",
-    ["Fira Sans Medium"]    = UF_FONT_DIR .. "FiraSans Medium.ttf",
-    ["Arial Narrow"]        = UF_FONT_DIR .. "Arial Narrow.ttf",
-    ["Changa"]              = UF_FONT_DIR .. "Changa.ttf",
-    ["Cinzel Decorative"]   = UF_FONT_DIR .. "Cinzel Decorative.ttf",
-    ["Exo"]                 = UF_FONT_DIR .. "Exo.otf",
-    ["Fira Sans Bold"]      = UF_FONT_DIR .. "FiraSans Bold.ttf",
-    ["Fira Sans Light"]     = UF_FONT_DIR .. "FiraSans Light.ttf",
-    ["Future X Black"]      = UF_FONT_DIR .. "Future X Black.otf",
-    ["Gotham Narrow Ultra"] = UF_FONT_DIR .. "Gotham Narrow Ultra.otf",
-    ["Gotham Narrow"]       = UF_FONT_DIR .. "Gotham Narrow.otf",
-    ["Russo One"]           = UF_FONT_DIR .. "Russo One.ttf",
-    ["Ubuntu"]              = UF_FONT_DIR .. "Ubuntu.ttf",
-    ["Homespun"]            = UF_FONT_DIR .. "Homespun.ttf",
-    ["Friz Quadrata"]       = "Fonts\\FRIZQT__.TTF",
-    ["Arial"]               = "Fonts\\ARIALN.TTF",
-    ["Morpheus"]            = "Fonts\\MORPHEUS.TTF",
-    ["Skurri"]              = "Fonts\\skurri.ttf",
-}
 
 -- Locale system font override: for CJK/Cyrillic clients, bypass all custom
 -- fonts and use the WoW built-in font that supports the locale's glyphs.
 local LOCALE_FONT_OVERRIDE = EllesmereUI and EllesmereUI.LOCALE_FONT_FALLBACK
 
-local cachedFontPath = LOCALE_FONT_OVERRIDE or fontPaths["Expressway"]
+local cachedFontPath = LOCALE_FONT_OVERRIDE or (EllesmereUI and EllesmereUI.GetFontPath and EllesmereUI.GetFontPath("unitFrames"))
+    or "Interface\\AddOns\\EllesmereUI\\media\\fonts\\Expressway.TTF"
 local cachedFontPaths = {}  -- per-unit font cache
 local function ResolveFontPath(unitKey)
-    -- Locale override takes absolute priority — no custom font can render CJK/Cyrillic
+    -- Locale override takes absolute priority ? no custom font can render CJK/Cyrillic
     if LOCALE_FONT_OVERRIDE then
         cachedFontPath = LOCALE_FONT_OVERRIDE
         for _, uKey in ipairs({"player", "target", "focus", "boss", "pet", "totPet"}) do
@@ -522,33 +521,12 @@ local function ResolveFontPath(unitKey)
         end
         return
     end
-    -- Global font system overrides per-unit fonts
-    if EllesmereUI and EllesmereUI.GetFontPath then
-        local gPath = EllesmereUI.GetFontPath("unitFrames")
-        cachedFontPath = gPath
-        for _, uKey in ipairs({"player", "target", "focus", "boss", "pet", "totPet"}) do
-            cachedFontPaths[uKey] = gPath
-        end
-        return
-    end
-    if unitKey then
-        local s = db and db.profile and db.profile[unitKey]
-        local fontName = s and s.selectedFont or (db and db.profile and db.profile.selectedFont) or "Expressway"
-        cachedFontPaths[unitKey] = fontPaths[fontName] or fontPaths["Expressway"]
-        return
-    end
-    -- Resolve all units + global fallback
-    if db and db.profile then
-        for _, uKey in ipairs({"player", "target", "focus", "boss", "pet", "totPet"}) do
-            local s = db.profile[uKey]
-            local fontName = s and s.selectedFont or db.profile.selectedFont or "Expressway"
-            cachedFontPaths[uKey] = fontPaths[fontName] or fontPaths["Expressway"]
-        end
-        -- Global fallback (used when unit context is unknown)
-        local gFont = db.profile.player and db.profile.player.selectedFont or db.profile.selectedFont or "Expressway"
-        cachedFontPath = fontPaths[gFont] or fontPaths["Expressway"]
-    else
-        cachedFontPath = fontPaths["Expressway"]
+    -- Global font system
+    local gPath = EllesmereUI and EllesmereUI.GetFontPath and EllesmereUI.GetFontPath("unitFrames")
+        or "Interface\\AddOns\\EllesmereUI\\media\\fonts\\Expressway.TTF"
+    cachedFontPath = gPath
+    for _, uKey in ipairs({"player", "target", "focus", "boss", "pet", "totPet"}) do
+        cachedFontPaths[uKey] = gPath
     end
 end
 
@@ -645,7 +623,6 @@ local function ApplyHealthBarTexture(health, unitKey)
     else
         health:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
     end
-    UnsnapTex(health:GetStatusBarTexture())
 
     -- Power bar: same texture
     local frame = health:GetParent()
@@ -656,38 +633,49 @@ local function ApplyHealthBarTexture(health, unitKey)
         else
             power:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
         end
-        UnsnapTex(power:GetStatusBarTexture())
     end
 end
 
 -------------------------------------------------------------------------------
---  Health Bar Opacity â€” controls the overall alpha of the health bar fill
+--  Health Bar Opacity � controls the overall alpha of the health bar fill
 -------------------------------------------------------------------------------
-local function ApplyHealthBarOpacity(health, unitKey)
+local function ApplyHealthBarAlpha(health, unitKey)
     if not health then return end
     local s = unitKey and db.profile[unitKey]
-    local alpha = (s and s.healthBarOpacity) or db.profile.healthBarOpacity or 0.9
-    -- Apply to the fill texture and background only (not the whole frame, which would affect text)
+    local fillA = 0.9
+    local bgA   = 0.75
+    if s then
+        local cf = s.customFillColor
+        if cf and cf.a then fillA = cf.a end
+        local cb = s.customBgColor
+        if cb and cb.a then bgA = cb.a end
+    end
     local fillTex = health:GetStatusBarTexture()
-    if fillTex then fillTex:SetAlpha(alpha) end
-    if health.bg then health.bg:SetAlpha(alpha) end
+    if fillTex then fillTex:SetAlpha(fillA) end
+    if health.bg then health.bg:SetAlpha(bgA) end
 end
 
 -------------------------------------------------------------------------------
---  Power Bar Opacity â€” controls the overall alpha of the power bar
+--  Power Bar Opacity � controls the overall alpha of the power bar
 -------------------------------------------------------------------------------
-local function ApplyPowerBarOpacity(power, unitKey)
+local function ApplyPowerBarAlpha(power, unitKey)
     if not power then return end
     local s = unitKey and db.profile[unitKey]
-    local alpha = (s and s.powerBarOpacity) or db.profile.powerBarOpacity or 1.0
-    -- Apply to the fill texture and background only (not the whole frame, which would affect text)
+    local fillA = 1.0
+    local bgA   = 0.5
+    if s then
+        local cf = s.customPowerFillColor
+        if cf and cf.a then fillA = cf.a end
+        local cb = s.customPowerBgColor
+        if cb and cb.a then bgA = cb.a end
+    end
     local fillTex = power:GetStatusBarTexture()
-    if fillTex then fillTex:SetAlpha(alpha) end
-    if power.bg then power.bg:SetAlpha(alpha) end
+    if fillTex then fillTex:SetAlpha(fillA) end
+    if power.bg then power.bg:SetAlpha(bgA) end
 end
 
 -------------------------------------------------------------------------------
---  Dark Mode â€” flat dark health bar with gray background
+--  Dark Mode � flat dark health bar with gray background
 -------------------------------------------------------------------------------
 local DARK_HEALTH_R, DARK_HEALTH_G, DARK_HEALTH_B = 0x11/255, 0x11/255, 0x11/255  -- #111111
 local DARK_HEALTH_A = 1.0
@@ -702,6 +690,8 @@ local function ApplyDarkTheme(health)
         health.colorTapped = false
         health.colorDisconnected = false
         health:SetStatusBarColor(DARK_HEALTH_R, DARK_HEALTH_G, DARK_HEALTH_B, DARK_HEALTH_A)
+        local darkFillTex = health:GetStatusBarTexture()
+        if darkFillTex then darkFillTex:SetAlpha(0.9) end
         if health.bg then
             -- Anchor bg to only cover the empty (missing-health) portion so the
             -- bar opacity fill shows the world behind it, not the bg color.
@@ -709,22 +699,19 @@ local function ApplyDarkTheme(health)
             health.bg:SetPoint("TOPLEFT", health:GetStatusBarTexture(), "TOPRIGHT", 0, 0)
             health.bg:SetPoint("BOTTOMRIGHT", health, "BOTTOMRIGHT", 0, 0)
             health.bg:SetColorTexture(DARK_BG_R, DARK_BG_G, DARK_BG_B, 1)
+            health.bg:SetAlpha(1)
         end
-        -- PostUpdateColor hook to re-apply after oUF tries to color
+        -- PostUpdateColor: re-apply dark color after oUF tries to class-color,
+        -- and re-anchor bg to track the fill edge.
+        -- Alpha is NOT re-applied here ? SetStatusBarColor(r,g,b) with 3 args
+        -- preserves existing texture alpha, so the alpha set by
+        -- ApplyHealthBarAlpha persists through oUF recolors.
         health.PostUpdateColor = function(self)
             self:SetStatusBarColor(DARK_HEALTH_R, DARK_HEALTH_G, DARK_HEALTH_B, DARK_HEALTH_A)
-            -- Re-apply bar opacity so it isn't lost when oUF recolors
-            local unitKey = self._euiUnitKey
-            local s = unitKey and db.profile[unitKey]
-            local alpha = (s and s.healthBarOpacity) or db.profile.healthBarOpacity or 0.9
-            local ft = self:GetStatusBarTexture()
-            if ft then ft:SetAlpha(alpha) end
             if self.bg then
                 self.bg:ClearAllPoints()
                 self.bg:SetPoint("TOPLEFT", self:GetStatusBarTexture(), "TOPRIGHT", 0, 0)
                 self.bg:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", 0, 0)
-                self.bg:SetColorTexture(DARK_BG_R, DARK_BG_G, DARK_BG_B, 1)
-                self.bg:SetAlpha(alpha)
             end
         end
     else
@@ -732,20 +719,42 @@ local function ApplyDarkTheme(health)
         health.colorReaction = true
         health.colorTapped = true
         health.colorDisconnected = true
-        -- Re-apply bar opacity after oUF recolors (SetVertexColor resets alpha)
-        -- Also tint the bg to 20% class color
+        -- Check for custom fill/bg colors on this unit
+        local unitKey = health._euiUnitKey
+        local unitSettings = unitKey and db.profile[unitKey]
+        local customFill = unitSettings and unitSettings.customFillColor
+        local customBg   = unitSettings and unitSettings.customBgColor
+        if customFill then
+            -- Custom fill overrides class coloring; skip if class color is enabled
+            if not (unitSettings and unitSettings.healthClassColored) then
+                health.colorClass = false
+                health.colorReaction = false
+                health.colorTapped = false
+                health.colorDisconnected = false
+                health:SetStatusBarColor(customFill.r, customFill.g, customFill.b)
+            end
+        end
+        -- Tint bg to 20% of the class/reaction color, or use custom bg color.
+        -- Alpha is NOT re-applied ? SetStatusBarColor(r,g,b) preserves
+        -- existing texture alpha through oUF recolors.
         health.PostUpdateColor = function(self, _, color)
-            local unitKey = self._euiUnitKey
-            local s = unitKey and db.profile[unitKey]
-            local alpha = (s and s.healthBarOpacity) or db.profile.healthBarOpacity or 0.9
-            local ft = self:GetStatusBarTexture()
-            if ft then ft:SetAlpha(alpha) end
+            local uKey = self._euiUnitKey
+            local uSettings = uKey and db.profile[uKey]
+            local cFill = uSettings and uSettings.customFillColor
+            local cBg   = uSettings and uSettings.customBgColor
+            local classColored = uSettings and uSettings.healthClassColored
+            if cFill and not classColored then
+                self:SetStatusBarColor(cFill.r, cFill.g, cFill.b)
+            end
             if self.bg then
-                if color and color.GetRGB then
+                if cBg then
+                    self.bg:SetColorTexture(cBg.r, cBg.g, cBg.b, 1)
+                elseif cFill and not classColored then
+                    self.bg:SetColorTexture(cFill.r * 0.2, cFill.g * 0.2, cFill.b * 0.2, 1)
+                elseif color and color.GetRGB then
                     local r, g, b = color:GetRGB()
-                    self.bg:SetColorTexture(r * 0.2, g * 0.2, b * 0.2, 0.75)
+                    self.bg:SetColorTexture(r * 0.2, g * 0.2, b * 0.2, 1)
                 end
-                self.bg:SetAlpha(alpha)
             end
         end
         if health.bg then
@@ -753,25 +762,57 @@ local function ApplyDarkTheme(health)
             health.bg:ClearAllPoints()
             PP.Point(health.bg, "TOPLEFT", health, "TOPLEFT", 0, 0)
             PP.Point(health.bg, "BOTTOMRIGHT", health, "BOTTOMRIGHT", 0, 0)
-            health.bg:SetColorTexture(0, 0, 0, 0.75)
+            if customBg then
+                health.bg:SetColorTexture(customBg.r, customBg.g, customBg.b, 1)
+            elseif customFill then
+                health.bg:SetColorTexture(customFill.r * 0.2, customFill.g * 0.2, customFill.b * 0.2, 1)
+            else
+                health.bg:SetColorTexture(0, 0, 0, 1)
+            end
         end
     end
 end
 ns.ApplyDarkTheme = ApplyDarkTheme
 
+-- Smart power text: percent for healers/prot pally/arcane mage, numeric for everyone else.
+-- Shared helper used by both the oUF tag and the resource bars renderer.
+local function EUI_IsSmartPowerPercent()
+    local _, cls = UnitClass("player")
+    if not cls then return false end
+    -- Druids: use percent in caster and travel form; other forms use raw value.
+    if cls == "DRUID" then
+        local form = GetShapeshiftForm()
+        return form == nil or form == 0 or form == 3
+    end
+    if cls == "PRIEST" or cls == "SHAMAN" or cls == "MONK" then
+        return true
+    end
+    -- Paladin: only Holy
+    if cls == "PALADIN" then
+        local spec = GetSpecialization()
+        return spec == 1  -- Holy
+    end
+    -- Mage: only Arcane
+    if cls == "MAGE" then
+        local spec = GetSpecialization()
+        return spec == 1  -- Arcane
+    end
+    -- Evoker: only Preservation
+    if cls == "EVOKER" then
+        local spec = GetSpecialization()
+        return spec == 2  -- Preservation
+    end
+    return false
+end
+ns.EUI_IsSmartPowerPercent = EUI_IsSmartPowerPercent
+EllesmereUI.IsSmartPowerPercent = EUI_IsSmartPowerPercent
+
 do
   local tagName = "curhpshort"
   local function AbbrevHP(unit)
-    if not unit or not UnitExists(unit) then
-      return ""
-    end
-    if not UnitIsConnected(unit) then
-      return "OFFLINE"
-    end
-    if UnitIsDeadOrGhost(unit) then
-      return "DEAD"
-    end
-
+    if not unit or not UnitExists(unit) then return "" end
+    if not UnitIsConnected(unit) then return "OFFLINE" end
+    if UnitIsDeadOrGhost(unit) then return "DEAD" end
     local hp = UnitHealth(unit) or 0
     return AbbreviateLargeNumbers(hp)
   end
@@ -779,6 +820,32 @@ do
   oUF.Tags.Methods[tagName] = AbbrevHP
   oUF.Tags.Events[tagName] = "UNIT_HEALTH UNIT_MAXHEALTH"
 end
+
+do
+  oUF.Tags.Methods["perhpnosign"] = function(unit)
+    if not unit or not UnitExists(unit) then return "" end
+    if not UnitIsConnected(unit) then return "OFFLINE" end
+    if UnitIsDeadOrGhost(unit) then return "DEAD" end
+    local hp, maxHP = UnitHealth(unit), UnitHealthMax(unit)
+    if not hp or not maxHP or maxHP == 0 then return "0" end
+    return tostring(math.floor(hp / maxHP * 100 + 0.5))
+  end
+  oUF.Tags.Events["perhpnosign"] = "UNIT_HEALTH UNIT_MAXHEALTH"
+end
+
+-- eui-perpp: power percent using explicit power type (runs in oUF _PROXY env)
+oUF.Tags.Methods["eui-perpp"] = [[function(u)
+    local pType = UnitPowerType(u)
+    return string.format('%d', UnitPowerPercent(u, pType, true, CurveConstants.ScaleTo100))
+end]]
+oUF.Tags.Events["eui-perpp"] = "UNIT_POWER_UPDATE UNIT_MAXPOWER UNIT_DISPLAYPOWER"
+
+-- eui-curpp: current power as abbreviated number
+oUF.Tags.Methods["eui-curpp"] = [[function(u)
+    local pType = UnitPowerType(u)
+    return AbbreviateLargeNumbers(UnitPower(u, pType))
+end]]
+oUF.Tags.Events["eui-curpp"] = "UNIT_POWER_UPDATE UNIT_MAXPOWER UNIT_DISPLAYPOWER"
 
 local optionsFrame
 local optionsCategoryID
@@ -802,7 +869,7 @@ local function GetSettingsForUnit(unit)
     return unitSettingsMap[unit] or db.profile.player
 end
 
--- Returns the donor settings table for mini frames (focus â†’ target â†’ player)
+-- Returns the donor settings table for mini frames (focus ? target ? player)
 -- Used to inherit border, texture, and font settings
 local function GetMiniDonorSettings()
     local ef = db.profile.enabledFrames
@@ -905,12 +972,14 @@ local function GetBossHealthTag()
 end
 
 -- Resolve a leftTextContent / rightTextContent value to an oUF tag string.
--- content: "name", "both", "curhpshort", "perhp", "none"
+-- content: "name", "both", "curhpshort", "perhp", "perhpnosign", "perhpnum", "none"
 local function ContentToTag(content)
     if content == "name" then return "[name]"
     elseif content == "both" then return "[curhpshort] | [perhp]%"
+    elseif content == "perhpnum" then return "[perhp]% | [curhpshort]"
     elseif content == "curhpshort" then return "[curhpshort]"
     elseif content == "perhp" then return "[perhp]%"
+    elseif content == "perhpnosign" then return "[perhpnosign]"
     elseif content == "perpp" then return "[perpp]%"
     elseif content == "curpp" then return "[curpp]"
     elseif content == "curhp_curpp" then return "[curhpshort] | [curpp]"
@@ -923,8 +992,10 @@ end
 local UF_TEXT_PADDING = 10
 local ufTextWidths = {
     both        = 75,  -- "132 K | 86%"
+    perhpnum    = 75,  -- "86% | 132 K"
     curhpshort  = 38,  -- "132 K"
     perhp       = 38,  -- "86%"
+    perhpnosign = 30,  -- "86"
     perpp       = 38,  -- "86%"
     curpp       = 38,  -- "132"
     curhp_curpp = 75,  -- "132 K | 132"
@@ -1106,7 +1177,6 @@ local function ApplyDetachedPortraitShape(backdrop, uSettings, unitToken)
     -- === TGA BORDER OVERLAY ===
     if not backdrop._shapeBorderTex then
         backdrop._shapeBorderTex = backdrop:CreateTexture(nil, "OVERLAY")
-        UnsnapTex(backdrop._shapeBorderTex)
     end
     backdrop._shapeBorderTex:ClearAllPoints()
     PP.Point(backdrop._shapeBorderTex, "TOPLEFT", backdrop, "TOPLEFT", -bExp, bExp)
@@ -1191,7 +1261,6 @@ local function CreateBottomTextBar(frame, unit, settings, anchorFrame, xOffset, 
     local bg = btb:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()
     bg:SetColorTexture(bgc.r, bgc.g, bgc.b, bga)
-    UnsnapTex(bg)
     btb.bg = bg
 
     -- Text overlay
@@ -1294,13 +1363,12 @@ local function CreateBottomTextBar(frame, unit, settings, anchorFrame, xOffset, 
     btb._applyBTBTextTags = ApplyBTBTextTags
     btb._applyBTBTextPositions = ApplyBTBTextPositions
 
-    -- Class icon overlay â€” on a high-level frame so it renders above the border
+    -- Class icon overlay � on a high-level frame so it renders above the border
     local classIconHolder = CreateFrame("Frame", nil, frame)
     classIconHolder:SetAllPoints(textOvr)
     classIconHolder:SetFrameLevel(frame:GetFrameLevel() + 12)
     local classIconTex = classIconHolder:CreateTexture(nil, "ARTWORK")
     classIconTex:SetTexCoord(0, 1, 0, 1)
-    UnsnapTex(classIconTex)
     classIconTex:Hide()
     btb.ClassIcon = classIconTex
 
@@ -1310,7 +1378,6 @@ local function CreateBottomTextBar(frame, unit, settings, anchorFrame, xOffset, 
         local _, classToken = UnitClass(unit)
         if not classToken then classIconTex:Hide(); return end
         if not ApplyClassIconTexture(classIconTex, classToken, style) then classIconTex:Hide(); return end
-        UnsnapTex(classIconTex)
         local sz = s.btbClassIconSize or 14
         PP.Size(classIconTex, sz, sz)
         classIconTex:ClearAllPoints()
@@ -1333,7 +1400,7 @@ local function CreateBottomTextBar(frame, unit, settings, anchorFrame, xOffset, 
     return btb
 end
 
--- SetFrameMovable removed Ã¢â‚¬â€ positioning is now handled by Unlock Mode
+-- SetFrameMovable removed — positioning is now handled by Unlock Mode
 
 local function ApplyFramePosition(frame, unit)
     if not frame or not db.profile.positions[unit] then return end
@@ -1354,12 +1421,8 @@ local function UpdateBordersForScale(frame, unit)
     local borderSize = settings.borderSize or 1
 
     -- 1) Main frame border textures
-    if frame.unifiedBorder and frame.unifiedBorder._texs then
-        local texs = frame.unifiedBorder._texs
-        PP.Height(texs[1], borderSize)
-        PP.Height(texs[2], borderSize)
-        PP.Width(texs[3], borderSize)
-        PP.Width(texs[4], borderSize)
+    if frame.unifiedBorder then
+        PP.SetBorderSize(frame.unifiedBorder, borderSize)
     end
 
     -- 2) Gather layout info
@@ -1367,7 +1430,7 @@ local function UpdateBordersForScale(frame, unit)
     local ppIsAtt = (ppPos == "below" or ppPos == "above")
     local ppIsDet = (ppPos == "detached_top" or ppPos == "detached_bottom")
     local ph = settings.powerHeight or 6
-    -- Simple frames (pet/tot/focustarget) have no power bar â€” skip power height
+    -- Simple frames (pet/tot/focustarget) have no power bar � skip power height
     local isMini = (unit == "pet" or unit == "targettarget" or unit == "focustarget")
     local powerH = (ppIsAtt and not isMini) and ph or 0
 
@@ -1419,18 +1482,31 @@ local function UpdateBordersForScale(frame, unit)
         local snappedPortH = frame.Portrait.backdrop:GetHeight()
         -- Trim portrait width if it + health would exceed frame
         if snappedPortW + healthTargetW > snappedFrameW + 0.01 then
-            frame.Portrait.backdrop:SetWidth(snappedFrameW - healthTargetW)
+            PP.Width(frame.Portrait.backdrop, snappedFrameW - healthTargetW)
             snappedPortW = frame.Portrait.backdrop:GetWidth()
         end
         -- Trim portrait height to frame height if it overflows
         if snappedPortH > snappedFrameH + 0.01 then
-            frame.Portrait.backdrop:SetHeight(snappedFrameH)
+            PP.Height(frame.Portrait.backdrop, snappedFrameH)
         end
     end
 
-    -- 5) Re-snap health bar height (width is derived from two-point anchoring)
+    -- 5) Re-snap health bar height and re-anchor to snapped portrait width
     if frame.Health then
         PP.Height(frame.Health, settings.healthHeight)
+        -- Re-anchor health bar so it's flush against the snapped portrait edge
+        if showPortrait and isAttached and frame.Portrait and frame.Portrait.backdrop then
+            local snappedPortW = frame.Portrait.backdrop:GetWidth()
+            local newXOff = (effectiveSide == "left") and snappedPortW or 0
+            local newRightInset = (effectiveSide == "right") and snappedPortW or 0
+            local topOff = frame.Health._topOffset or 0
+            frame.Health:ClearAllPoints()
+            PP.Point(frame.Health, "TOPLEFT", frame, "TOPLEFT", newXOff, -topOff)
+            PP.Point(frame.Health, "RIGHT", frame, "RIGHT", -newRightInset, 0)
+            PP.Height(frame.Health, settings.healthHeight)
+            frame.Health._xOffset = newXOff
+            frame.Health._rightInset = newRightInset
+        end
     end
 
     -- 6) Re-snap power bar
@@ -1446,19 +1522,19 @@ local function UpdateBordersForScale(frame, unit)
             local snappedPowerH = frame.Power:GetHeight()
             local expectedBarH = settings.healthHeight + ph
             if snappedHealthH + snappedPowerH > expectedBarH + 0.01 then
-                frame.Power:SetHeight(snappedPowerH - (snappedHealthH + snappedPowerH - expectedBarH))
+                PP.Height(frame.Power, snappedPowerH - (snappedHealthH + snappedPowerH - expectedBarH))
             end
             -- Width: match health bar width exactly
             local snappedHealthW = frame.Health:GetWidth()
             local snappedPowerW = frame.Power:GetWidth()
             if math.abs(snappedPowerW - snappedHealthW) > 0.01 then
-                frame.Power:SetWidth(snappedHealthW)
+                PP.Width(frame.Power, snappedHealthW)
             end
         elseif not ppIsDet then
             -- Non-attached non-detached shouldn't happen, but trim width to frame
             local snappedPowerW = frame.Power:GetWidth()
             if snappedPowerW > snappedFrameW + 0.01 then
-                frame.Power:SetWidth(snappedFrameW)
+                PP.Width(frame.Power, snappedFrameW)
             end
         end
     end
@@ -1470,14 +1546,14 @@ local function UpdateBordersForScale(frame, unit)
         local snappedBtbH = frame.BottomTextBar:GetHeight()
         -- Width: trim to frame width
         if snappedBtbW > snappedFrameW + 0.01 then
-            frame.BottomTextBar:SetWidth(snappedFrameW)
+            PP.Width(frame.BottomTextBar, snappedFrameW)
         end
         -- Height: ensure full stack fits within frame height
         local usedH = cpAboveH
         if frame.Health then usedH = usedH + frame.Health:GetHeight() end
         if frame.Power and ppIsAtt then usedH = usedH + frame.Power:GetHeight() end
         if usedH + snappedBtbH > snappedFrameH + 0.01 then
-            frame.BottomTextBar:SetHeight(snappedBtbH - (usedH + snappedBtbH - snappedFrameH))
+            PP.Height(frame.BottomTextBar, snappedBtbH - (usedH + snappedBtbH - snappedFrameH))
         end
     end
 
@@ -1488,17 +1564,11 @@ local function UpdateBordersForScale(frame, unit)
             -- Trim castbar bg width to match frame width
             local cbW = castbarBg:GetWidth()
             if cbW > snappedFrameW + 0.01 then
-                castbarBg:SetWidth(snappedFrameW)
+                PP.Width(castbarBg, snappedFrameW)
             end
             -- Re-snap border textures
-            if castbarBg._borderTexs then
-                for _, info in ipairs(castbarBg._borderTexs) do
-                    if info.edge == "width" then
-                        PP.Width(info.tex, 1)
-                    else
-                        PP.Height(info.tex, 1)
-                    end
-                end
+            if castbarBg._ppBorders then
+                PP.SetBorderSize(castbarBg, 1)
                 frame.Castbar:ClearAllPoints()
                 PP.Point(frame.Castbar, "TOPLEFT", castbarBg, "TOPLEFT", 0, 0)
                 PP.Point(frame.Castbar, "BOTTOMRIGHT", castbarBg, "BOTTOMRIGHT", 0, 0)
@@ -1642,7 +1712,7 @@ local function ApplyFrameScaleCentered(frame, unit, newScale, animate)
     end)
 end
 
--- ToggleLock removed Ã¢â‚¬â€ positioning is now handled by Unlock Mode
+-- ToggleLock removed — positioning is now handled by Unlock Mode
 
 -- fakeFrames / CreateFakeFrame / ShowFakeFrames / HideFakeFrames removed
 -- Positioning is now handled exclusively by Unlock Mode
@@ -1688,7 +1758,7 @@ local function GetFrameDimensions(unit)
     return 150, 30
 end
 
--- ShowFakeFrames / HideFakeFrames removed Ã¢â‚¬â€ Unlock Mode handles all positioning
+-- ShowFakeFrames / HideFakeFrames removed — Unlock Mode handles all positioning
 
 local function CreateHealthBar(frame, unit, height, xOffset, settings, rightInset)
     height = height or settings.healthHeight
@@ -1703,15 +1773,14 @@ local function CreateHealthBar(frame, unit, height, xOffset, settings, rightInse
     PP.Height(health, height)
     health._xOffset = xOffset  -- store for class power repositioning
     health._rightInset = rightInset  -- store for class power repositioning
+    health._topOffset = 0  -- store for SnapLayout re-anchoring
     health:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
     health:GetStatusBarTexture():SetHorizTile(false)
-    UnsnapTex(health:GetStatusBarTexture())
 
     local bg = health:CreateTexture(nil, "BACKGROUND")
     PP.Point(bg, "TOPLEFT", health, "TOPLEFT", 0, 0)
     PP.Point(bg, "BOTTOMRIGHT", health, "BOTTOMRIGHT", 0, 0)
     bg:SetColorTexture(0, 0, 0, 0.5)
-    UnsnapTex(bg)
     health.bg = bg
 
     health.colorClass = true
@@ -1721,7 +1790,7 @@ local function CreateHealthBar(frame, unit, height, xOffset, settings, rightInse
     health._euiUnitKey = UnitToSettingsKey(unit)
 
     ApplyHealthBarTexture(health, UnitToSettingsKey(unit))
-    ApplyHealthBarOpacity(health, UnitToSettingsKey(unit))
+    ApplyHealthBarAlpha(health, UnitToSettingsKey(unit))
     ApplyDarkTheme(health)
 
     return health
@@ -1740,7 +1809,6 @@ local function CreateAbsorbBar(frame, unit, settings)
     shieldBar:SetStatusBarTexture("Interface\\AddOns\\EllesmereUIUnitFrames\\Media\\shield.tga")
     shieldBar:SetStatusBarColor(1, 1, 1, 0.8)
     shieldBar:SetReverseFill(true)
-    UnsnapTex(shieldBar:GetStatusBarTexture())
     shieldBar:ClearAllPoints()
     shieldBar:SetPoint("TOPRIGHT", hpBar:GetStatusBarTexture(), "TOPRIGHT", 0, 0)
     shieldBar:SetPoint("BOTTOMRIGHT", hpBar:GetStatusBarTexture(), "BOTTOMRIGHT", 0, 0)
@@ -1770,32 +1838,56 @@ local function CreatePowerBar(frame, unit, settings)
     if powerPos == "none" then
         power:Hide()
     elseif powerPos == "above" then
-        PP.Point(power, "BOTTOM", frame.Health, "TOP", 0, 0)
+        PP.Point(power, "BOTTOMLEFT", frame.Health, "TOPLEFT", 0, 0)
     elseif powerPos == "detached_top" then
         power:SetPoint("BOTTOM", frame.Health, "TOP", settings.powerX or 0, 15 + (settings.powerY or 0))
     elseif powerPos == "detached_bottom" then
         power:SetPoint("TOP", frame.Health, "BOTTOM", settings.powerX or 0, -15 + (settings.powerY or 0))
     else -- "below" (default)
-        PP.Point(power, "TOP", frame.Health, "BOTTOM", 0, 0)
+        PP.Point(power, "TOPLEFT", frame.Health, "BOTTOMLEFT", 0, 0)
     end
 
     power:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
     power:GetStatusBarTexture():SetHorizTile(false)
-    UnsnapTex(power:GetStatusBarTexture())
 
     local bg = power:CreateTexture(nil, "BACKGROUND")
     PP.Point(bg, "TOPLEFT", power, "TOPLEFT", 0, 0)
     PP.Point(bg, "BOTTOMRIGHT", power, "BOTTOMRIGHT", 0, 0)
-    bg:SetColorTexture(0, 0, 0, 0.5)
-    UnsnapTex(bg)
+    bg:SetColorTexture(0, 0, 0, 1)
     power.bg = bg
 
-    power.colorPower = true
+    -- Power bar fill color: controlled by powerPercentPowerColor toggle
+    local usePowerColor = settings.powerPercentPowerColor ~= false
+    if usePowerColor then
+        power.colorPower = true
+    else
+        power.colorPower = false
+        local customFill = settings.customPowerFillColor
+        if customFill then
+            power:SetStatusBarColor(customFill.r, customFill.g, customFill.b)
+            power.PostUpdateColor = function(self)
+                local s2 = GetSettingsForUnit(unit)
+                local cf = s2 and s2.customPowerFillColor
+                if cf then self:SetStatusBarColor(cf.r, cf.g, cf.b) end
+            end
+        else
+            power:SetStatusBarColor(0.2, 0.35, 0.85)
+            power.PostUpdateColor = function(self)
+                self:SetStatusBarColor(0.2, 0.35, 0.85)
+            end
+        end
+    end
+
+    -- Custom power bar background color
+    local customBg = settings.customPowerBgColor
+    if customBg then
+        bg:SetColorTexture(customBg.r, customBg.g, customBg.b, 1)
+    end
 
     -- Power percent text overlay
     local ppTextOvr = CreateFrame("Frame", nil, power)
-    ppTextOvr:SetAllPoints()
-    ppTextOvr:SetFrameLevel(power:GetFrameLevel() + 2)
+    ppTextOvr:SetAllPoints(power)
+    ppTextOvr:SetFrameLevel(frame:GetFrameLevel() + 11)
     local ppFS = ppTextOvr:CreateFontString(nil, "OVERLAY")
     SetFSFont(ppFS, settings.powerPercentSize or 9)
     ppFS:Hide()
@@ -1804,13 +1896,13 @@ local function CreatePowerBar(frame, unit, settings)
 
     local function ApplyPowerPercentText(s)
         local pos = s.powerPercentText or "none"
-        local sz = s.powerPercentSize or 9
-        local ox = s.powerPercentX or 0
-        local oy = s.powerPercentY or 0
-        local usePowerColor = s.powerPercentPowerColor
+        local sz  = s.powerPercentSize or 9
+        local ox  = s.powerPercentX or 0
+        local oy  = s.powerPercentY or 0
 
         SetFSFont(ppFS, sz)
         ppFS:ClearAllPoints()
+
         if pos == "none" then
             ppFS:Hide()
             if ppFS._curTag then frame:Untag(ppFS); ppFS._curTag = nil end
@@ -1829,18 +1921,34 @@ local function CreatePowerBar(frame, unit, settings)
         end
 
         if ppFS._curTag then frame:Untag(ppFS); ppFS._curTag = nil end
-        local tag = "[perpp]%"
+        local showPct = s.powerShowPercent ~= false
+        local pctSuffix = showPct and "%" or ""
+        local fmt = s.powerTextFormat or "perpp"
+        local tag
+        if fmt == "curpp" then
+            tag = "[eui-curpp]"
+        elseif fmt == "both" then
+            tag = "[eui-curpp] | [eui-perpp]" .. pctSuffix
+        elseif fmt == "smart" then
+            -- smart: percent for mana-based specs, numeric for others
+            -- resolved at apply time; re-applied on spec change via ReloadAndUpdate
+            local isPercent = EUI_IsSmartPowerPercent()
+            tag = isPercent and ("[eui-perpp]" .. pctSuffix) or "[eui-curpp]"
+        else -- "perpp" default
+            tag = "[eui-perpp]" .. pctSuffix
+        end
         frame:Tag(ppFS, tag); ppFS._curTag = tag
         if frame.UpdateTags then frame:UpdateTags() end
 
-        if usePowerColor then
+        -- Text color: power-colored > custom color > white
+        if s.powerPercentTextPowerColor then
             local pType = UnitPowerType(unit)
             local info = PowerBarColor[pType]
-            if info then
-                ppFS:SetTextColor(info.r, info.g, info.b)
-            else
-                ppFS:SetTextColor(1, 1, 1)
-            end
+            if info then ppFS:SetTextColor(info.r, info.g, info.b)
+            else ppFS:SetTextColor(1, 1, 1) end
+        elseif s.powerTextColor then
+            local tc = s.powerTextColor
+            ppFS:SetTextColor(tc.r, tc.g, tc.b, tc.a or 1)
         else
             ppFS:SetTextColor(1, 1, 1)
         end
@@ -1850,7 +1958,71 @@ local function CreatePowerBar(frame, unit, settings)
     ApplyPowerPercentText(settings)
     power._applyPowerPercentText = ApplyPowerPercentText
 
-    ApplyPowerBarOpacity(power, UnitToSettingsKey(unit))
+    ApplyPowerBarAlpha(power, UnitToSettingsKey(unit))
+
+    -- Hide power bar for enemy NPCs that don't use power (melee mobs, etc.)
+    -- Show power for: player, friendly units, enemy players, bosses, minibosses, casters
+    power._grayedOut = false
+    power.PostUpdate = function(self, u, cur, min, max)
+        local s = GetSettingsForUnit(u)
+        if not s then return end
+
+        local pp = s.powerPosition or "below"
+        if pp == "none" or pp == "detached_top" or pp == "detached_bottom" then return end
+
+        -- Classification check: gray out power bar for generic melee NPCs
+        local ok, shouldGray = pcall(function()
+            if u == "player" or not UnitExists(u) then return false end
+            if not UnitCanAttack("player", u) or UnitIsPlayer(u) then return false end
+            local cls = UnitClassification(u)
+            if cls == "worldboss" then return false end
+            local isElite = (cls == "elite" or cls == "rareelite")
+            local lvl = UnitLevel(u)
+            local pLvl = UnitLevel("player")
+            if isElite and (lvl == -1 or (pLvl and lvl >= pLvl + 1)) then return false end
+            if UnitClassBase and UnitClassBase(u) == "PALADIN" then return false end
+            return true
+        end)
+        if not ok then return end
+
+        if shouldGray and not self._grayedOut then
+            self._grayedOut = true
+            if self.bg then
+                self.bg:SetColorTexture(0.25, 0.25, 0.25, 1)
+                self.bg:SetAlpha(1)
+            end
+        elseif not shouldGray and self._grayedOut then
+            self._grayedOut = false
+            local customBg = s.customPowerBgColor
+            if customBg then
+                if self.bg then self.bg:SetColorTexture(customBg.r, customBg.g, customBg.b, 1) end
+            else
+                if self.bg then self.bg:SetColorTexture(0, 0, 0, 1) end
+            end
+            -- Restore original bg alpha
+            if self.bg then
+                local bgA = 0.5
+                if customBg and customBg.a then bgA = customBg.a end
+                self.bg:SetAlpha(bgA)
+            end
+        end
+    end
+
+    -- Shadow Priest: show Mana on the power bar
+    -- (Insanity is shown as class resource on Resource Bars)
+    if unit == "player" then
+        local _, classFile = UnitClass("player")
+        if classFile == "PRIEST" then
+            power.displayAltPower = true
+            power.GetDisplayPower = function(self, u)
+                local spec = GetSpecialization and GetSpecialization()
+                if classFile == "PRIEST" and spec == 3 then -- Shadow
+                    return 0 -- Enum.PowerType.Mana
+                end
+                return nil
+            end
+        end
+    end
 
     return power
 end
@@ -1889,7 +2061,6 @@ local function CreatePortrait(frame, side, frameHeight, unit)
     PP.Point(bgTex, "TOPLEFT", backdrop, "TOPLEFT", 0, 0)
     PP.Point(bgTex, "BOTTOMRIGHT", backdrop, "BOTTOMRIGHT", 0, 0)
     bgTex:SetColorTexture(0.1, 0.1, 0.1, 1)
-    UnsnapTex(bgTex)
     backdrop._bg = bgTex
 
     if isAttached then
@@ -1911,18 +2082,26 @@ local function CreatePortrait(frame, side, frameHeight, unit)
         backdrop:SetFrameLevel(frame:GetFrameLevel() + 15)
     end
 
-    -- Always create 2D, 3D, and class theme textures; only show the active one.
-    local model3D = CreateFrame("PlayerModel", nil, backdrop)
-    PP.Point(model3D, "TOPLEFT", backdrop, "TOPLEFT", 0, 0)
-    PP.Point(model3D, "BOTTOMRIGHT", backdrop, "BOTTOMRIGHT", 0, 0)
-    model3D:SetCamera(0)
-    model3D:Hide()
+    -- Create 2D and class theme textures eagerly; 3D PlayerModel is deferred
+    -- until actually needed (mode == "3d") to avoid GPU/memory cost when unused.
+    local model3D = nil  -- lazy-created only when mode is "3d"
+
+    local function EnsureModel3D()
+        if model3D then return model3D end
+        model3D = CreateFrame("PlayerModel", nil, backdrop)
+        PP.Point(model3D, "TOPLEFT", backdrop, "TOPLEFT", 0, 0)
+        PP.Point(model3D, "BOTTOMRIGHT", backdrop, "BOTTOMRIGHT", 0, 0)
+        model3D:SetCamera(0)
+        model3D:Hide()
+        backdrop._3d = model3D
+        return model3D
+    end
+    backdrop._ensureModel3D = EnsureModel3D
 
     local tex2D = backdrop:CreateTexture(nil, "ARTWORK")
     PP.Point(tex2D, "TOPLEFT", backdrop, "TOPLEFT", 0, 0)
     PP.Point(tex2D, "BOTTOMRIGHT", backdrop, "BOTTOMRIGHT", 0, 0)
     tex2D:SetTexCoord(0.15, 0.85, 0.15, 0.85)
-    UnsnapTex(tex2D)
     tex2D:Hide()
 
     -- Class theme icon (static texture, no oUF element needed)
@@ -1934,7 +2113,6 @@ local function CreatePortrait(frame, side, frameHeight, unit)
     local _, classToken = UnitClass("player")
     local classStyle = (uSettings and uSettings.classThemeStyle) or "modern"
     ApplyClassIconTexture(texClass, classToken or "WARRIOR", classStyle)
-    UnsnapTex(texClass)
     texClass:Hide()
 
     backdrop._3d = model3D
@@ -1967,8 +2145,9 @@ local function CreatePortrait(frame, side, frameHeight, unit)
         active = tex2D
         active.is2D = true
     else
-        model3D:Show()
-        active = model3D
+        local m3d = EnsureModel3D()
+        m3d:Show()
+        active = m3d
         active.is2D = false
     end
     active.backdrop = backdrop
@@ -2032,7 +2211,7 @@ local function CreateCastBar(frame, unit, settings)
         else
             PP.Size(castbarBg, totalWidth, settings.castbarHeight or 14)
         end
-        -- Player castbar is always locked to frame â€” anchor from left edge of frame
+        -- Player castbar is always locked to frame � anchor from left edge of frame
         local healthOff = (frame.Health and frame.Health._xOffset) or 0
         castbarBg:SetPoint("TOPLEFT", anchorFrame, "BOTTOMLEFT", -healthOff, 0)
     else
@@ -2044,42 +2223,15 @@ local function CreateCastBar(frame, unit, settings)
     PP.Point(bgTex, "TOPLEFT", castbarBg, "TOPLEFT", 0, 0)
     PP.Point(bgTex, "BOTTOMRIGHT", castbarBg, "BOTTOMRIGHT", 0, 0)
     bgTex:SetColorTexture(0, 0, 0, 0.5)
-    UnsnapTex(bgTex)
 
-    local leftBorder = castbarBg:CreateTexture(nil, "OVERLAY")
-    leftBorder:SetColorTexture(0, 0, 0, 1)
-    UnsnapTex(leftBorder)
-    PP.Width(leftBorder, 1)
-    PP.Point(leftBorder, "TOPLEFT", castbarBg, "TOPLEFT", 0, 0)
-    PP.Point(leftBorder, "BOTTOMLEFT", castbarBg, "BOTTOMLEFT", 0, 0)
-
-    local rightBorder = castbarBg:CreateTexture(nil, "OVERLAY")
-    rightBorder:SetColorTexture(0, 0, 0, 1)
-    UnsnapTex(rightBorder)
-    PP.Width(rightBorder, 1)
-    PP.Point(rightBorder, "TOPRIGHT", castbarBg, "TOPRIGHT", 0, 0)
-    PP.Point(rightBorder, "BOTTOMRIGHT", castbarBg, "BOTTOMRIGHT", 0, 0)
-
-    local bottomBorder = castbarBg:CreateTexture(nil, "OVERLAY")
-    bottomBorder:SetColorTexture(0, 0, 0, 1)
-    UnsnapTex(bottomBorder)
-    PP.Height(bottomBorder, 1)
-    PP.Point(bottomBorder, "BOTTOMLEFT", castbarBg, "BOTTOMLEFT", 0, 0)
-    PP.Point(bottomBorder, "BOTTOMRIGHT", castbarBg, "BOTTOMRIGHT", 0, 0)
-
-    -- Store castbar border textures so UpdateBordersForScale can adjust them
-    castbarBg._borderTexs = {
-        { tex = leftBorder,   edge = "width" },
-        { tex = rightBorder,  edge = "width" },
-        { tex = bottomBorder, edge = "height" },
-    }
+    -- Castbar borders (3 edges: left, right, bottom ? top is shared with the frame above)
+    PP.CreateBorder(castbarBg, 0, 0, 0, 1, 1, "OVERLAY", 0)
 
     local castbar = CreateFrame("StatusBar", nil, castbarBg)
     PP.Point(castbar, "TOPLEFT", castbarBg, "TOPLEFT", 0, 0)
     PP.Point(castbar, "BOTTOMRIGHT", castbarBg, "BOTTOMRIGHT", 0, 0)
     castbar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
     castbar:GetStatusBarTexture():SetHorizTile(false)
-    UnsnapTex(castbar:GetStatusBarTexture())
 
 
     local text = castbar:CreateFontString(nil, "OVERLAY")
@@ -2124,10 +2276,11 @@ local function CreateCastBar(frame, unit, settings)
             self.castTintLayer:SetAlpha(1)
             local cc
             local uSettings = self._eufSettings
-            if uSettings and uSettings.castbarClassColored then
-                local unit = self.__owner and self.__owner.unit
-                if unit then
-                    local _, classToken = UnitClass(unit)
+            -- Class colored only applies to the player cast bar
+            local ownerUnit = self.__owner and self.__owner.unit
+            if uSettings and uSettings.castbarClassColored and ownerUnit == "player" then
+                if ownerUnit then
+                    local _, classToken = UnitClass(ownerUnit)
                     if classToken then
                         cc = RAID_CLASS_COLORS[classToken]
                     end
@@ -2167,16 +2320,8 @@ local function CreateCastBar(frame, unit, settings)
     local iconBg = iconFrame:CreateTexture(nil, "BACKGROUND")
     iconBg:SetAllPoints()
     iconBg:SetColorTexture(0, 0, 0, 1)
-    -- 1px black border
-    local function MkCBdr(parent)
-        local t = parent:CreateTexture(nil, "OVERLAY", nil, 7)
-        t:SetColorTexture(0, 0, 0, 1)
-        return t
-    end
-    local ibT = MkCBdr(iconFrame); ibT:SetHeight(1); ibT:SetPoint("TOPLEFT"); ibT:SetPoint("TOPRIGHT")
-    local ibB = MkCBdr(iconFrame); ibB:SetHeight(1); ibB:SetPoint("BOTTOMLEFT"); ibB:SetPoint("BOTTOMRIGHT")
-    local ibL = MkCBdr(iconFrame); ibL:SetWidth(1); ibL:SetPoint("TOPLEFT"); ibL:SetPoint("BOTTOMLEFT")
-    local ibR = MkCBdr(iconFrame); ibR:SetWidth(1); ibR:SetPoint("TOPRIGHT"); ibR:SetPoint("BOTTOMRIGHT")
+    -- 1px black border via unified PP system
+    PP.CreateBorder(iconFrame, 0, 0, 0, 1)
     local iconTex = iconFrame:CreateTexture(nil, "ARTWORK")
     iconTex:SetPoint("TOPLEFT", iconFrame, "TOPLEFT", 1, -1)
     iconTex:SetPoint("BOTTOMRIGHT", iconFrame, "BOTTOMRIGHT", -1, 1)
@@ -2192,11 +2337,21 @@ local function SetupShowOnCastBar(frame, unit)
     local castbarBg = castbar:GetParent()
     local iconFrame = castbar._iconFrame
 
-    -- For target: keep the castbar background always visible so the
-    -- empty bar area is part of the frame layout.  Only the StatusBar fill,
-    -- text, and icon hide when nothing is being cast.
-    -- For player/focus: hide everything when not casting.
-    local alwaysShowBg = (unit == "target")
+    -- Read per-unit "hide while not casting" setting.
+    -- When true, the castbar bg hides when nothing is being cast (player/focus default).
+    -- When false, the castbar bg stays visible as part of the frame layout (target default).
+    local settings = GetSettingsForUnit(unit)
+    local hideWhenInactive = true
+    if settings then
+        local v = settings.castbarHideWhenInactive
+        if v == nil then
+            -- Legacy fallback: target always showed bg, others hid it
+            hideWhenInactive = (unit ~= "target")
+        else
+            hideWhenInactive = v
+        end
+    end
+    local alwaysShowBg = not hideWhenInactive
 
     castbar:Hide()
     if iconFrame then iconFrame:Hide() end
@@ -2249,30 +2404,25 @@ end
 
 
 local function FrameBorderEnter(self)
-    if self.unifiedBorder and self.unifiedBorder._texs then
+    if self.unifiedBorder and self.unifiedBorder._ppBorders then
         local unit = self.unit or "player"
         local isMini = (unit == "pet" or unit == "targettarget" or unit == "focustarget" or (unit and unit:match("^boss%d$")))
         local settings = isMini and GetMiniDonorSettings() or GetSettingsForUnit(unit)
         local hc = settings.highlightColor or { r = 1, g = 1, b = 1 }
-        for _, t in ipairs(self.unifiedBorder._texs) do
-            t:SetColorTexture(hc.r, hc.g, hc.b, 1)
-        end
+        PP.SetBorderColor(self.unifiedBorder, hc.r, hc.g, hc.b, 1)
     end
 end
 local function FrameBorderLeave(self)
-    if self.unifiedBorder and self.unifiedBorder._texs then
+    if self.unifiedBorder and self.unifiedBorder._ppBorders then
         local unit = self.unit or "player"
         local isMini = (unit == "pet" or unit == "targettarget" or unit == "focustarget" or (unit and unit:match("^boss%d$")))
         local settings = isMini and GetMiniDonorSettings() or GetSettingsForUnit(unit)
         local bc = settings.borderColor or { r = 0, g = 0, b = 0 }
-        for _, t in ipairs(self.unifiedBorder._texs) do
-            t:SetColorTexture(bc.r, bc.g, bc.b, 1)
-        end
+        PP.SetBorderColor(self.unifiedBorder, bc.r, bc.g, bc.b, 1)
     end
 end
 
--- Uses individual edge textures instead of BackdropTemplate for pixel-perfect rendering
--- (BackdropTemplate has internal pixel snapping that can't be disabled)
+-- Unified border for unit frames using the PP border system
 local function CreateUnifiedBorder(frame, unit)
     local settings = GetSettingsForUnit(unit or "player")
     local size = settings.borderSize or 1
@@ -2283,17 +2433,7 @@ local function CreateUnifiedBorder(frame, unit)
     PP.Point(border, "BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
     border:SetFrameLevel(frame:GetFrameLevel() + 10)
 
-    local function MkEdge()
-        local t = border:CreateTexture(nil, "OVERLAY", nil, 7)
-        t:SetColorTexture(bc.r, bc.g, bc.b, 1)
-        UnsnapTex(t)
-        return t
-    end
-    local eT = MkEdge(); PP.Height(eT, size); PP.Point(eT, "TOPLEFT", border, "TOPLEFT", 0, 0); PP.Point(eT, "TOPRIGHT", border, "TOPRIGHT", 0, 0)
-    local eB = MkEdge(); PP.Height(eB, size); PP.Point(eB, "BOTTOMLEFT", border, "BOTTOMLEFT", 0, 0); PP.Point(eB, "BOTTOMRIGHT", border, "BOTTOMRIGHT", 0, 0)
-    local eL = MkEdge(); PP.Width(eL, size); PP.Point(eL, "TOPLEFT", border, "TOPLEFT", 0, 0); PP.Point(eL, "BOTTOMLEFT", border, "BOTTOMLEFT", 0, 0)
-    local eR = MkEdge(); PP.Width(eR, size); PP.Point(eR, "TOPRIGHT", border, "TOPRIGHT", 0, 0); PP.Point(eR, "BOTTOMRIGHT", border, "BOTTOMRIGHT", 0, 0)
-    border._texs = { eT, eB, eL, eR }
+    PP.CreateBorder(border, bc.r, bc.g, bc.b, 1, size)
 
     frame.unifiedBorder = border
 
@@ -2323,11 +2463,10 @@ local function CreateTargetAuras(frame, unit)
         end
 
         if not button.Border then
-            button.Border = CreateFrame("Frame", nil, button, "BackdropTemplate")
+            button.Border = CreateFrame("Frame", nil, button)
             button.Border:SetAllPoints()
-            button.Border:SetBackdrop(BORDER_BACKDROP)
-            button.Border:SetBackdropBorderColor(0, 0, 0, 1)
             button.Border:SetFrameLevel(button:GetFrameLevel() + 1)
+            PP.CreateBorder(button.Border, 0, 0, 0, 1)
         end
     end
 
@@ -2466,6 +2605,19 @@ local function StyleFullFrame(frame, unit)
         if frame.Portrait and not showPortrait then
             frame.Portrait.backdrop:Hide()
         end
+        -- Re-anchor health bar to portrait's actual snapped width (eliminates sub-pixel gap)
+        if frame.Portrait and frame.Portrait.backdrop and showPortrait and isAttached and frame.Health then
+            local snappedPortW = frame.Portrait.backdrop:GetWidth()
+            local newXOff = (effectiveSide == "left") and snappedPortW or 0
+            local newRI = (effectiveSide == "right") and snappedPortW or 0
+            frame.Health:ClearAllPoints()
+            PP.Point(frame.Health, "TOPLEFT", frame, "TOPLEFT", newXOff, 0)
+            PP.Point(frame.Health, "RIGHT", frame, "RIGHT", -newRI, 0)
+            PP.Height(frame.Health, settings.healthHeight)
+            frame.Health._xOffset = newXOff
+            frame.Health._rightInset = newRI
+            frame.Health._topOffset = 0
+        end
 
         -- Always create castbar; oUF element disabled later if not wanted
         frame.Castbar = CreateCastBar(frame, unit, settings)
@@ -2508,11 +2660,10 @@ local function StyleFullFrame(frame, unit)
                     button.Cooldown:SetHideCountdownNumbers(true)
                 end
                 if not button.Border then
-                    button.Border = CreateFrame("Frame", nil, button, "BackdropTemplate")
+                    button.Border = CreateFrame("Frame", nil, button)
                     button.Border:SetAllPoints()
-                    button.Border:SetBackdrop(BORDER_BACKDROP)
-                    button.Border:SetBackdropBorderColor(0, 0, 0, 1)
                     button.Border:SetFrameLevel(button:GetFrameLevel() + 1)
+                    PP.CreateBorder(button.Border, 0, 0, 0, 1)
                 end
             end
             frame.Buffs = buffs
@@ -2546,6 +2697,19 @@ local function StyleFullFrame(frame, unit)
         if frame.Portrait and not showPortrait then
             frame.Portrait.backdrop:Hide()
         end
+        -- Re-anchor health bar to portrait's actual snapped width (eliminates sub-pixel gap)
+        if frame.Portrait and frame.Portrait.backdrop and showPortrait and isAttached and frame.Health then
+            local snappedPortW = frame.Portrait.backdrop:GetWidth()
+            local newXOff = (effectiveSide == "left") and snappedPortW or 0
+            local newRI = (effectiveSide == "right") and snappedPortW or 0
+            frame.Health:ClearAllPoints()
+            PP.Point(frame.Health, "TOPLEFT", frame, "TOPLEFT", newXOff, 0)
+            PP.Point(frame.Health, "RIGHT", frame, "RIGHT", -newRI, 0)
+            PP.Height(frame.Health, settings.healthHeight)
+            frame.Health._xOffset = newXOff
+            frame.Health._rightInset = newRI
+            frame.Health._topOffset = 0
+        end
 
         CreateTargetAuras(frame, unit)
     end
@@ -2556,7 +2720,7 @@ local function StyleFullFrame(frame, unit)
     -- Text overlay frame -- sits above the StatusBar for clean text rendering.
     local textOverlay = CreateFrame("Frame", nil, frame.Health)
     textOverlay:SetAllPoints(frame.Health)
-    textOverlay:SetFrameLevel(frame.Health:GetFrameLevel() + 3)
+    textOverlay:SetFrameLevel(frame.Health:GetFrameLevel() + 12)
     frame._textOverlay = textOverlay
 
     local leftContent = settings.leftTextContent or "name"
@@ -2746,6 +2910,19 @@ local function StyleFocusFrame(frame, unit)
     if frame.Portrait and not showPortrait then
         frame.Portrait.backdrop:Hide()
     end
+    -- Re-anchor health bar to portrait's actual snapped width (eliminates sub-pixel gap)
+    if frame.Portrait and frame.Portrait.backdrop and showPortrait and isAttached and frame.Health then
+        local snappedPortW = frame.Portrait.backdrop:GetWidth()
+        local newXOff = (effectiveSide == "left") and snappedPortW or 0
+        local newRI = (effectiveSide == "right") and snappedPortW or 0
+        frame.Health:ClearAllPoints()
+        PP.Point(frame.Health, "TOPLEFT", frame, "TOPLEFT", newXOff, 0)
+        PP.Point(frame.Health, "RIGHT", frame, "RIGHT", -newRI, 0)
+        PP.Height(frame.Health, settings.healthHeight)
+        frame.Health._xOffset = newXOff
+        frame.Health._rightInset = newRI
+        frame.Health._topOffset = 0
+    end
 
     PP.Size(frame, totalWidth, focusBarHeight)
 
@@ -2757,7 +2934,7 @@ local function StyleFocusFrame(frame, unit)
     -- Text overlay frame -- sits above the StatusBar for clean text rendering.
     local textOverlay = CreateFrame("Frame", nil, frame.Health)
     textOverlay:SetAllPoints(frame.Health)
-    textOverlay:SetFrameLevel(frame.Health:GetFrameLevel() + 3)
+    textOverlay:SetFrameLevel(frame.Health:GetFrameLevel() + 12)
     frame._textOverlay = textOverlay
 
     local leftContent = settings.leftTextContent or "name"
@@ -2901,13 +3078,11 @@ local function StyleSimpleFrame(frame, unit)
     PP.Height(health, settings.healthHeight)
     health:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
     health:GetStatusBarTexture():SetHorizTile(false)
-    UnsnapTex(health:GetStatusBarTexture())
 
     local bg = health:CreateTexture(nil, "BACKGROUND")
     PP.Point(bg, "TOPLEFT", health, "TOPLEFT", 0, 0)
     PP.Point(bg, "BOTTOMRIGHT", health, "BOTTOMRIGHT", 0, 0)
     bg:SetColorTexture(0, 0, 0, 0.5)
-    UnsnapTex(bg)
     health.bg = bg
 
     health.colorClass = true
@@ -2917,7 +3092,7 @@ local function StyleSimpleFrame(frame, unit)
     health._euiUnitKey = UnitToSettingsKey(unit)
 
     ApplyHealthBarTexture(health, UnitToSettingsKey(unit))
-    ApplyHealthBarOpacity(health, UnitToSettingsKey(unit))
+    ApplyHealthBarAlpha(health, UnitToSettingsKey(unit))
     ApplyDarkTheme(health)
 
     frame.Health = health
@@ -2927,7 +3102,7 @@ local function StyleSimpleFrame(frame, unit)
     -- Text overlay frame
     local textOverlay = CreateFrame("Frame", nil, health)
     textOverlay:SetAllPoints(health)
-    textOverlay:SetFrameLevel(health:GetFrameLevel() + 3)
+    textOverlay:SetFrameLevel(health:GetFrameLevel() + 12)
     frame._textOverlay = textOverlay
 
     local ts = settings.textSize or 12
@@ -3035,13 +3210,11 @@ local function StylePetFrame(frame, unit)
     PP.Height(health, settings.healthHeight)
     health:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
     health:GetStatusBarTexture():SetHorizTile(false)
-    UnsnapTex(health:GetStatusBarTexture())
 
     local bg = health:CreateTexture(nil, "BACKGROUND")
     PP.Point(bg, "TOPLEFT", health, "TOPLEFT", 0, 0)
     PP.Point(bg, "BOTTOMRIGHT", health, "BOTTOMRIGHT", 0, 0)
     bg:SetColorTexture(0, 0, 0, 0.5)
-    UnsnapTex(bg)
     health.bg = bg
 
     health.colorClass = true
@@ -3051,7 +3224,7 @@ local function StylePetFrame(frame, unit)
     health._euiUnitKey = UnitToSettingsKey(unit)
 
     ApplyHealthBarTexture(health, UnitToSettingsKey(unit))
-    ApplyHealthBarOpacity(health, UnitToSettingsKey(unit))
+    ApplyHealthBarAlpha(health, UnitToSettingsKey(unit))
     ApplyDarkTheme(health)
 
     frame.Health = health
@@ -3061,6 +3234,17 @@ local function StylePetFrame(frame, unit)
     frame._portraitSide = "left"
     if frame.Portrait and not showPortrait then        frame.Portrait.backdrop:Hide()
     end
+    -- Re-anchor health bar to portrait's actual snapped width (eliminates sub-pixel gap)
+    if frame.Portrait and frame.Portrait.backdrop and showPortrait then
+        local snappedPortW = frame.Portrait.backdrop:GetWidth()
+        health:ClearAllPoints()
+        PP.Point(health, "TOPLEFT", frame, "TOPLEFT", snappedPortW, 0)
+        PP.Point(health, "RIGHT", frame, "RIGHT", 0, 0)
+        PP.Height(health, settings.healthHeight)
+        health._xOffset = snappedPortW
+        health._rightInset = 0
+        health._topOffset = 0
+    end
 
     CreateUnifiedBorder(frame, unit)
     UpdateBordersForScale(frame, unit)
@@ -3068,7 +3252,7 @@ local function StylePetFrame(frame, unit)
     -- Text overlay frame
     local textOverlay = CreateFrame("Frame", nil, health)
     textOverlay:SetAllPoints(health)
-    textOverlay:SetFrameLevel(health:GetFrameLevel() + 3)
+    textOverlay:SetFrameLevel(health:GetFrameLevel() + 12)
     frame._textOverlay = textOverlay
 
     local ts = settings.textSize or 12
@@ -3181,6 +3365,17 @@ local function StyleBossFrame(frame, unit)
     if frame.Portrait and not showPortrait then
         frame.Portrait.backdrop:Hide()
     end
+    -- Re-anchor health bar to portrait's actual snapped width (eliminates sub-pixel gap)
+    if frame.Portrait and frame.Portrait.backdrop and showPortrait and frame.Health then
+        local snappedPortW = frame.Portrait.backdrop:GetWidth()
+        frame.Health:ClearAllPoints()
+        PP.Point(frame.Health, "TOPLEFT", frame, "TOPLEFT", 0, 0)
+        PP.Point(frame.Health, "RIGHT", frame, "RIGHT", -snappedPortW, 0)
+        PP.Height(frame.Health, settings.healthHeight)
+        frame.Health._xOffset = 0
+        frame.Health._rightInset = snappedPortW
+        frame.Health._topOffset = 0
+    end
 
     PP.Size(frame, totalWidth, bossBarHeight)
 
@@ -3190,7 +3385,7 @@ local function StyleBossFrame(frame, unit)
     -- Text overlay frame
     local textOverlay = CreateFrame("Frame", nil, frame.Health)
     textOverlay:SetAllPoints(frame.Health)
-    textOverlay:SetFrameLevel(frame.Health:GetFrameLevel() + 3)
+    textOverlay:SetFrameLevel(frame.Health:GetFrameLevel() + 12)
     frame._textOverlay = textOverlay
 
     local bts = settings.textSize or 12
@@ -3310,11 +3505,13 @@ end
 
 -- Swap portrait mode (3D / 2D / class theme) without recreating frames.
 -- All three objects already exist on the backdrop; we just show/hide and reassign frame.Portrait.
+-- Swap portrait mode (3D / 2D / class theme) without recreating frames.
+-- 2D and class textures exist on the backdrop; 3D PlayerModel is lazy-created on first use.
 local function SwapPortraitMode(frame)
     local portrait = frame.Portrait
     if not portrait or not portrait.backdrop then return end
     local bd = portrait.backdrop
-    if not bd._2d or not bd._3d then return end
+    if not bd._2d then return end
 
     local wantMode
     do
@@ -3343,8 +3540,7 @@ local function SwapPortraitMode(frame)
     end
 
     -- Hide all
-    bd._3d:ClearModel()
-    bd._3d:Hide()
+    if bd._3d then bd._3d:ClearModel(); bd._3d:Hide() end
     bd._2d:Hide()
     if bd._class then bd._class:Hide() end
 
@@ -3359,6 +3555,9 @@ local function SwapPortraitMode(frame)
         -- Class theme is static -- no oUF element needed, skip re-enable
         return
     elseif wantMode == "3d" then
+        -- Lazily create the PlayerModel on first switch to 3D
+        if bd._ensureModel3D then bd._ensureModel3D() end
+        if not bd._3d then return end
         bd._3d:Show()
         bd._3d.backdrop = bd
         bd._3d.is2D = false
@@ -3470,6 +3669,11 @@ local function CreateCustomClassPower(playerFrame, style)
     local pipH = isModern and math.max(3, math.floor(sizeAdj * 0.375)) or (isCircle and (sizeAdj + 6) or (sizeAdj))
     local gap = spacingAdj
     local pad = isModern and 0 or 4
+    -- Snap all dimensions to physical pixel boundaries
+    pipSize = PP.Scale(pipSize)
+    pipH = PP.Scale(pipH)
+    gap = PP.Scale(gap)
+    pad = PP.Scale(pad)
     local totalW = maxPower * pipSize + (maxPower - 1) * gap + pad
     local totalH = pipH + pad
 
@@ -3483,7 +3687,6 @@ local function CreateCustomClassPower(playerFrame, style)
     local containerBg = container:CreateTexture(nil, "BACKGROUND")
     containerBg:SetAllPoints()
     containerBg:SetColorTexture(bgCol.r, bgCol.g, bgCol.b, bgCol.a)
-    UnsnapTex(containerBg)
     container._bg = containerBg
 
     -- Empty pip color (shown when pip is not filled)
@@ -3501,10 +3704,9 @@ local function CreateCustomClassPower(playerFrame, style)
     cpBdrOverlay:SetAllPoints()
     cpBdrOverlay:SetFrameLevel(container:GetFrameLevel() + 20)
     local cpBottomBdr = cpBdrOverlay:CreateTexture(nil, "OVERLAY", nil, 7)
-    PP.Height(cpBottomBdr, 1)
+    cpBottomBdr:SetHeight(1)
     PP.Point(cpBottomBdr, "BOTTOMLEFT", cpBdrOverlay, "BOTTOMLEFT", 0, 0)
     PP.Point(cpBottomBdr, "BOTTOMRIGHT", cpBdrOverlay, "BOTTOMRIGHT", 0, 0)
-    UnsnapTex(cpBottomBdr)
     cpBdrOverlay:Hide()  -- shown only when position is "above"
     container._bottomBdr = cpBottomBdr
     container._bottomBdrFrame = cpBdrOverlay
@@ -3532,9 +3734,9 @@ local function CreateCustomClassPower(playerFrame, style)
 
     local function MakePip(parent, index)
         local pip = CreateFrame("Frame", nil, parent)
-        pip:SetSize(pipSize, pipH)
+        PP.Size(pip, pipSize, pipH)
         local x = (index - 1) * (pipSize + gap) + pad / 2
-        pip:SetPoint("LEFT", parent, "LEFT", x, 0)
+        PP.Point(pip, "LEFT", parent, "LEFT", x, 0)
 
         -- Empty bar color (visible when pip is not filled)
         local pipEmpty = pip:CreateTexture(nil, "ARTWORK", nil, 0)
@@ -3544,7 +3746,6 @@ local function CreateCustomClassPower(playerFrame, style)
             pipEmpty:SetVertexColor(emptyCol.r, emptyCol.g, emptyCol.b, emptyCol.a)
         else
             pipEmpty:SetColorTexture(emptyCol.r, emptyCol.g, emptyCol.b, emptyCol.a)
-            UnsnapTex(pipEmpty)
         end
 
         -- Fill color (on top of empty)
@@ -3556,7 +3757,6 @@ local function CreateCustomClassPower(playerFrame, style)
             pipFill:SetVertexColor(cr, cg, cb, 1)
         else
             pipFill:SetColorTexture(cr, cg, cb, 1)
-            UnsnapTex(pipFill)
         end
 
         pip._fill = pipFill
@@ -3613,8 +3813,8 @@ local function CreateCustomClassPower(playerFrame, style)
                 end
                 local x = (i - 1) * (pipSize + gap) + pad / 2
                 pips[i]:ClearAllPoints()
-                pips[i]:SetPoint("TOPLEFT", container, "TOPLEFT", x, 0)
-                pips[i]:SetSize(pipSize, pipH)
+                PP.Point(pips[i], "TOPLEFT", container, "TOPLEFT", x, 0)
+                PP.Size(pips[i], pipSize, pipH)
                 pips[i]:Show()
             end
         end
@@ -3659,24 +3859,39 @@ local function CreateCustomClassPower(playerFrame, style)
     -- Event driver
     local eventFrame = CreateFrame("Frame", nil, container)
     if isCustom then
-        -- Custom resources: poll + manual tracker events
-        local elapsed = 0
-        eventFrame:SetScript("OnUpdate", function(_, dt)
-            elapsed = elapsed + dt
-            if elapsed < 0.1 then return end
-            elapsed = 0
-            UpdatePips()
-        end)
-        eventFrame:RegisterUnitEvent("UNIT_AURA", "player")
+        -- Per-resource event registration: only register what each resource
+        -- actually needs to avoid unnecessary event traffic.
+        local needsOnUpdate = (powerType ~= "MAELSTROM_WEAPON")
+        local needsAura     = (powerType == "MAELSTROM_WEAPON")
+        local needsCasts    = (powerType == "TIP_OF_THE_SPEAR" or powerType == "WHIRLWIND_STACKS")
+
+        if needsOnUpdate then
+            local elapsed = 0
+            eventFrame:SetScript("OnUpdate", function(_, dt)
+                elapsed = elapsed + dt
+                if elapsed < 0.1 then return end
+                elapsed = 0
+                UpdatePips()
+            end)
+        end
+
         eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
         eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
-        eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
-        eventFrame:RegisterEvent("PLAYER_DEAD")
-        eventFrame:RegisterEvent("PLAYER_ALIVE")
-        eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+
+        if needsAura then
+            eventFrame:RegisterUnitEvent("UNIT_AURA", "player")
+        end
+        if needsCasts then
+            eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+            eventFrame:RegisterEvent("PLAYER_DEAD")
+            eventFrame:RegisterEvent("PLAYER_ALIVE")
+        end
+        if powerType == "WHIRLWIND_STACKS" then
+            eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+        end
+
         eventFrame:SetScript("OnEvent", function(_, event, ...)
             if event == "PLAYER_SPECIALIZATION_CHANGED" then
-                -- Spec changed: destroy and rebuild via ReloadFrames
                 DestroyCustomClassPower()
                 frames._classPowerBar = nil
                 C_Timer.After(0.1, function()
@@ -3684,7 +3899,6 @@ local function CreateCustomClassPower(playerFrame, style)
                 end)
                 return
             elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
-                -- Route to manual trackers (skip if resource bars handles it)
                 if not _G._ERB_AceDB and EllesmereUI then
                     local unit, castGUID, spellID = ...
                     if unit == "player" then
@@ -3777,10 +3991,9 @@ local function ReloadFrames()
     local castbarOpacity = profile.castbarOpacity
     local enabled = profile.enabledFrames
 
-    -- Resolve donor font for mini frames (inherit from focusâ†’targetâ†’player)
-    local donorS = GetMiniDonorSettings()
-    local donorFont = donorS.selectedFont or profile.selectedFont or "Expressway"
-    local donorFontPath = fontPaths[donorFont] or fontPaths["Expressway"]
+    -- Uses global font
+    local donorFontPath = EllesmereUI and EllesmereUI.GetFontPath and EllesmereUI.GetFontPath("unitFrames")
+        or "Interface\\AddOns\\EllesmereUI\\media\\fonts\\Expressway.TTF"
 
     -- Live enable/disable frames without reload
     local function ToggleFrame(unit, frame)
@@ -3966,9 +4179,16 @@ local function ReloadFrames()
                     end
                     if frame.Health then
                         frame.Health:ClearAllPoints()
+                        -- Use portrait's actual snapped width for flush alignment
+                        if showPortrait and isAttached and frame.Portrait and frame.Portrait.backdrop then
+                            local snappedPortW = frame.Portrait.backdrop:GetWidth()
+                            healthXOffset = (effectiveSide == "left") and snappedPortW or 0
+                            healthRightInset = (effectiveSide == "right") and snappedPortW or 0
+                        end
                         frame.Health._xOffset = healthXOffset
                         frame.Health._rightInset = healthRightInset
                         local hTopOff = cpAboveH + (btbPos == "top" and settings.bottomTextBar and (settings.bottomTextBarHeight or 16) or 0)
+                        frame.Health._topOffset = hTopOff
                         PP.Point(frame.Health, "TOPLEFT", frame, "TOPLEFT", healthXOffset, -hTopOff)
                         PP.Point(frame.Health, "RIGHT", frame, "RIGHT", -healthRightInset, 0)
                         PP.Height(frame.Health, settings.healthHeight)
@@ -3984,7 +4204,7 @@ local function ReloadFrames()
                         if ppPos == "none" then
                             frame.Power:Hide()
                         elseif ppPos == "above" then
-                            PP.Point(frame.Power, "BOTTOM", frame.Health, "TOP", 0, 0)
+                            PP.Point(frame.Power, "BOTTOMLEFT", frame.Health, "TOPLEFT", 0, 0)
                             frame.Power:Show()
                         elseif ppPos == "detached_top" then
                             frame.Power:SetPoint("BOTTOM", frame.Health, "TOP", settings.powerX or 0, 15 + (settings.powerY or 0))
@@ -3993,12 +4213,35 @@ local function ReloadFrames()
                             frame.Power:SetPoint("TOP", frame.Health, "BOTTOM", settings.powerX or 0, -15 + (settings.powerY or 0))
                             frame.Power:Show()
                         else
-                            PP.Point(frame.Power, "TOP", frame.Health, "BOTTOM", 0, 0)
+                            PP.Point(frame.Power, "TOPLEFT", frame.Health, "BOTTOMLEFT", 0, 0)
                             frame.Power:Show()
                         end
                         if frame.Power._applyPowerPercentText then frame.Power._applyPowerPercentText(settings) end
+
+                        -- Gray out power bar background for generic melee NPCs
+                        if ppPos ~= "none" and (ppPos == "below" or ppPos == "above") then
+                            local shouldGray = false
+                            if unit ~= "player" and UnitExists(unit) and UnitCanAttack("player", unit) and not UnitIsPlayer(unit) then
+                                local cls = UnitClassification(unit)
+                                local isBoss = (cls == "worldboss")
+                                local isElite = (cls == "elite" or cls == "rareelite")
+                                local lvl = UnitLevel(unit)
+                                local pLvl = UnitLevel("player")
+                                local isMB = isElite and (lvl == -1 or (pLvl and lvl >= pLvl + 1))
+                                local isCst = (UnitClassBase and UnitClassBase(unit) == "PALADIN")
+                                if not isBoss and not isMB and not isCst then shouldGray = true end
+                            end
+                            if shouldGray then
+                                frame.Power._grayedOut = true
+                                if frame.Power.bg then
+                                    frame.Power.bg:SetColorTexture(0.25, 0.25, 0.25, 1)
+                                    frame.Power.bg:SetAlpha(1)
+                                end
+                            else
+                                frame.Power._grayedOut = false
+                            end
+                        end
                     end
-                    
                     if frame.Castbar then
                         local castbarBg = frame.Castbar:GetParent()
                         if settings.showPlayerCastbar then
@@ -4028,8 +4271,14 @@ local function ReloadFrames()
                                 local pBtbVisible = (settings.bottomTextBar and pBtbPos == "bottom" and frame.BottomTextBar and frame.BottomTextBar:IsShown())
                                 local anchorFrame = pBtbVisible and frame.BottomTextBar or (ppIsAtt and frame.Power) or frame.Health
                                 local pCbXOff = pBtbVisible and 0 or castBarOffset
-                                -- Player castbar is always locked to frame â€” no x/y offsets
+                                -- Player castbar is always locked to frame � no x/y offsets
                                 castbarBg:SetPoint("TOP", anchorFrame, "BOTTOM", pCbXOff, 0)
+                                -- Respect hide-while-not-casting
+                                if settings.castbarHideWhenInactive and not frame.Castbar:IsShown() then
+                                    castbarBg:Hide()
+                                else
+                                    castbarBg:Show()
+                                end
                             end
                             -- Store per-unit settings for PostCastStart
                             frame.Castbar._eufSettings = settings
@@ -4175,7 +4424,6 @@ local function ReloadFrames()
                                 local bgc = settings.btbBgColor or { r = 0.2, g = 0.2, b = 0.2 }
                                 local bga = settings.btbBgOpacity or 1.0
                                 btb.bg:SetColorTexture(bgc.r, bgc.g, bgc.b, bga)
-                                UnsnapTex(btb.bg)
                             end
                             if btb._applyBTBTextTags then
                                 btb._applyBTBTextTags(settings.btbLeftContent or "none", settings.btbRightContent or "none", settings.btbCenterContent or "none")
@@ -4247,7 +4495,17 @@ local function ReloadFrames()
                     end
                     if frame.Health then
                         frame.Health:ClearAllPoints()
-                        PP.Point(frame.Health, "TOPLEFT", frame, "TOPLEFT", healthXOffset, -(btbPos == "top" and settings.bottomTextBar and (settings.bottomTextBarHeight or 16) or 0))
+                        -- Use portrait's actual snapped width for flush alignment
+                        if showPortrait and isAttached and frame.Portrait and frame.Portrait.backdrop then
+                            local snappedPortW = frame.Portrait.backdrop:GetWidth()
+                            healthXOffset = (effectiveSide == "left") and snappedPortW or 0
+                            healthRightInset = (effectiveSide == "right") and snappedPortW or 0
+                        end
+                        local tBtbTopOff = (btbPos == "top" and settings.bottomTextBar and (settings.bottomTextBarHeight or 16) or 0)
+                        frame.Health._xOffset = healthXOffset
+                        frame.Health._rightInset = healthRightInset
+                        frame.Health._topOffset = tBtbTopOff
+                        PP.Point(frame.Health, "TOPLEFT", frame, "TOPLEFT", healthXOffset, -tBtbTopOff)
                         PP.Point(frame.Health, "RIGHT", frame, "RIGHT", -healthRightInset, 0)
                         PP.Height(frame.Health, settings.healthHeight)
                     end
@@ -4262,7 +4520,7 @@ local function ReloadFrames()
                         if ppPos == "none" then
                             frame.Power:Hide()
                         elseif ppPos == "above" then
-                            PP.Point(frame.Power, "BOTTOM", frame.Health, "TOP", 0, 0)
+                            PP.Point(frame.Power, "BOTTOMLEFT", frame.Health, "TOPLEFT", 0, 0)
                             frame.Power:Show()
                         elseif ppPos == "detached_top" then
                             frame.Power:SetPoint("BOTTOM", frame.Health, "TOP", settings.powerX or 0, 15 + (settings.powerY or 0))
@@ -4271,10 +4529,34 @@ local function ReloadFrames()
                             frame.Power:SetPoint("TOP", frame.Health, "BOTTOM", settings.powerX or 0, -15 + (settings.powerY or 0))
                             frame.Power:Show()
                         else
-                            PP.Point(frame.Power, "TOP", frame.Health, "BOTTOM", 0, 0)
+                            PP.Point(frame.Power, "TOPLEFT", frame.Health, "BOTTOMLEFT", 0, 0)
                             frame.Power:Show()
                         end
                         if frame.Power._applyPowerPercentText then frame.Power._applyPowerPercentText(settings) end
+
+                        -- Gray out power bar background for generic melee NPCs
+                        if ppPos ~= "none" and (ppPos == "below" or ppPos == "above") then
+                            local shouldGray = false
+                            if unit ~= "player" and UnitExists(unit) and UnitCanAttack("player", unit) and not UnitIsPlayer(unit) then
+                                local cls = UnitClassification(unit)
+                                local isBoss = (cls == "worldboss")
+                                local isElite = (cls == "elite" or cls == "rareelite")
+                                local lvl = UnitLevel(unit)
+                                local pLvl = UnitLevel("player")
+                                local isMB = isElite and (lvl == -1 or (pLvl and lvl >= pLvl + 1))
+                                local isCst = (UnitClassBase and UnitClassBase(unit) == "PALADIN")
+                                if not isBoss and not isMB and not isCst then shouldGray = true end
+                            end
+                            if shouldGray then
+                                frame.Power._grayedOut = true
+                                if frame.Power.bg then
+                                    frame.Power.bg:SetColorTexture(0.25, 0.25, 0.25, 1)
+                                    frame.Power.bg:SetAlpha(1)
+                                end
+                            else
+                                frame.Power._grayedOut = false
+                            end
+                        end
                     end
 
                     -- Reposition name and health text
@@ -4285,7 +4567,7 @@ local function ReloadFrames()
                         frame._applyTextPositions(settings)
                     end
 
-                    -- Bottom Text Bar update (target) â€” must come before castbar so castbar can anchor to it
+                    -- Bottom Text Bar update (target) � must come before castbar so castbar can anchor to it
                     local tPpBtbAnchor = (ppIsAtt and frame.Power) or frame.Health
                     if settings.bottomTextBar then
                         local btbPos2 = settings.btbPosition or "bottom"
@@ -4317,7 +4599,6 @@ local function ReloadFrames()
                                 local bgc = settings.btbBgColor or { r = 0.2, g = 0.2, b = 0.2 }
                                 local bga = settings.btbBgOpacity or 1.0
                                 btb.bg:SetColorTexture(bgc.r, bgc.g, bgc.b, bga)
-                                UnsnapTex(btb.bg)
                             end
                             if btb._applyBTBTextTags then
                                 btb._applyBTBTextTags(settings.btbLeftContent or "none", settings.btbRightContent or "none", settings.btbCenterContent or "none")
@@ -4332,7 +4613,7 @@ local function ReloadFrames()
                         frame.BottomTextBar:Hide()
                     end
 
-                    -- Castbar (target) â€” anchors to BTB when BTB is bottom, otherwise to power/health
+                    -- Castbar (target) � anchors to BTB when BTB is bottom, otherwise to power/health
                     if frame.Castbar then
                         local castbarBg = frame.Castbar:GetParent()
                         if castbarBg then
@@ -4363,7 +4644,12 @@ local function ReloadFrames()
                                 local cbAnchor = btbVisible and frame.BottomTextBar or tPpBtbAnchor
                                 local cbXOff = btbVisible and 0 or castBarOffset
                                 castbarBg:SetPoint("TOP", cbAnchor, "BOTTOM", cbXOff, 0)
-                                castbarBg:Show()
+                                -- Respect hide-while-not-casting: only show bg if inactive hiding is off or cast is active
+                                if settings.castbarHideWhenInactive and not frame.Castbar:IsShown() then
+                                    castbarBg:Hide()
+                                else
+                                    castbarBg:Show()
+                                end
                             else
                                 if frame:IsElementEnabled("Castbar") then
                                     frame:DisableElement("Castbar")
@@ -4376,12 +4662,7 @@ local function ReloadFrames()
                         frame.Castbar._eufSettings = settings
                         -- Resolve per-unit fill color
                         local tCbColor = castbarColor
-                        if settings.castbarClassColored then
-                            local _, classToken = UnitClass(unit)
-                            if classToken then
-                                tCbColor = RAID_CLASS_COLORS[classToken] or castbarColor
-                            end
-                        elseif settings.castbarFillColor then
+                        if settings.castbarFillColor then
                             tCbColor = settings.castbarFillColor
                         end
                         frame.Castbar:SetStatusBarColor(tCbColor.r, tCbColor.g, tCbColor.b, castbarOpacity)
@@ -4511,6 +4792,19 @@ local function ReloadFrames()
 
                 if frame.Portrait and frame.Portrait.backdrop then
                     PP.Size(frame.Portrait.backdrop, adjPortraitH, adjPortraitH)
+                    -- Trim portrait to stay within frame bounds
+                    if showPortrait and isAttached then
+                        local frameW = frame:GetWidth()
+                        local frameH = frame:GetHeight()
+                        local portW = frame.Portrait.backdrop:GetWidth()
+                        local portH = frame.Portrait.backdrop:GetHeight()
+                        if portW + settings.frameWidth > frameW + 0.01 then
+                            PP.Width(frame.Portrait.backdrop, frameW - settings.frameWidth)
+                        end
+                        if portH > frameH + 0.01 then
+                            PP.Height(frame.Portrait.backdrop, frameH)
+                        end
+                    end
                     -- Reposition portrait for attached/detached
                     frame.Portrait.backdrop:ClearAllPoints()
                     local fBtbTopOff = (fBtbPos == "top" and settings.bottomTextBar) and (settings.bottomTextBarHeight or 16) or 0
@@ -4541,7 +4835,17 @@ local function ReloadFrames()
                     frame.Health:ClearAllPoints()
                     local focusHealthXOff = (showPortrait and isAttached and effectiveSide == "left") and adjPortraitH or 0
                     local focusHealthRightInset = (showPortrait and isAttached and effectiveSide == "right") and adjPortraitH or 0
-                    PP.Point(frame.Health, "TOPLEFT", frame, "TOPLEFT", focusHealthXOff, -(fBtbPos == "top" and settings.bottomTextBar and (settings.bottomTextBarHeight or 16) or 0))
+                    -- Use portrait's actual snapped width for flush alignment
+                    if showPortrait and isAttached and frame.Portrait and frame.Portrait.backdrop then
+                        local snappedPortW = frame.Portrait.backdrop:GetWidth()
+                        focusHealthXOff = (effectiveSide == "left") and snappedPortW or 0
+                        focusHealthRightInset = (effectiveSide == "right") and snappedPortW or 0
+                    end
+                    local fHTopOff = (fBtbPos == "top" and settings.bottomTextBar and (settings.bottomTextBarHeight or 16) or 0)
+                    frame.Health._xOffset = focusHealthXOff
+                    frame.Health._rightInset = focusHealthRightInset
+                    frame.Health._topOffset = fHTopOff
+                    PP.Point(frame.Health, "TOPLEFT", frame, "TOPLEFT", focusHealthXOff, -fHTopOff)
                     PP.Point(frame.Health, "RIGHT", frame, "RIGHT", -focusHealthRightInset, 0)
                     PP.Height(frame.Health, settings.healthHeight)
                 end
@@ -4556,7 +4860,7 @@ local function ReloadFrames()
                     if fPpPos == "none" then
                         frame.Power:Hide()
                     elseif fPpPos == "above" then
-                        PP.Point(frame.Power, "BOTTOM", frame.Health, "TOP", 0, 0)
+                        PP.Point(frame.Power, "BOTTOMLEFT", frame.Health, "TOPLEFT", 0, 0)
                         frame.Power:Show()
                     elseif fPpPos == "detached_top" then
                         frame.Power:SetPoint("BOTTOM", frame.Health, "TOP", settings.powerX or 0, 15 + (settings.powerY or 0))
@@ -4565,7 +4869,7 @@ local function ReloadFrames()
                         frame.Power:SetPoint("TOP", frame.Health, "BOTTOM", settings.powerX or 0, -15 + (settings.powerY or 0))
                         frame.Power:Show()
                     else
-                        PP.Point(frame.Power, "TOP", frame.Health, "BOTTOM", 0, 0)
+                        PP.Point(frame.Power, "TOPLEFT", frame.Health, "BOTTOMLEFT", 0, 0)
                         frame.Power:Show()
                     end
                     if frame.Power._applyPowerPercentText then frame.Power._applyPowerPercentText(settings) end
@@ -4577,7 +4881,7 @@ local function ReloadFrames()
                     frame._applyTextPositions(settings)
                 end
 
-                -- Bottom Text Bar update (focus) â€” must come before castbar so castbar can anchor to it
+                -- Bottom Text Bar update (focus) � must come before castbar so castbar can anchor to it
                 local fPpBtbAnchor = (fPpIsAtt and frame.Power) or frame.Health
                 if settings.bottomTextBar then
                     local btbPos2 = settings.btbPosition or "bottom"
@@ -4609,7 +4913,6 @@ local function ReloadFrames()
                             local bgc = settings.btbBgColor or { r = 0.2, g = 0.2, b = 0.2 }
                             local bga = settings.btbBgOpacity or 1.0
                             btb.bg:SetColorTexture(bgc.r, bgc.g, bgc.b, bga)
-                            UnsnapTex(btb.bg)
                         end
                         if btb._applyBTBTextTags then
                             btb._applyBTBTextTags(settings.btbLeftContent or "none", settings.btbRightContent or "none", settings.btbCenterContent or "none")
@@ -4624,7 +4927,7 @@ local function ReloadFrames()
                     frame.BottomTextBar:Hide()
                 end
 
-                -- Castbar (focus) â€” anchors to BTB when BTB is bottom, otherwise to power/health
+                -- Castbar (focus) � anchors to BTB when BTB is bottom, otherwise to power/health
                 if frame.Castbar then
                     local castbarBg = frame.Castbar:GetParent()
                     if castbarBg then
@@ -4655,7 +4958,12 @@ local function ReloadFrames()
                             local cbAnchor = btbVisible and frame.BottomTextBar or fPpBtbAnchor
                             local cbXOff = btbVisible and 0 or castBarOffset
                             castbarBg:SetPoint("TOP", cbAnchor, "BOTTOM", cbXOff, 0)
-                            castbarBg:Show()
+                            -- Respect hide-while-not-casting: only show bg if inactive hiding is off or cast is active
+                            if settings.castbarHideWhenInactive and not frame.Castbar:IsShown() then
+                                castbarBg:Hide()
+                            else
+                                castbarBg:Show()
+                            end
                         else
                             if frame:IsElementEnabled("Castbar") then
                                 frame:DisableElement("Castbar")
@@ -4668,12 +4976,7 @@ local function ReloadFrames()
                     frame.Castbar._eufSettings = settings
                     -- Resolve per-unit fill color
                     local fCbColor = castbarColor
-                    if settings.castbarClassColored then
-                        local _, classToken = UnitClass(unit)
-                        if classToken then
-                            fCbColor = RAID_CLASS_COLORS[classToken] or castbarColor
-                        end
-                    elseif settings.castbarFillColor then
+                    if settings.castbarFillColor then
                         fCbColor = settings.castbarFillColor
                     end
                     frame.Castbar:SetStatusBarColor(fCbColor.r, fCbColor.g, fCbColor.b, castbarOpacity)
@@ -4702,14 +5005,24 @@ local function ReloadFrames()
                         petW = settings.healthHeight + settings.frameWidth
                     end
                     PP.Size(frame, petW, settings.healthHeight)
-                    if frame.Health then
-                        frame.Health:ClearAllPoints()
-                        PP.Point(frame.Health, "TOPLEFT", frame, "TOPLEFT", showPetPortrait and settings.healthHeight or 0, 0)
-                        PP.Point(frame.Health, "RIGHT", frame, "RIGHT", 0, 0)
-                        PP.Height(frame.Health, settings.healthHeight)
-                    end
                     if frame.Portrait and frame.Portrait.backdrop then
                         PP.Size(frame.Portrait.backdrop, settings.healthHeight, settings.healthHeight)
+                    end
+                    if frame.Health then
+                        frame.Health:ClearAllPoints()
+                        -- Use portrait's actual snapped width for flush alignment
+                        local petPortOff = 0
+                        if showPetPortrait and frame.Portrait and frame.Portrait.backdrop then
+                            petPortOff = frame.Portrait.backdrop:GetWidth()
+                        elseif showPetPortrait then
+                            petPortOff = settings.healthHeight
+                        end
+                        PP.Point(frame.Health, "TOPLEFT", frame, "TOPLEFT", petPortOff, 0)
+                        PP.Point(frame.Health, "RIGHT", frame, "RIGHT", 0, 0)
+                        PP.Height(frame.Health, settings.healthHeight)
+                        frame.Health._xOffset = petPortOff
+                        frame.Health._rightInset = 0
+                        frame.Health._topOffset = 0
                     end
                 else
                     PP.Size(frame, settings.frameWidth, settings.healthHeight)
@@ -4743,9 +5056,21 @@ local function ReloadFrames()
                 end
                 if frame.Health then
                     frame.Health:ClearAllPoints()
+                    -- Use portrait's actual snapped width for flush alignment
+                    local bossRightInset = 0
+                    if showPortrait then
+                        if frame.Portrait and frame.Portrait.backdrop then
+                            bossRightInset = frame.Portrait.backdrop:GetWidth()
+                        else
+                            bossRightInset = bossBarHeight
+                        end
+                    end
                     PP.Point(frame.Health, "TOPLEFT", frame, "TOPLEFT", 0, 0)
-                    PP.Point(frame.Health, "RIGHT", frame, "RIGHT", -(showPortrait and bossBarHeight or 0), 0)
+                    PP.Point(frame.Health, "RIGHT", frame, "RIGHT", -bossRightInset, 0)
                     PP.Height(frame.Health, settings.healthHeight)
+                    frame.Health._xOffset = 0
+                    frame.Health._rightInset = bossRightInset
+                    frame.Health._topOffset = 0
                 end
                 if frame.Power then
                     local bpw = settings.frameWidth
@@ -4758,7 +5083,7 @@ local function ReloadFrames()
                     if bPpPos == "none" then
                         frame.Power:Hide()
                     elseif bPpPos == "above" then
-                        PP.Point(frame.Power, "BOTTOM", frame.Health, "TOP", 0, 0)
+                        PP.Point(frame.Power, "BOTTOMLEFT", frame.Health, "TOPLEFT", 0, 0)
                         frame.Power:Show()
                     elseif bPpPos == "detached_top" then
                         frame.Power:SetPoint("BOTTOM", frame.Health, "TOP", settings.powerX or 0, 15 + (settings.powerY or 0))
@@ -4767,10 +5092,34 @@ local function ReloadFrames()
                         frame.Power:SetPoint("TOP", frame.Health, "BOTTOM", settings.powerX or 0, -15 + (settings.powerY or 0))
                         frame.Power:Show()
                     else
-                        PP.Point(frame.Power, "TOP", frame.Health, "BOTTOM", 0, 0)
+                        PP.Point(frame.Power, "TOPLEFT", frame.Health, "BOTTOMLEFT", 0, 0)
                         frame.Power:Show()
                     end
                     if frame.Power._applyPowerPercentText then frame.Power._applyPowerPercentText(settings) end
+
+                    -- Gray out power bar background for generic melee NPCs
+                    if bPpPos ~= "none" and (bPpPos == "below" or bPpPos == "above") then
+                        local shouldGray = false
+                        if UnitExists(unit) and UnitCanAttack("player", unit) and not UnitIsPlayer(unit) then
+                            local cls = UnitClassification(unit)
+                            local isBoss = (cls == "worldboss")
+                            local isElite = (cls == "elite" or cls == "rareelite")
+                            local lvl = UnitLevel(unit)
+                            local pLvl = UnitLevel("player")
+                            local isMB = isElite and (lvl == -1 or (pLvl and lvl >= pLvl + 1))
+                            local isCst = (UnitClassBase and UnitClassBase(unit) == "PALADIN")
+                            if not isBoss and not isMB and not isCst then shouldGray = true end
+                        end
+                        if shouldGray then
+                            frame.Power._grayedOut = true
+                            if frame.Power.bg then
+                                frame.Power.bg:SetColorTexture(0.25, 0.25, 0.25, 1)
+                                frame.Power.bg:SetAlpha(1)
+                            end
+                        else
+                            frame.Power._grayedOut = false
+                        end
+                    end
                 end
 
                 UpdateBordersForScale(frame, unit)
@@ -4785,16 +5134,13 @@ local function ReloadFrames()
                 -- Override texture settings from donor
                 local uKey = UnitToSettingsKey(unit)
                 local origTex = settings.healthBarTexture
-                local origHbOp = settings.healthBarOpacity
                 settings.healthBarTexture = donorSettings.healthBarTexture
-                settings.healthBarOpacity = donorSettings.healthBarOpacity
                 ApplyHealthBarTexture(frame.Health, uKey)
-                ApplyHealthBarOpacity(frame.Health, uKey)
                 settings.healthBarTexture = origTex
-                settings.healthBarOpacity = origHbOp
+                ApplyHealthBarAlpha(frame.Health, uKey)
             else
                 ApplyHealthBarTexture(frame.Health, UnitToSettingsKey(unit))
-                ApplyHealthBarOpacity(frame.Health, UnitToSettingsKey(unit))
+                ApplyHealthBarAlpha(frame.Health, UnitToSettingsKey(unit))
             end
             ApplyDarkTheme(frame.Health)
             if frame.Health.ForceUpdate then
@@ -4803,15 +5149,37 @@ local function ReloadFrames()
 
             -- Apply power bar opacity
             if frame.Power then
-                if isMiniFrame then
-                    local uKey = UnitToSettingsKey(unit)
-                    local origPbOp = settings.powerBarOpacity
-                    settings.powerBarOpacity = donorSettings.powerBarOpacity
-                    ApplyPowerBarOpacity(frame.Power, uKey)
-                    settings.powerBarOpacity = origPbOp
+                ApplyPowerBarAlpha(frame.Power, UnitToSettingsKey(unit))
+
+                -- Re-apply power bar fill color based on powerPercentPowerColor toggle
+                local usePowerColor = settings.powerPercentPowerColor ~= false
+                if usePowerColor then
+                    frame.Power.colorPower = true
+                    frame.Power.PostUpdateColor = nil
                 else
-                    ApplyPowerBarOpacity(frame.Power, UnitToSettingsKey(unit))
+                    local customFill = settings.customPowerFillColor
+                    frame.Power.colorPower = false
+                    if customFill then
+                        frame.Power:SetStatusBarColor(customFill.r, customFill.g, customFill.b)
+                        frame.Power.PostUpdateColor = function(self)
+                            local s2 = GetSettingsForUnit(unit)
+                            local cf = s2 and s2.customPowerFillColor
+                            if cf then self:SetStatusBarColor(cf.r, cf.g, cf.b) end
+                        end
+                    else
+                        frame.Power:SetStatusBarColor(0.2, 0.35, 0.85)
+                        frame.Power.PostUpdateColor = function(self)
+                            self:SetStatusBarColor(0.2, 0.35, 0.85)
+                        end
+                    end
                 end
+                local customBg = settings.customPowerBgColor
+                if customBg and frame.Power.bg then
+                    frame.Power.bg:SetColorTexture(customBg.r, customBg.g, customBg.b, 1)
+                elseif frame.Power.bg then
+                    frame.Power.bg:SetColorTexture(0, 0, 0, 1)
+                end
+                if frame.Power.ForceUpdate then frame.Power:ForceUpdate() end
             end
 
             if frame.unifiedBorder then
@@ -4823,15 +5191,7 @@ local function ReloadFrames()
                 else
                     PP.Point(frame.unifiedBorder, "TOPLEFT", frame, "TOPLEFT", 0, 0)
                     PP.Point(frame.unifiedBorder, "BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
-                    if frame.unifiedBorder._texs then
-                        for _, t in ipairs(frame.unifiedBorder._texs) do
-                            t:SetColorTexture(bc.r, bc.g, bc.b, 1)
-                        end
-                        PP.Height(frame.unifiedBorder._texs[1], bs)
-                        PP.Height(frame.unifiedBorder._texs[2], bs)
-                        PP.Width(frame.unifiedBorder._texs[3], bs)
-                        PP.Width(frame.unifiedBorder._texs[4], bs)
-                    end
+                    PP.UpdateBorder(frame.unifiedBorder, bs, bc.r, bc.g, bc.b, 1)
                     frame.unifiedBorder:Show()
                 end
             end
@@ -5084,7 +5444,7 @@ function InitializeFrames()
         end
     end
 
-    -- Always suppress the Blizzard default castbar — we have our own.
+    -- Always suppress the Blizzard default castbar ? we have our own.
     -- This must run unconditionally so zone changes (portals, etc.) can't
     -- re-show it even when the player castbar setting is disabled.
     if PlayerCastingBarFrame then
@@ -5183,8 +5543,14 @@ function InitializeFrames()
         local offsetX = db.profile.player.classPowerBarX or 0
         local offsetY = db.profile.player.classPowerBarY or 0
 
+        -- Stop castbar watcher by default; only re-enabled in the "bottom" branch
+        if bar._castbarWatcher then
+            bar._castbarWatcher:SetScript("OnUpdate", nil)
+            bar._castbarWatcher:Hide()
+        end
+
         if style == "modern" and position == "above" then
-            -- Above health bar, inside the frame â€” pips stretch to fill health bar width
+            -- Above health bar, inside the frame � pips stretch to fill health bar width
             -- Bottom of pips flush with top of health bar, top of pips flush with top of border
             bar:SetParent(frames.player)
             local anchorFrame = frames.player.Health
@@ -5213,7 +5579,7 @@ function InitializeFrames()
                 bar._bottomBdrFrame:Show()
             end
         elseif style == "modern" and position == "top" then
-            -- "top" floats above the frame (like "bottom" floats below) â€” does NOT become part of the frame
+            -- "top" floats above the frame (like "bottom" floats below) � does NOT become part of the frame
             bar:SetParent(frames.player)
             ResizeFrameForClassPower(0)
             -- Reset health bar to normal position
@@ -5263,7 +5629,7 @@ function InitializeFrames()
                 PP.Point(frames.player.Health, "TOPLEFT", frames.player, "TOPLEFT", frames.player.Health._xOffset or 0, -btbOff)
                 PP.Point(frames.player.Health, "RIGHT", frames.player, "RIGHT", -(frames.player.Health._rightInset or 0), 0)
             end
-            -- "bottom" position â€” flush with bottom of frame; shifts below castbar when visible (unless user set Y offset)
+            -- "bottom" position � flush with bottom of frame; shifts below castbar when visible (unless user set Y offset)
             bar:SetParent(frames.player)
             if bar._bottomBdrFrame then bar._bottomBdrFrame:Hide() end
             local function AnchorBottom()
@@ -5279,9 +5645,16 @@ function InitializeFrames()
                 PP.Point(bar, "TOP", frames.player, "BOTTOM", offsetX, baseY)
             end
             AnchorBottom()
-            if not bar._castbarWatcher then
-                bar._castbarWatcher = CreateFrame("Frame", nil, bar)
-                bar._castbarWatcher:SetScript("OnUpdate", function()
+            -- Only run the castbar watcher if the player castbar is enabled
+            if db.profile.player.showPlayerCastbar then
+                if not bar._castbarWatcher then
+                    bar._castbarWatcher = CreateFrame("Frame", nil, bar)
+                end
+                local cbElapsed = 0
+                bar._castbarWatcher:SetScript("OnUpdate", function(_, dt)
+                    cbElapsed = cbElapsed + dt
+                    if cbElapsed < 0.1 then return end
+                    cbElapsed = 0
                     local castbarBg = frames.player.Castbar and frames.player.Castbar:GetParent()
                     local nowVis = castbarBg and castbarBg:IsShown() and db.profile.player.showPlayerCastbar
                     if nowVis ~= bar._lastCastVis then
@@ -5289,6 +5662,7 @@ function InitializeFrames()
                         AnchorBottom()
                     end
                 end)
+                bar._castbarWatcher:Show()
             end
             ResizeFrameForClassPower(0)
         end
@@ -5555,7 +5929,7 @@ function InitializeFrames()
                         frame:SetAttribute("unit", unitKey)
                         -- Re-enable oUF elements that were disabled on hide.
                         -- Castbar is handled separately below to respect the
-                        -- user's show/hide setting — never blindly re-enable it.
+                        -- user's show/hide setting ? never blindly re-enable it.
                         for _, elem in ipairs({"Health", "Power", "Portrait", "Buffs", "Debuffs", "HealthPrediction"}) do
                             if frame[elem] and not frame:IsElementEnabled(elem) then
                                 frame:EnableElement(elem)
@@ -5651,8 +6025,8 @@ function SetupOptionsPanel()
             reloadThrottle:Show()
         end
     end
+    _G._EUF_ReloadFrames = ns.ReloadFrames
     ns.ResolveFontPath = ResolveFontPath
-    ns.fontPaths = fontPaths
 
     -- Trigger the EllesmereUI options module registration now that ns.db is ready
     if ns._InitEUIModule then
@@ -5950,6 +6324,16 @@ function EllesmereUF:OnInitialize()
     end
     ResolveFontPath()
 
+    -- Append SharedMedia textures to runtime tables so SM texture keys resolve
+    if EllesmereUI.AppendSharedMediaTextures then
+        EllesmereUI.AppendSharedMediaTextures(
+            healthBarTextureNames,
+            healthBarTextureOrder,
+            nil,
+            healthBarTextures
+        )
+    end
+
     -- Migrate old texture keys (gradient, grunge, stripe) to "none"
     do
         local prof = db.profile
@@ -5996,7 +6380,7 @@ function EllesmereUF:OnInitialize()
         end
     end
 
-    -- Migrate old classPowerStyle values (bars/circles Ã¢â€ â€™ modern) and
+    -- Migrate old classPowerStyle values (bars/circles → modern) and
     -- sync showClassPowerBar with classPowerStyle
     do
         local p = db and db.profile
@@ -6017,7 +6401,7 @@ function EllesmereUF:OnInitialize()
         end
     end
 
-    -- Migrate portraitMode="none" Ã¢â€ â€™ portraitStyle="none" + portraitMode="2d"
+    -- Migrate portraitMode="none" → portraitStyle="none" + portraitMode="2d"
     -- (portrait hide moved from per-unit portraitMode to global portraitStyle)
     do
         local prof = db.profile
@@ -6043,10 +6427,22 @@ function EllesmereUF:OnInitialize()
         end
     end
 
-    -- Minimap button (shared across all Ellesmere addons Ã¢â‚¬â€ first to load wins)
-    -- Minimap button (handled by parent addon)
-    if not _EllesmereUI_MinimapRegistered and EllesmereUI and EllesmereUI.CreateMinimapButton then
-        EllesmereUI.CreateMinimapButton()
+    -- Migrate powerPercentPowerColor split: copy old value to new powerPercentTextPowerColor
+    -- Old behavior: powerPercentPowerColor controlled both fill swatch disable AND text color.
+    -- New behavior: powerPercentPowerColor controls fill only, powerPercentTextPowerColor controls text.
+    do
+        local prof = db.profile
+        local UNITS = { "player", "target", "focus", "boss" }
+        for _, uKey in ipairs(UNITS) do
+            local s = prof[uKey]
+            if s and s.powerPercentTextPowerColor == nil and s.powerPercentPowerColor ~= nil then
+                s.powerPercentTextPowerColor = s.powerPercentPowerColor
+            end
+        end
+        local old = prof.playerTarget
+        if old and old.powerPercentTextPowerColor == nil and old.powerPercentPowerColor ~= nil then
+            old.powerPercentTextPowerColor = old.powerPercentPowerColor
+        end
     end
 
     -- Blizzard options panel is registered centrally in EllesmereUI.lua

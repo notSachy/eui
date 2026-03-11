@@ -413,9 +413,6 @@ local friendlyFrameCache = CreateFramePool("Frame", UIParent, nil, nil, false, f
     plate.health:SetPoint("CENTER", 0, FRIENDLY_PLATE_Y_OFFSET)
     plate.health:SetSize(GetFriendlyHealthBarWidth(), GetFriendlyHealthBarHeight())
     plate.health:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
-    do local PP = EllesmereUI and EllesmereUI.PP
-        if PP then PP.DisablePixelSnap(plate.health) end
-    end
 
     plate.healthBG = plate.health:CreateTexture(nil, "BACKGROUND")
     plate.healthBG:SetAllPoints()
@@ -431,7 +428,6 @@ local friendlyFrameCache = CreateFramePool("Frame", UIParent, nil, nil, false, f
         local PP = EllesmereUI and EllesmereUI.PP
         local t = plate.borderFrame:CreateTexture(nil, "OVERLAY", nil, 7)
         t:SetTexture(BORDER_TEX)
-        if PP then PP.DisablePixelSnap(t) end
         return t
     end
 
@@ -715,6 +711,17 @@ function FriendlyFrame:UNIT_HEALTH()  self:UpdateHealth() end
 function FriendlyFrame:UNIT_NAME_UPDATE()  self:UpdateName() end
 
 -------------------------------------------------------------------------------
+--  Friendly event manager (target, mouseover, raid icons)
+--  Only registered when friendly plates are active -- zero CPU when disabled.
+-------------------------------------------------------------------------------
+local friendlyManager = CreateFrame("Frame")
+local friendlyManagerRegistered = false
+local friendlyMouseoverPlate = nil
+
+local RegisterFriendlyManager   -- forward declaration
+local UnregisterFriendlyManager -- forward declaration
+
+-------------------------------------------------------------------------------
 --  Add / Remove helpers
 -------------------------------------------------------------------------------
 local function ClearAllFriendlyPlates()
@@ -795,14 +802,9 @@ function ns.RemoveFriendlyPlateNoRestore(unit)
 end
 
 -------------------------------------------------------------------------------
---  Friendly event manager (target, mouseover, raid icons)
---  Only registered when friendly plates are active — zero CPU when disabled.
+--  Friendly event manager function definitions
 -------------------------------------------------------------------------------
-local friendlyManager = CreateFrame("Frame")
-local friendlyManagerRegistered = false
-local friendlyMouseoverPlate = nil
-
-local function RegisterFriendlyManager()
+function RegisterFriendlyManager()
     if friendlyManagerRegistered then return end
     friendlyManager:RegisterEvent("PLAYER_TARGET_CHANGED")
     friendlyManager:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
@@ -810,7 +812,7 @@ local function RegisterFriendlyManager()
     friendlyManagerRegistered = true
 end
 
-local function UnregisterFriendlyManager()
+function UnregisterFriendlyManager()
     if not friendlyManagerRegistered then return end
     friendlyManager:UnregisterAllEvents()
     friendlyManagerRegistered = false

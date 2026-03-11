@@ -13,6 +13,16 @@ externals:
   EllesmereUIUnitFrames/Libs/oUF:
     url: https://github.com/oUF-wow/oUF
     tag: latest
+  Libs/LibStub:
+    url: https://repos.wowace.com/wow/libstub/trunk
+    tag: 1.0
+  Libs/CallbackHandler-1.0:
+    url: https://repos.wowace.com/wow/callbackhandler/trunk/CallbackHandler-1.0
+  Libs/LibSharedMedia-3.0:
+    url: https://repos.wowace.com/wow/libsharedmedia-3-0/trunk/LibSharedMedia-3.0
+  Libs/LibDeflate:
+    url: https://github.com/SafeteeWoW/LibDeflate
+    tag: latest
 
 enable-nolib-creation: no
 
@@ -22,5 +32,5 @@ ignore:
   - .kiro
   - README.md
   - CHANGELOG.md
-  - EllesmereUI/EllesmereUIRaidFrames
-  - EllesmereUI/EllesmereUIBasics
+  - EllesmereUIRaidFrames
+  - EllesmereUIBasics

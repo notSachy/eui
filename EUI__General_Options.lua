@@ -22,6 +22,7 @@ local PAGE_CORE        = "Quick Setup"
 local PAGE_COLORS      = "Fonts & Colors"
 local PAGE_PROFILES    = "Profiles"
 
+
 -------------------------------------------------------------------------------
 --  FCT font — handled by EllesmereUI_Startup.lua which runs earlier.
 -------------------------------------------------------------------------------
@@ -75,17 +76,24 @@ initFrame:SetScript("OnEvent", function(self)
     --  { cvarName, euiPreferred }
     --  For the "hide pet/periodic" group we set three CVars to "0" (hidden).
     ---------------------------------------------------------------------------
+    local eqolLoaded = C_AddOns and C_AddOns.IsAddOnLoaded("EnhanceQoL")
+
     local EUI_DEFAULTS = {
         { "cameraDistanceMaxZoomFactor",                    "2.6" },
         { "ActionButtonUseKeyDown",                         "1"   },
         { "SpellQueueWindow",                               "300" },
         { "floatingCombatTextCombatHealing_v2",             "1"   },
-        { "floatingCombatTextCombatDamage_v2",              "1"   },
         { "WorldTextScale_v2",                              "0.5" },
         { "floatingCombatTextCombatLogPeriodicSpells_v2",   "0"   },
         { "floatingCombatTextPetMeleeDamage_v2",            "0"   },
         { "floatingCombatTextPetSpellDamage_v2",            "0"   },
     }
+
+    -- If conflicting addon is loaded, also add damage text CVar to defaults
+    -- so it gets forced to "1" only when the conflict isn't present
+    if not eqolLoaded then
+        EUI_DEFAULTS[#EUI_DEFAULTS + 1] = { "floatingCombatTextCombatDamage_v2", "1" }
+    end
 
     --- Walk the table once at login and apply only where safe.
     local function ApplySmartDefaults()
@@ -97,6 +105,14 @@ initFrame:SetScript("OnEvent", function(self)
         end
     end
     ApplySmartDefaults()
+
+    -- Force damage text CVars off when conflicting addon is present
+    if eqolLoaded then
+        SetCVarSafe("floatingCombatTextCombatDamage_v2", "0")
+        SetCVarSafe("floatingCombatTextCombatLogPeriodicSpells_v2", "0")
+        SetCVarSafe("floatingCombatTextPetMeleeDamage_v2", "0")
+        SetCVarSafe("floatingCombatTextPetSpellDamage_v2", "0")
+    end
 
     ---------------------------------------------------------------------------
     --  Lightweight Error Grabber (replaces Blizzard error popup with chat links)
@@ -503,7 +519,7 @@ initFrame:SetScript("OnEvent", function(self)
         --  Optimized graphics CVar table + buttons (above all sections)
         -------------------------------------------------------------------
         local OPTIMIZED_CVARS = {
-            { "graphicsShadowQuality",      "0" },
+            { "graphicsShadowQuality",      "1" },
             { "graphicsLiquidDetail",       "0" },
             { "graphicsParticleDensity",    "5" },
             { "graphicsSSAO",              "0" },
@@ -621,7 +637,7 @@ initFrame:SetScript("OnEvent", function(self)
                 EllesmereUI:ShowInfoPopup({
                     title = "FPS & Graphics Optimization",
                     content = "This feature optimizes your in-game graphics settings to give you the best combination of high FPS and visual clarity.\n\nYou can revert all changes at any time by clicking \"Restore My Settings\" which will appear after optimizing.\n\n\nWhat we change:\n\n"
-                        .. "Shadow Quality - Disabled (large FPS gain)\n"
+                        .. "Shadow Quality - Fair (balanced quality/FPS)\n"
                         .. "Liquid Detail - Disabled\n"
                         .. "Particle Density - Set to Ultra (keeps important spell effects)\n"
                         .. "SSAO (Ambient Occlusion) - Disabled\n"
@@ -668,11 +684,12 @@ initFrame:SetScript("OnEvent", function(self)
                 EllesmereUI:RefreshPage()
               end },
             { type="dropdown", text="Window Scale",
-              values={ ["Small (90%)"]="Small (90%)", ["Normal (100%)"]="Normal (100%)", ["Large (110%)"]="Large (110%)", ["Huge (125%)"]="Huge (125%)", ["Massive (150%)"]="Massive (150%)" },
-              order={ "Small (90%)", "Normal (100%)", "Large (110%)", "Huge (125%)", "Massive (150%)" },
+              values={ ["Tiny (75%)"]="Tiny (75%)", ["Small (90%)"]="Small (90%)", ["Normal (100%)"]="Normal (100%)", ["Large (110%)"]="Large (110%)", ["Huge (125%)"]="Huge (125%)", ["Massive (150%)"]="Massive (150%)" },
+              order={ "Tiny (75%)", "Small (90%)", "Normal (100%)", "Large (110%)", "Huge (125%)", "Massive (150%)" },
               getValue=function()
                 local raw = (EllesmereUIDB and EllesmereUIDB.panelScale) or 1.0
                 local pct = floor(raw * 100 + 0.5)
+                if pct == 75  then return "Tiny (75%)"    end
                 if pct == 90  then return "Small (90%)"   end
                 if pct == 110 then return "Large (110%)"  end
                 if pct == 125 then return "Huge (125%)"   end
@@ -681,7 +698,8 @@ initFrame:SetScript("OnEvent", function(self)
               end,
               setValue=function(v)
                 local scale = 1.0
-                if v == "Small (90%)"    then scale = 0.90
+                if v == "Tiny (75%)"     then scale = 0.75
+                elseif v == "Small (90%)"    then scale = 0.90
                 elseif v == "Large (110%)"  then scale = 1.10
                 elseif v == "Huge (125%)"   then scale = 1.25
                 elseif v == "Massive (150%)" then scale = 1.50 end
@@ -723,26 +741,35 @@ initFrame:SetScript("OnEvent", function(self)
 
         _, h = W:DualRow(parent, y,
             { type="slider", text="UI Scale",
-              min=40, max=115, step=1,
-              tooltip="Sets the scale of the entire game UI. Defaults to your current WoW UI scale setting.",
+              min=0.40, max=1.00, step=0.01,
+              tooltip="Sets the scale of the entire game UI. Lower values make everything smaller, higher values make everything larger.",
               getValue=function()
-                if EllesmereUI._blizzUIScaleDragVal then
-                    return EllesmereUI._blizzUIScaleDragVal
+                if EllesmereUI._uiScaleDragVal then
+                    return EllesmereUI._uiScaleDragVal
                 end
-                return EllesmereUIDB and EllesmereUIDB.blizzUIScale or 100
+                return EllesmereUIDB and EllesmereUIDB.ppUIScale or EllesmereUI.PP.PixelBestSize()
               end,
               setValue=function(v)
                 if not EllesmereUIDB then EllesmereUIDB = {} end
-                EllesmereUIDB.blizzUIScale = v
-                EllesmereUI._blizzUIScaleDragVal = v
-                if EllesmereUI._applyBlizzUIScale then EllesmereUI._applyBlizzUIScale() end
-                if not EllesmereUI._blizzUIScaleCleanup then
-                    EllesmereUI._blizzUIScaleCleanup = true
+                EllesmereUI._uiScaleDragVal = v
+                EllesmereUIDB.ppUIScaleAuto = false
+                -- Snapshot panel scale before changing UIParent
+                local mf = EllesmereUI._mainFrame
+                local panelScaleBefore
+                if mf then panelScaleBefore = mf:GetEffectiveScale() end
+                EllesmereUI.PP.SetUIScale(v)
+                -- Counter-scale panel so it stays visually identical
+                if mf and panelScaleBefore then
+                    local newEff = UIParent:GetEffectiveScale()
+                    if newEff > 0 then mf:SetScale(panelScaleBefore / newEff) end
+                end
+                if not EllesmereUI._uiScaleCleanup then
+                    EllesmereUI._uiScaleCleanup = true
                     C_Timer.After(0, function()
                         if not EllesmereUI._sliderDragging then
-                            EllesmereUI._blizzUIScaleDragVal = nil
+                            EllesmereUI._uiScaleDragVal = nil
                         end
-                        EllesmereUI._blizzUIScaleCleanup = false
+                        EllesmereUI._uiScaleCleanup = false
                     end)
                 end
               end },
@@ -1428,6 +1455,71 @@ initFrame:SetScript("OnEvent", function(self)
             if ssInitOff then ssCogBlock:Show() else ssCogBlock:Hide() end
         end
 
+        -- Row 5: Character Crosshair (left, with inline swatch) | empty (right)
+        local crosshairRow
+        crosshairRow, h = W:DualRow(parent, y,
+            { type="dropdown", text="Character Crosshair",
+              tooltip="Displays a crosshair at the center of the screen.",
+              values={ ["None"]="None", ["Thin"]="Thin", ["Normal"]="Normal", ["Thick"]="Thick" },
+              order={ "None", "Thin", "Normal", "Thick" },
+              getValue=function()
+                return (EllesmereUIDB and EllesmereUIDB.crosshairSize) or "None"
+              end,
+              setValue=function(v)
+                if not EllesmereUIDB then EllesmereUIDB = {} end
+                EllesmereUIDB.crosshairSize = v
+                if EllesmereUI._applyCrosshair then EllesmereUI._applyCrosshair() end
+                EllesmereUI:RefreshPage()
+              end },
+            { type="label", text="" }
+        );  y = y - h
+
+        -- Inline color swatch on the crosshair dropdown (left region)
+        do
+            local leftRgn = crosshairRow._leftRegion
+            local function crosshairOff()
+                return not EllesmereUIDB or (EllesmereUIDB.crosshairSize or "None") == "None"
+            end
+
+            local chSwGet = function()
+                local c = EllesmereUIDB and EllesmereUIDB.crosshairColor
+                if c then return c.r, c.g, c.b, c.a end
+                return 1, 1, 1, 0.75
+            end
+            local chSwSet = function(r, g, b, a)
+                if not EllesmereUIDB then EllesmereUIDB = {} end
+                EllesmereUIDB.crosshairColor = { r = r, g = g, b = b, a = a or 1 }
+                if EllesmereUI._applyCrosshair then EllesmereUI._applyCrosshair() end
+            end
+            local chSwatch, chUpdateSwatch = EllesmereUI.BuildColorSwatch(leftRgn, leftRgn:GetFrameLevel() + 5, chSwGet, chSwSet, true, 20)
+            PP.Point(chSwatch, "RIGHT", leftRgn._control, "LEFT", -12, 0)
+            leftRgn._lastInline = chSwatch
+
+            local chSwBlock = CreateFrame("Frame", nil, chSwatch)
+            chSwBlock:SetAllPoints()
+            chSwBlock:SetFrameLevel(chSwatch:GetFrameLevel() + 10)
+            chSwBlock:EnableMouse(true)
+            chSwBlock:SetScript("OnEnter", function()
+                EllesmereUI.ShowWidgetTooltip(chSwatch, EllesmereUI.DisabledTooltip("Character Crosshair"))
+            end)
+            chSwBlock:SetScript("OnLeave", function() EllesmereUI.HideWidgetTooltip() end)
+
+            EllesmereUI.RegisterWidgetRefresh(function()
+                local off = crosshairOff()
+                if off then
+                    chSwatch:SetAlpha(0.3)
+                    chSwBlock:Show()
+                else
+                    chSwatch:SetAlpha(1)
+                    chSwBlock:Hide()
+                end
+                chUpdateSwatch()
+            end)
+            local chInitOff = crosshairOff()
+            chSwatch:SetAlpha(chInitOff and 0.3 or 1)
+            if chInitOff then chSwBlock:Show() else chSwBlock:Hide() end
+        end
+
         _, h = W:Spacer(parent, y, 20);  y = y - h
 
         -------------------------------------------------------------------
@@ -1453,7 +1545,7 @@ initFrame:SetScript("OnEvent", function(self)
         local fctFontValues = {
             ["default"]                                = { text = "Blizzard Default", font = "Fonts\\FRIZQT__.TTF" },
             [FCT_FONT_DIR .. "Expressway.TTF"]         = { text = "Expressway",           font = FCT_FONT_DIR .. "Expressway.TTF" },
-            [FCT_FONT_DIR .. "Avant Garde.ttf"]        = { text = "Avant Garde",          font = FCT_FONT_DIR .. "Avant Garde.ttf" },
+            [FCT_FONT_DIR .. "Avant Garde.ttf"]        = { text = "Avant Garde (Naowh)",  font = FCT_FONT_DIR .. "Avant Garde.ttf" },
             [FCT_FONT_DIR .. "Arial Bold.TTF"]         = { text = "Arial Bold",           font = FCT_FONT_DIR .. "Arial Bold.TTF" },
             [FCT_FONT_DIR .. "Poppins.ttf"]            = { text = "Poppins",              font = FCT_FONT_DIR .. "Poppins.ttf" },
             [FCT_FONT_DIR .. "FiraSans Medium.ttf"]    = { text = "Fira Sans Medium",     font = FCT_FONT_DIR .. "FiraSans Medium.ttf" },
@@ -1499,14 +1591,22 @@ initFrame:SetScript("OnEvent", function(self)
             "Fonts\\MORPHEUS.TTF",
             "Fonts\\skurri.ttf",
         }
+        if EllesmereUI.AppendSharedMediaFonts then
+            EllesmereUI.AppendSharedMediaFonts(fctFontValues, fctFontOrder)
+        end
 
         local showDmgRow
         showDmgRow, h = W:DualRow(parent, y,
             { type="toggle", text="Show Damage Text",
-              getValue=function() return GetCVarBool("floatingCombatTextCombatDamage_v2") end,
+              disabled=function() return eqolLoaded end,
+              disabledTooltip="This option is temporarily disabled due to EQoL crashing things in conjunction with EUI. Please enable this via EQoL or disable EQoL to use this option",
+              getValue=function()
+                if eqolLoaded then return false end
+                return GetCVarBool("floatingCombatTextCombatDamage_v2")
+              end,
               setValue=function(v)
+                if eqolLoaded then return end
                 SetCVarSafe("floatingCombatTextCombatDamage_v2", v and "1" or "0")
-                EllesmereUI:RefreshPage()
               end },
             { type="dropdown", text="Combat Text Font",
               tooltip="WARNING: This feature requires you to re-log or restart WoW to take effect.",
@@ -1529,59 +1629,6 @@ initFrame:SetScript("OnEvent", function(self)
                     cancelText  = "Later",
                 })
               end });  y = y - h
-
-        -- Cog on Show Damage Text for Pet/Periodic Damage
-        do
-            local leftRgn = showDmgRow._leftRegion
-            local function dmgTextOff()
-                return not GetCVarBool("floatingCombatTextCombatDamage_v2")
-            end
-
-            local _, petDmgCogShow = EllesmereUI.BuildCogPopup({
-                title = "Damage Text Settings",
-                rows = {
-                    { type="toggle", label="Show Pet/Periodic Damage",
-                      get=function()
-                        return GetCVarBool("floatingCombatTextCombatLogPeriodicSpells_v2")
-                           and GetCVarBool("floatingCombatTextPetMeleeDamage_v2")
-                           and GetCVarBool("floatingCombatTextPetSpellDamage_v2")
-                      end,
-                      set=function(v)
-                        local val = v and "1" or "0"
-                        SetCVarSafe("floatingCombatTextCombatLogPeriodicSpells_v2", val)
-                        SetCVarSafe("floatingCombatTextPetMeleeDamage_v2", val)
-                        SetCVarSafe("floatingCombatTextPetSpellDamage_v2", val)
-                      end },
-                },
-            })
-            local petDmgCogBtn = CreateFrame("Button", nil, leftRgn)
-            petDmgCogBtn:SetSize(26, 26)
-            petDmgCogBtn:SetPoint("RIGHT", leftRgn._control, "LEFT", -8, 0)
-            leftRgn._lastInline = petDmgCogBtn
-            petDmgCogBtn:SetFrameLevel(leftRgn:GetFrameLevel() + 5)
-            petDmgCogBtn:SetAlpha(dmgTextOff() and 0.15 or 0.4)
-            local petDmgCogTex = petDmgCogBtn:CreateTexture(nil, "OVERLAY")
-            petDmgCogTex:SetAllPoints()
-            petDmgCogTex:SetTexture(EllesmereUI.COGS_ICON)
-            petDmgCogBtn:SetScript("OnEnter", function(self)
-                if dmgTextOff() then
-                    EllesmereUI.ShowWidgetTooltip(self, EllesmereUI.DisabledTooltip("Show Damage Text"))
-                else
-                    self:SetAlpha(0.7)
-                end
-            end)
-            petDmgCogBtn:SetScript("OnLeave", function(self)
-                EllesmereUI.HideWidgetTooltip()
-                self:SetAlpha(dmgTextOff() and 0.15 or 0.4)
-            end)
-            petDmgCogBtn:SetScript("OnClick", function(self)
-                if dmgTextOff() then return end
-                petDmgCogShow(self)
-            end)
-            EllesmereUI.RegisterWidgetRefresh(function()
-                petDmgCogBtn:SetAlpha(dmgTextOff() and 0.15 or 0.4)
-            end)
-        end
 
         _, h = W:Spacer(parent, y, 20);  y = y - h
 
@@ -1732,13 +1779,8 @@ initFrame:SetScript("OnEvent", function(self)
                 local db = EAB_db()
                 if not db then return end
                 db.squareIcons = v
-                EllesmereUI:ShowConfirmPopup({
-                    title   = "Reload Required",
-                    message = "Modern Icons requires a UI reload to apply.",
-                    confirmText = "Reload Now",
-                    cancelText  = "Later",
-                    onConfirm = function() ReloadUI() end,
-                })
+                if EAB and EAB.ApplyShapes then EAB:ApplyShapes() end
+                if EAB and EAB.ApplyBorders then EAB:ApplyBorders() end
             end);  y = y - h
 
         _, h = W:Slider(parent, "Icon Zoom", y, 0, 10, 0.5,
@@ -1924,7 +1966,7 @@ initFrame:SetScript("OnEvent", function(self)
                     local div = rowFrame:CreateTexture(nil, "ARTWORK")
                     div:SetColorTexture(1, 1, 1, 0.06)
                     if div.SetSnapToPixelGrid then div:SetSnapToPixelGrid(false); div:SetTexelSnappingBias(0) end
-                    PP.Width(div, 1)
+                    div:SetWidth(1)
                     local xPos = d * colW
                     PP.Point(div, "TOP", rowFrame, "TOPLEFT", xPos, 0)
                     PP.Point(div, "BOTTOM", rowFrame, "BOTTOMLEFT", xPos, 0)
@@ -2036,10 +2078,15 @@ initFrame:SetScript("OnEvent", function(self)
             else
                 local path = EllesmereUI.FONT_BLIZZARD[name]
                     or (FONT_DIR_GLOBAL .. (EllesmereUI.FONT_FILES[name] or "Expressway.TTF"))
-                fontDropValues[name] = { text = name, font = path }
+                local displayName = (EllesmereUI.FONT_DISPLAY_NAMES and EllesmereUI.FONT_DISPLAY_NAMES[name]) or name
+                fontDropValues[name] = { text = displayName, font = path }
                 fontDropOrder[#fontDropOrder + 1] = name
             end
         end
+        if EllesmereUI.AppendSharedMediaFonts then
+            EllesmereUI.AppendSharedMediaFonts(fontDropValues, fontDropOrder, { keyByName = true })
+        end
+
 
         -- Reload popup for font changes
         local function FontReload()
@@ -2622,48 +2669,34 @@ initFrame:SetScript("OnEvent", function(self)
     end)
 
     ---------------------------------------------------------------------------
-    --  Runtime: Blizzard UI Scale (UIParent:SetScale)
-    --  100% = default (no change). We multiply the system's base scale.
-    --  Counter-scale our panel so it stays visually identical.
+    --  Runtime: Pixel-Perfect UI Scale (UIParent:SetScale)
+    --  Scale is stored directly in EllesmereUIDB.ppUIScale as a decimal.
+    --  Startup applies it early; this handler re-applies at PLAYER_ENTERING_WORLD
+    --  to cover any Blizzard resets, and counter-scales our panel.
     ---------------------------------------------------------------------------
     do
-        local baseUIScale       -- captured once at login (Blizzard default)
-
-        local function ApplyBlizzUIScale()
-            if not baseUIScale then
-                baseUIScale = UIParent:GetScale()
-            end
-            local pct = EllesmereUIDB and EllesmereUIDB.blizzUIScale or 100
-            -- Scale proportionally from the Blizzard default.
-            -- 100% = baseUIScale (no change), 50% = half, 115% = 15% larger.
-            local newScale = baseUIScale * (pct / 100)
-            -- Snapshot our panel's current effective scale before changing UIParent
+        local function ApplyPPUIScale()
+            local scale = EllesmereUIDB and EllesmereUIDB.ppUIScale
+            if not scale then return end
+            -- Snapshot panel scale before changing UIParent
             local mf = EllesmereUI._mainFrame
             local panelScaleBefore
-            if mf then
-                panelScaleBefore = mf:GetEffectiveScale()
-            end
-            UIParent:SetScale(newScale)
-            -- Counter-scale: keep our panel at the same effective scale
+            if mf then panelScaleBefore = mf:GetEffectiveScale() end
+            EllesmereUI.PP.SetUIScale(scale)
+            -- Counter-scale panel so it stays visually identical
             if mf and panelScaleBefore then
-                local newParentEffective = UIParent:GetEffectiveScale()
-                if newParentEffective > 0 then
-                    mf:SetScale(panelScaleBefore / newParentEffective)
-                end
+                local newEff = UIParent:GetEffectiveScale()
+                if newEff > 0 then mf:SetScale(panelScaleBefore / newEff) end
             end
         end
 
-        EllesmereUI._applyBlizzUIScale = ApplyBlizzUIScale
+        EllesmereUI._applyPPUIScale = ApplyPPUIScale
 
-        local blizzScaleFrame = CreateFrame("Frame")
-        blizzScaleFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-        blizzScaleFrame:SetScript("OnEvent", function(self)
+        local ppScaleFrame = CreateFrame("Frame")
+        ppScaleFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+        ppScaleFrame:SetScript("OnEvent", function(self)
             self:UnregisterEvent("PLAYER_ENTERING_WORLD")
-            baseUIScale = UIParent:GetScale()
-            local pct = EllesmereUIDB and EllesmereUIDB.blizzUIScale or 100
-            if pct ~= 100 then
-                ApplyBlizzUIScale()
-            end
+            ApplyPPUIScale()
         end)
     end
 
@@ -2718,19 +2751,1098 @@ initFrame:SetScript("OnEvent", function(self)
         end)
     end
 
+    ---------------------------------------------------------------------------
+    --  Runtime: Character Crosshair
+    ---------------------------------------------------------------------------
+    do
+        local PP = EllesmereUI.PanelPP
+        local crosshairFrame
+        local function CreateCrosshair()
+            if crosshairFrame then return end
+            crosshairFrame = CreateFrame("Frame", "EUI_CharacterCrosshair", UIParent)
+            crosshairFrame:SetFrameStrata("HIGH")
+            crosshairFrame:SetFrameLevel(100)
+            crosshairFrame:EnableMouse(false)
+            crosshairFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+            crosshairFrame:SetSize(1, 1)
+
+            local function MakeArm()
+                local t = crosshairFrame:CreateTexture(nil, "OVERLAY")
+                if t.SetSnapToPixelGrid then
+                    t:SetSnapToPixelGrid(false)
+                    t:SetTexelSnappingBias(0)
+                end
+                return t
+            end
+            crosshairFrame._hBar = MakeArm()
+            crosshairFrame._vBar = MakeArm()
+        end
+
+        EllesmereUI._applyCrosshair = function()
+            local size = EllesmereUIDB and EllesmereUIDB.crosshairSize or "None"
+            if size == "None" then
+                if crosshairFrame then crosshairFrame:Hide() end
+                return
+            end
+
+            CreateCrosshair()
+
+            local c = EllesmereUIDB and EllesmereUIDB.crosshairColor
+            local cr = c and c.r or 1
+            local cg = c and c.g or 1
+            local cb = c and c.b or 1
+            local ca = c and c.a or 0.75
+
+            -- Thickness in logical pixels: Thin=1, Normal=2, Thick=3
+            -- Do NOT use PP.Scale() on border/line thickness — raw pixel count
+            local thickness = (size == "Thin") and 1 or (size == "Thick") and 3 or 2
+            -- Arm length: 20 logical px each direction, snapped to physical pixels
+            local ARM = PP.Scale(20)
+
+            local hBar = crosshairFrame._hBar
+            local vBar = crosshairFrame._vBar
+
+            hBar:SetColorTexture(cr, cg, cb, ca)
+            hBar:ClearAllPoints()
+            hBar:SetPoint("LEFT",  crosshairFrame, "CENTER", -ARM, 0)
+            hBar:SetPoint("RIGHT", crosshairFrame, "CENTER",  ARM, 0)
+            hBar:SetHeight(thickness)
+
+            vBar:SetColorTexture(cr, cg, cb, ca)
+            vBar:ClearAllPoints()
+            vBar:SetPoint("TOP",    crosshairFrame, "CENTER", 0,  ARM)
+            vBar:SetPoint("BOTTOM", crosshairFrame, "CENTER", 0, -ARM)
+            vBar:SetWidth(thickness)
+
+            crosshairFrame:Show()
+        end
+
+        -- Apply on login
+        C_Timer.After(1, function()
+            if EllesmereUIDB and EllesmereUIDB.crosshairSize and EllesmereUIDB.crosshairSize ~= "None" then
+                EllesmereUI._applyCrosshair()
+            end
+        end)
+    end
+
     end  -- EUI_ExtrasRuntimeInit guard
+
+    ---------------------------------------------------------------------------
+    --  Profiles page
+    ---------------------------------------------------------------------------
+    local function BuildProfilesPage(pageName, parent, yOffset)
+        local W = EllesmereUI.Widgets
+        local y = yOffset
+        local _, h
+        local FONT = EllesmereUI.EXPRESSWAY
+        local EG = EllesmereUI.ELLESMERE_GREEN
+        local MEDIA = "Interface\\AddOns\\EllesmereUI\\media\\"
+
+        parent._showRowDivider = false
+
+        -- Button colours matching dropdown border style
+        local _c = EllesmereUI.WB_COLOURS
+        local PROF_BTN_COLOURS = {
+            _c[1],  _c[2],  _c[3],  _c[4],   _c[5],  _c[6],  _c[7],  _c[8],
+            1, 1, 1, EllesmereUI.DD_BRD_A,   1, 1, 1, EllesmereUI.DD_BRD_HA,
+            _c[17], _c[18], _c[19], _c[20],  _c[21], _c[22], _c[23], _c[24],
+        }
+
+        _, h = W:Spacer(parent, y, 10);  y = y - h
+
+        local function UniquePresetName(baseName)
+            local _, profiles = EllesmereUI.GetProfileList()
+            if not profiles[baseName] then return baseName end
+            local n = 2
+            while profiles[baseName .. " " .. n] do n = n + 1 end
+            return baseName .. " " .. n
+        end
+
+        -- Shared dropdown builder (reused for profile dd and preset dd)
+        local function MakeDropdown(parentFrame, w, h, getLabel)
+            local btn = CreateFrame("Button", nil, parentFrame)
+            PP.Size(btn, w, h)
+            btn:SetFrameLevel(parentFrame:GetFrameLevel() + 2)
+            local bg = btn:CreateTexture(nil, "BACKGROUND")
+            bg:SetAllPoints()
+            bg:SetColorTexture(EllesmereUI.DD_BG_R, EllesmereUI.DD_BG_G, EllesmereUI.DD_BG_B, EllesmereUI.DD_BG_A)
+            local brd = EllesmereUI.MakeBorder(btn, 1, 1, 1, EllesmereUI.DD_BRD_A, PP)
+            local lbl = EllesmereUI.MakeFont(btn, 13, nil, 1, 1, 1)
+            lbl:SetAlpha(EllesmereUI.DD_TXT_A)
+            lbl:SetJustifyH("LEFT")
+            lbl:SetWordWrap(false)
+            lbl:SetMaxLines(1)
+            lbl:SetPoint("LEFT", btn, "LEFT", 12, 0)
+            local arrow = EllesmereUI.MakeDropdownArrow(btn, 12, PP)
+            lbl:SetPoint("RIGHT", arrow, "LEFT", -5, 0)
+            lbl:SetText(getLabel())
+            local s = EllesmereUI.RD_DD_COLOURS
+            btn:SetScript("OnEnter", function()
+                lbl:SetTextColor(s[21], s[22], s[23], s[24])
+                brd:SetColor(s[13], s[14], s[15], s[16])
+                bg:SetColorTexture(s[5], s[6], s[7], s[8])
+            end)
+            btn:SetScript("OnLeave", function()
+                lbl:SetTextColor(s[17], s[18], s[19], s[20])
+                brd:SetColor(s[9], s[10], s[11], s[12])
+                bg:SetColorTexture(s[1], s[2], s[3], s[4])
+            end)
+            return btn, lbl, bg, brd
+        end
+
+        local function MakeDropdownMenu(anchor, w)
+            local menu = CreateFrame("Frame", nil, UIParent)
+            menu:SetFrameStrata("FULLSCREEN_DIALOG")
+            menu:SetFrameLevel(200)
+            menu:SetClampedToScreen(true)
+            menu:SetSize(w, 4)
+            menu:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
+            menu:Hide()
+            local bg = menu:CreateTexture(nil, "BACKGROUND")
+            bg:SetAllPoints()
+            bg:SetColorTexture(EllesmereUI.DD_BG_R, EllesmereUI.DD_BG_G, EllesmereUI.DD_BG_B, 0.98)
+            EllesmereUI.MakeBorder(menu, 1, 1, 1, EllesmereUI.DD_BRD_A, PP)
+            menu:SetScript("OnShow", function(self)
+                local s = anchor:GetEffectiveScale() / UIParent:GetEffectiveScale()
+                self:SetScale(s)
+                self:SetScript("OnUpdate", function(m)
+                    if not anchor:IsMouseOver() and not m:IsMouseOver() then
+                        if IsMouseButtonDown("LeftButton") or IsMouseButtonDown("RightButton") then m:Hide() end
+                    end
+                end)
+            end)
+            menu:SetScript("OnHide", function(self) self:SetScript("OnUpdate", nil) end)
+            return menu
+        end
+
+        local function MakeMenuItems(menu, items, onSelect)
+            -- items = { { label, key } }
+            local btns = {}
+            for i, item in ipairs(items) do
+                local itm = CreateFrame("Button", nil, menu)
+                itm:SetHeight(26)
+                itm:SetFrameLevel(menu:GetFrameLevel() + 1)
+                local lbl = itm:CreateFontString(nil, "OVERLAY")
+                lbl:SetFont(FONT, 13, EllesmereUI.GetFontOutlineFlag())
+                lbl:SetPoint("LEFT", itm, "LEFT", 10, 0)
+                lbl:SetJustifyH("LEFT")
+                lbl:SetTextColor(1, 1, 1, EllesmereUI.TEXT_DIM_A)
+                itm._lbl = lbl
+                local hl = itm:CreateTexture(nil, "ARTWORK")
+                hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 1); hl:SetAlpha(0)
+                itm._hl = hl
+                itm:SetScript("OnEnter", function() lbl:SetTextColor(1,1,1,1); hl:SetAlpha(EllesmereUI.DD_ITEM_HL_A) end)
+                itm:SetScript("OnLeave", function()
+                    lbl:SetTextColor(1, 1, 1, EllesmereUI.TEXT_DIM_A)
+                    hl:SetAlpha(itm._isSel and EllesmereUI.DD_ITEM_SEL_A or 0)
+                end)
+                itm._lbl:SetText(item.label)
+                local idx = i
+                itm:SetScript("OnClick", function() menu:Hide(); onSelect(idx, item) end)
+                btns[i] = itm
+            end
+            return btns
+        end
+
+        local function LayoutMenuItems(menu, btns, selIdx)
+            local mH = 4
+            for i, itm in ipairs(btns) do
+                itm:SetPoint("TOPLEFT", menu, "TOPLEFT", 1, -mH)
+                itm:SetPoint("TOPRIGHT", menu, "TOPRIGHT", -1, -mH)
+                itm._isSel = (i == selIdx)
+                itm._hl:SetAlpha(itm._isSel and 0.04 or 0)
+                itm:Show()
+                mH = mH + 26
+            end
+            menu:SetHeight(mH + 4)
+        end
+
+        -------------------------------------------------------------------
+        --  Row 1: Export Profile | Import Profile | Popular Presets (centered, no bg)
+        -------------------------------------------------------------------
+        _, h = W:Spacer(parent, y, 10);  y = y - h
+
+        -- hoisted so the import callback can update it
+        local ddLabel
+
+        do
+            local ROW_H  = 70
+            local ITEM_H = 36
+            local GAP    = 35
+            local ITEM_W = 220
+
+            local totalW = parent:GetWidth() - EllesmereUI.CONTENT_PAD * 2
+            local rowFrame = CreateFrame("Frame", nil, parent)
+            PP.Size(rowFrame, totalW, ROW_H)
+            PP.Point(rowFrame, "TOPLEFT", parent, "TOPLEFT", EllesmereUI.CONTENT_PAD, y)
+
+            local groupW = ITEM_W * 3 + GAP * 2
+            local startX = math.floor((totalW - groupW) / 2)
+
+            -- Export Profile button
+            local exportBtn = CreateFrame("Button", nil, rowFrame)
+            PP.Size(exportBtn, ITEM_W, ITEM_H)
+            PP.Point(exportBtn, "TOPLEFT", rowFrame, "TOPLEFT", startX, -math.floor((ROW_H - ITEM_H) / 2))
+            exportBtn:SetFrameLevel(rowFrame:GetFrameLevel() + 2)
+            EllesmereUI.MakeStyledButton(exportBtn, "Export Profile", 13, PROF_BTN_COLOURS, function()
+                local str = EllesmereUI.ExportCurrentProfile()
+                if str then EllesmereUI:ShowExportPopup(str) end
+            end)
+
+            -- Import Profile button
+            local importBtn = CreateFrame("Button", nil, rowFrame)
+            PP.Size(importBtn, ITEM_W, ITEM_H)
+            PP.Point(importBtn, "TOPLEFT", exportBtn, "TOPRIGHT", GAP, 0)
+            importBtn:SetFrameLevel(rowFrame:GetFrameLevel() + 2)
+            EllesmereUI.MakeStyledButton(importBtn, "Import Profile", 13, PROF_BTN_COLOURS, function()
+                EllesmereUI:ShowImportPopup(function(importStr)
+                    EllesmereUI:ShowInputPopup({
+                        title       = "Name This Profile",
+                        message     = "Enter a name for the imported profile:",
+                        placeholder = "Imported Profile",
+                        confirmText = "Import",
+                        cancelText  = "Cancel",
+                        onConfirm   = function(name)
+                            if not name or name == "" then return end
+                            local ok, err = EllesmereUI.ImportProfile(importStr, name)
+                            if ok then
+                                ReloadUI()
+                            else
+                                EllesmereUI:ShowInfoPopup({ title = "Import Failed", content = err or "Unknown error" })
+                            end
+                        end,
+                    })
+                end)
+            end)
+
+            -- Popular Presets dropdown (label always stays "Popular Presets")
+            do
+                local presetEntries = {}
+                presetEntries[#presetEntries + 1] = {
+                    label = "Spin the Wheel",
+                    onApply = function()
+                        EllesmereUI.SpinTheWheel()
+                        EllesmereUI.SaveCurrentAsProfile(UniquePresetName("Spin the Wheel"))
+                        ReloadUI()
+                    end,
+                }
+                if EllesmereUI.WEEKLY_SPOTLIGHT then
+                    local spot = EllesmereUI.WEEKLY_SPOTLIGHT
+                    presetEntries[#presetEntries + 1] = {
+                        label = "Weekly Spotlight: " .. spot.name,
+                        onApply = function()
+                            if not spot.exportString then return end
+                            local ok, err = EllesmereUI.ImportProfile(spot.exportString, UniquePresetName("Weekly: " .. spot.name))
+                            if ok then
+                                ReloadUI()
+                            else EllesmereUI:ShowInfoPopup({ title = "Spotlight Error", content = err or "Unknown error" }) end
+                        end,
+                    }
+                end
+                for _, preset in ipairs(EllesmereUI.POPULAR_PRESETS) do
+                    if preset.exportString then
+                        local p = preset
+                        presetEntries[#presetEntries + 1] = {
+                            label = p.name,
+                            onApply = function()
+                                local ok, err = EllesmereUI.ImportProfile(p.exportString, UniquePresetName(p.name))
+                                if ok then
+                                    ReloadUI()
+                                else EllesmereUI:ShowInfoPopup({ title = "Preset Error", content = err or "Unknown error" }) end
+                            end,
+                        }
+                    end
+                end
+
+                local ddBtn = CreateFrame("Button", nil, rowFrame)
+                PP.Size(ddBtn, ITEM_W, ITEM_H)
+                PP.Point(ddBtn, "TOPLEFT", importBtn, "TOPRIGHT", GAP, 0)
+                ddBtn:SetFrameLevel(rowFrame:GetFrameLevel() + 2)
+
+                local ddBg = ddBtn:CreateTexture(nil, "BACKGROUND")
+                ddBg:SetAllPoints()
+                ddBg:SetColorTexture(EllesmereUI.DD_BG_R, EllesmereUI.DD_BG_G, EllesmereUI.DD_BG_B, EllesmereUI.DD_BG_A)
+                local ddBrd = EllesmereUI.MakeBorder(ddBtn, 1, 1, 1, EllesmereUI.DD_BRD_A, PP)
+
+                local ddLbl = EllesmereUI.MakeFont(ddBtn, 13, nil, 1, 1, 1)
+                ddLbl:SetAlpha(EllesmereUI.DD_TXT_A)
+                ddLbl:SetJustifyH("LEFT")
+                ddLbl:SetWordWrap(false)
+                ddLbl:SetMaxLines(1)
+                ddLbl:SetPoint("LEFT",  ddBtn, "LEFT",  12, 0)
+                local ddArrow = EllesmereUI.MakeDropdownArrow(ddBtn, 12, PP)
+                ddLbl:SetPoint("RIGHT", ddArrow, "LEFT", -5, 0)
+                ddLbl:SetText("Popular Presets")
+
+                local pS = EllesmereUI.RD_DD_COLOURS
+
+                local menu = MakeDropdownMenu(ddBtn, ITEM_W)
+                local menuBtns = MakeMenuItems(menu, presetEntries, function(idx, entry)
+                    EllesmereUI:ShowConfirmPopup({
+                        title       = entry.label,
+                        message     = "Apply \"" .. entry.label .. "\" as your active profile?",
+                        confirmText = "Apply",
+                        cancelText  = "Cancel",
+                        onConfirm   = function() entry.onApply() end,
+                    })
+                end)
+
+                local function PresetApplyNormal()
+                    ddLbl:SetTextColor(pS[17], pS[18], pS[19], pS[20])
+                    ddBrd:SetColor(pS[9], pS[10], pS[11], pS[12])
+                    ddBg:SetColorTexture(pS[1], pS[2], pS[3], pS[4])
+                end
+                local function PresetApplyHover()
+                    ddLbl:SetTextColor(pS[21], pS[22], pS[23], pS[24])
+                    ddBrd:SetColor(pS[13], pS[14], pS[15], pS[16])
+                    ddBg:SetColorTexture(pS[5], pS[6], pS[7], pS[8])
+                end
+
+                ddBtn:SetScript("OnClick", function()
+                    if menu:IsShown() then menu:Hide()
+                    else LayoutMenuItems(menu, menuBtns, 0); menu:Show() end
+                end)
+                ddBtn:SetScript("OnEnter", function() PresetApplyHover() end)
+                ddBtn:SetScript("OnLeave", function()
+                    if not menu:IsShown() then PresetApplyNormal() end
+                end)
+                ddBtn:HookScript("OnHide", function() menu:Hide() end)
+                menu:HookScript("OnShow", function()
+                    PresetApplyHover()
+                end)
+                menu:SetScript("OnHide", function(self)
+                    self:SetScript("OnUpdate", nil)
+                    if ddBtn:IsMouseOver() then PresetApplyHover()
+                    else PresetApplyNormal() end
+                end)
+            end
+
+            y = y - ROW_H
+        end
+
+        -------------------------------------------------------------------
+        --  Row 2: Active Profile dropdown | Save As | Assign to Spec (centered, no bg)
+        -------------------------------------------------------------------
+        do
+            local ROW_H  = 50
+            local ITEM_H = 30
+            local GAP    = 15
+            local BTN_W  = 110
+            local DD_W   = 220
+
+            local totalW = parent:GetWidth() - EllesmereUI.CONTENT_PAD * 2
+            local rowFrame = CreateFrame("Frame", nil, parent)
+            PP.Size(rowFrame, totalW, ROW_H)
+            PP.Point(rowFrame, "TOPLEFT", parent, "TOPLEFT", EllesmereUI.CONTENT_PAD, y)
+
+            local groupW = DD_W + GAP * 2 + BTN_W * 2
+            local startX = math.floor((totalW - groupW) / 2)
+            local offsetY = -math.floor((ROW_H - ITEM_H) / 2)
+
+            -- Active Profile dropdown (no X on the field)
+            local ddBtn = CreateFrame("Button", nil, rowFrame)
+            PP.Size(ddBtn, DD_W, ITEM_H)
+            PP.Point(ddBtn, "TOPLEFT", rowFrame, "TOPLEFT", startX, offsetY)
+            ddBtn:SetFrameLevel(rowFrame:GetFrameLevel() + 2)
+
+            local ddBg = ddBtn:CreateTexture(nil, "BACKGROUND")
+            ddBg:SetAllPoints()
+            ddBg:SetColorTexture(EllesmereUI.DD_BG_R, EllesmereUI.DD_BG_G, EllesmereUI.DD_BG_B, EllesmereUI.DD_BG_A)
+            local ddBrd = EllesmereUI.MakeBorder(ddBtn, 1, 1, 1, EllesmereUI.DD_BRD_A, PP)
+
+            ddLabel = EllesmereUI.MakeFont(ddBtn, 13, nil, 1, 1, 1)
+            ddLabel:SetAlpha(EllesmereUI.DD_TXT_A)
+            ddLabel:SetJustifyH("LEFT")
+            ddLabel:SetWordWrap(false)
+            ddLabel:SetMaxLines(1)
+            ddLabel:SetPoint("LEFT",  ddBtn, "LEFT",  12, 0)
+            local ddArrow2 = EllesmereUI.MakeDropdownArrow(ddBtn, 12, PP)
+            ddLabel:SetPoint("RIGHT", ddArrow2, "LEFT", -5, 0)
+            ddLabel:SetText(EllesmereUI.GetActiveProfileName())
+
+            local aS = EllesmereUI.RD_DD_COLOURS
+
+            local menu = MakeDropdownMenu(ddBtn, DD_W)
+            local X_SZ = 14
+            local menuItems = {}
+
+            local function RebuildProfileMenu()
+                for _, itm in ipairs(menuItems) do itm:Hide() end
+                local order, profiles = EllesmereUI.GetProfileList()
+                local mH = 4
+                local idx = 0
+                local activeName = EllesmereUI.GetActiveProfileName()
+                for _, name in ipairs(order) do
+                    if profiles[name] then
+                        idx = idx + 1
+                        local itm = menuItems[idx]
+                        if not itm then
+                            itm = CreateFrame("Button", nil, menu)
+                            itm:SetHeight(26)
+                            itm:SetFrameLevel(menu:GetFrameLevel() + 1)
+
+                            local lbl = itm:CreateFontString(nil, "OVERLAY")
+                            lbl:SetFont(FONT, 13, EllesmereUI.GetFontOutlineFlag())
+                            lbl:SetPoint("LEFT",  itm, "LEFT",  10, 0)
+                            lbl:SetPoint("RIGHT", itm, "RIGHT", -(X_SZ + 14), 0)
+                            lbl:SetJustifyH("LEFT")
+                            lbl:SetTextColor(1, 1, 1, EllesmereUI.TEXT_DIM_A)
+                            itm._lbl = lbl
+
+                            local hl = itm:CreateTexture(nil, "ARTWORK")
+                            hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 1); hl:SetAlpha(0)
+                            itm._hl = hl
+
+                            local xBtn = CreateFrame("Button", nil, itm)
+                            xBtn:SetSize(X_SZ, X_SZ)
+                            xBtn:SetPoint("RIGHT", itm, "RIGHT", -8, 0)
+                            xBtn:SetFrameLevel(itm:GetFrameLevel() + 2)
+                            local xIcon = xBtn:CreateTexture(nil, "OVERLAY")
+                            xIcon:SetAllPoints()
+                            if xIcon.SetSnapToPixelGrid then xIcon:SetSnapToPixelGrid(false); xIcon:SetTexelSnappingBias(0) end
+                            xIcon:SetTexture(MEDIA .. "icons\\eui-close.png")
+                            xBtn:SetAlpha(0.4)
+                            itm._xBtn = xBtn
+
+                            itm:SetScript("OnEnter", function()
+                                lbl:SetTextColor(1, 1, 1, 1)
+                                hl:SetAlpha(EllesmereUI.DD_ITEM_HL_A)
+                                xBtn:SetAlpha(0.8)
+                            end)
+                            itm:SetScript("OnLeave", function()
+                                -- Stay highlighted if mouse moved to the X button
+                                if xBtn:IsMouseOver() then return end
+                                lbl:SetTextColor(1, 1, 1, EllesmereUI.TEXT_DIM_A)
+                                hl:SetAlpha(itm._isSel and EllesmereUI.DD_ITEM_SEL_A or 0)
+                                xBtn:SetAlpha(0.4)
+                            end)
+                            xBtn:SetScript("OnEnter", function()
+                                lbl:SetTextColor(1, 1, 1, 1)
+                                hl:SetAlpha(EllesmereUI.DD_ITEM_HL_A)
+                                xBtn:SetAlpha(1)
+                            end)
+                            xBtn:SetScript("OnLeave", function()
+                                -- Stay highlighted if mouse moved back to the item row
+                                if itm:IsMouseOver() then
+                                    xBtn:SetAlpha(0.8)
+                                    return
+                                end
+                                lbl:SetTextColor(1, 1, 1, EllesmereUI.TEXT_DIM_A)
+                                hl:SetAlpha(itm._isSel and EllesmereUI.DD_ITEM_SEL_A or 0)
+                                xBtn:SetAlpha(0.4)
+                            end)
+                            menuItems[idx] = itm
+                        end
+
+                        itm:SetPoint("TOPLEFT",  menu, "TOPLEFT",  1, -mH)
+                        itm:SetPoint("TOPRIGHT", menu, "TOPRIGHT", -1, -mH)
+                        itm._lbl:SetText(name)
+                        itm._isSel = (name == activeName)
+                        itm._hl:SetAlpha(itm._isSel and 0.04 or 0)
+
+                        local capName = name
+                        itm:SetScript("OnClick", function()
+                            menu:Hide()
+                            EllesmereUI.AutoSaveActiveProfile()
+                            EllesmereUI.SwitchProfile(capName)
+                            ReloadUI()
+                        end)
+                        itm._xBtn:SetScript("OnClick", function()
+                            if capName == "Custom" then return end
+                            menu:Hide()
+                            EllesmereUI:ShowConfirmPopup({
+                                title       = "Delete Profile",
+                                message     = "Delete \"" .. capName .. "\"?",
+                                confirmText = "Delete",
+                                cancelText  = "Cancel",
+                                onConfirm   = function()
+                                    EllesmereUI.DeleteProfile(capName)
+                                    ddLabel:SetText(EllesmereUI.GetActiveProfileName())
+                                    EllesmereUI:InvalidatePageCache()
+                                    EllesmereUI:RefreshPage(true)
+                                end,
+                            })
+                        end)
+
+                        itm:Show()
+                        mH = mH + 26
+                    end
+                end
+                menu:SetHeight(mH + 4)
+            end
+
+            local function ActiveApplyNormal()
+                ddLabel:SetTextColor(aS[17], aS[18], aS[19], aS[20])
+                ddBrd:SetColor(aS[9], aS[10], aS[11], aS[12])
+                ddBg:SetColorTexture(aS[1], aS[2], aS[3], aS[4])
+            end
+            local function ActiveApplyHover()
+                ddLabel:SetTextColor(aS[21], aS[22], aS[23], aS[24])
+                ddBrd:SetColor(aS[13], aS[14], aS[15], aS[16])
+                ddBg:SetColorTexture(aS[5], aS[6], aS[7], aS[8])
+            end
+
+            ddBtn:SetScript("OnClick", function()
+                if menu:IsShown() then menu:Hide()
+                else RebuildProfileMenu(); menu:Show() end
+            end)
+            ddBtn:SetScript("OnEnter", function() ActiveApplyHover() end)
+            ddBtn:SetScript("OnLeave", function()
+                if not menu:IsShown() then ActiveApplyNormal() end
+            end)
+            ddBtn:HookScript("OnHide", function() menu:Hide() end)
+            menu:HookScript("OnShow", function()
+                ActiveApplyHover()
+            end)
+            menu:SetScript("OnHide", function(self)
+                self:SetScript("OnUpdate", nil)
+                if ddBtn:IsMouseOver() then ActiveApplyHover()
+                else ActiveApplyNormal() end
+            end)
+
+            -- Save As button
+            local saveAsBtn = CreateFrame("Button", nil, rowFrame)
+            PP.Size(saveAsBtn, BTN_W, ITEM_H)
+            PP.Point(saveAsBtn, "LEFT", ddBtn, "RIGHT", GAP, 0)
+            saveAsBtn:SetFrameLevel(rowFrame:GetFrameLevel() + 2)
+            EllesmereUI.MakeStyledButton(saveAsBtn, "Save As", 11, PROF_BTN_COLOURS, function()
+                EllesmereUI:ShowInputPopup({
+                    title       = "Save Profile As",
+                    message     = "Enter a name for the new profile:",
+                    placeholder = "My Profile",
+                    confirmText = "Save",
+                    cancelText  = "Cancel",
+                    onConfirm   = function(name)
+                        if not name or name == "" then return end
+                        EllesmereUI.SaveCurrentAsProfile(name)
+                        ddLabel:SetText(name)
+                        EllesmereUI:RefreshPage()
+                    end,
+                })
+            end)
+
+            -- Assign to Spec button
+            local assignBtn = CreateFrame("Button", nil, rowFrame)
+            PP.Size(assignBtn, BTN_W, ITEM_H)
+            PP.Point(assignBtn, "LEFT", saveAsBtn, "RIGHT", GAP, 0)
+            assignBtn:SetFrameLevel(rowFrame:GetFrameLevel() + 2)
+            EllesmereUI.MakeStyledButton(assignBtn, "Assign to Spec", 11, PROF_BTN_COLOURS, function()
+                local db = EllesmereUIDB or {}
+                if not db.specProfiles then db.specProfiles = {} end
+                local tempDB = { _profileSpecs = {} }
+                local order, profiles = EllesmereUI.GetProfileList()
+                for _, pName in ipairs(order) do tempDB._profileSpecs[pName] = {} end
+                for specID, pName in pairs(db.specProfiles) do
+                    if tempDB._profileSpecs[pName] then
+                        tempDB._profileSpecs[pName][specID] = true
+                    end
+                end
+                local activeName = EllesmereUI.GetActiveProfileName()
+                EllesmereUI:ShowSpecAssignPopup({
+                    db = tempDB,
+                    dbKey = "_profileSpecs",
+                    presetKey = activeName,
+                    allPresetKeys = function()
+                        local list = {}
+                        for _, n in ipairs(order) do
+                            if profiles[n] then list[#list + 1] = { key = n, name = n } end
+                        end
+                        return list
+                    end,
+                    onDone = function()
+                        db.specProfiles = {}
+                        for pName, specSet in pairs(tempDB._profileSpecs) do
+                            for specID in pairs(specSet) do
+                                db.specProfiles[specID] = pName
+                            end
+                        end
+                        EllesmereUI:RefreshPage()
+                    end,
+                })
+            end)
+
+            y = y - ROW_H
+        end
+
+        -------------------------------------------------------------------
+        --  Shared: Check All / Uncheck All link builder
+        -------------------------------------------------------------------
+        local function BuildCheckLinks(anchorFrame, items, refreshAll)
+            local FONT_L = EllesmereUI.EXPRESSWAY
+            local LINK_GAP = 16
+            local checkAllBtn = CreateFrame("Button", nil, anchorFrame)
+            checkAllBtn:SetFrameLevel(anchorFrame:GetFrameLevel() + 2)
+            local checkAllLbl = checkAllBtn:CreateFontString(nil, "OVERLAY")
+            checkAllLbl:SetFont(FONT_L, 12, "")
+            checkAllLbl:SetText("Check All")
+            checkAllLbl:SetTextColor(1, 1, 1, 0.40)
+            checkAllLbl:SetPoint("CENTER")
+            checkAllBtn:SetSize(checkAllLbl:GetStringWidth() + 4, 18)
+            PP.Point(checkAllBtn, "BOTTOMRIGHT", anchorFrame, "BOTTOMRIGHT", -LINK_GAP - 70, 8)
+            checkAllBtn:SetScript("OnEnter", function() checkAllLbl:SetTextColor(1, 1, 1, 0.80) end)
+            checkAllBtn:SetScript("OnLeave", function() checkAllLbl:SetTextColor(1, 1, 1, 0.40) end)
+            checkAllBtn:SetScript("OnClick", function()
+                for _, item in ipairs(items) do
+                    if item.enabled ~= false then item.setVal(true) end
+                end
+                if refreshAll then refreshAll() end
+            end)
+
+            local linkDiv = anchorFrame:CreateTexture(nil, "OVERLAY", nil, 7)
+            linkDiv:SetColorTexture(1, 1, 1, 0.15)
+            if linkDiv.SetSnapToPixelGrid then linkDiv:SetSnapToPixelGrid(false); linkDiv:SetTexelSnappingBias(0) end
+            PP.Point(linkDiv, "LEFT", checkAllBtn, "RIGHT", LINK_GAP / 2, 0)
+            linkDiv:SetWidth(1)
+            linkDiv:SetHeight(10)
+
+            local uncheckAllBtn = CreateFrame("Button", nil, anchorFrame)
+            uncheckAllBtn:SetFrameLevel(anchorFrame:GetFrameLevel() + 2)
+            local uncheckAllLbl = uncheckAllBtn:CreateFontString(nil, "OVERLAY")
+            uncheckAllLbl:SetFont(FONT_L, 12, "")
+            uncheckAllLbl:SetText("Uncheck All")
+            uncheckAllLbl:SetTextColor(1, 1, 1, 0.40)
+            uncheckAllLbl:SetPoint("CENTER")
+            uncheckAllBtn:SetSize(uncheckAllLbl:GetStringWidth() + 4, 18)
+            PP.Point(uncheckAllBtn, "LEFT", checkAllBtn, "RIGHT", LINK_GAP, 0)
+            uncheckAllBtn:SetScript("OnEnter", function() uncheckAllLbl:SetTextColor(1, 1, 1, 0.80) end)
+            uncheckAllBtn:SetScript("OnLeave", function() uncheckAllLbl:SetTextColor(1, 1, 1, 0.40) end)
+            uncheckAllBtn:SetScript("OnClick", function()
+                for _, item in ipairs(items) do
+                    if item.enabled ~= false then item.setVal(false) end
+                end
+                if refreshAll then refreshAll() end
+            end)
+        end
+
+        -- Shared: error flash on a MakeBorder object (red highlight that fades)
+        local function BuildErrorFlash(btn, brd)
+            local flashFrame = CreateFrame("Frame", nil, btn)
+            flashFrame:Hide()
+            local elapsed = 0
+            local FLASH_DUR = 0.7
+            local lerp = EllesmereUI.lerp
+            flashFrame:SetScript("OnUpdate", function(self, dt)
+                elapsed = elapsed + dt
+                if elapsed >= FLASH_DUR then
+                    self:Hide()
+                    brd:SetColor(1, 1, 1, EllesmereUI.DD_BRD_A)
+                    return
+                end
+                local t = elapsed / FLASH_DUR
+                brd:SetColor(lerp(0.9, 1, t), lerp(0.15, 1, t), lerp(0.15, 1, t), lerp(0.7, EllesmereUI.DD_BRD_A, t))
+            end)
+            return function()
+                elapsed = 0
+                brd:SetColor(0.9, 0.15, 0.15, 0.7)
+                flashFrame:Show()
+            end
+        end
+
+        -------------------------------------------------------------------
+        --  PER-ADDON EXPORT section
+        -------------------------------------------------------------------
+        local perAddonHeader
+        perAddonHeader, h = W:SectionHeader(parent, "PER-ADDON EXPORT", y);  y = y - h
+
+        -- 4-column checkbox grid for addon selection
+        local selectedAddons = {}
+        local addonGridVisuals = {}
+        do
+            local ADDON_DB_MAP_LOCAL = EllesmereUI._ADDON_DB_MAP
+            local GRID_COLS  = 4
+            local GRID_ROW_H = 50
+            local GRID_BOX_SZ = 18
+            local GRID_PAD   = EllesmereUI.CONTENT_PAD or 16
+            local GRID_SIDE  = 20
+            local EG = EllesmereUI.ELLESMERE_GREEN or { r=0.047, g=0.824, b=0.624 }
+
+            -- Build item list: loaded addons first, then disabled stubs
+            local gridItems = {}
+            for _, entry in ipairs(ADDON_DB_MAP_LOCAL) do
+                if C_AddOns.IsAddOnLoaded(entry.folder) then
+                    local folder = entry.folder
+                    gridItems[#gridItems + 1] = {
+                        label   = entry.display,
+                        enabled = true,
+                        getVal  = function() return selectedAddons[folder] or false end,
+                        setVal  = function(v)
+                            selectedAddons[folder] = v or nil
+                        end,
+                    }
+                end
+            end
+            -- Coming Soon stubs
+            for _, stub in ipairs({ "Raid Frames", "Basics" }) do
+                gridItems[#gridItems + 1] = {
+                    label   = stub,
+                    enabled = false,
+                    getVal  = function() return false end,
+                    setVal  = function() end,
+                }
+            end
+
+            -- Check All / Uncheck All links on the section header
+            local function RefreshAddonGrid()
+                for _, fn in ipairs(addonGridVisuals) do fn() end
+            end
+            BuildCheckLinks(perAddonHeader, gridItems, RefreshAddonGrid)
+
+            local totalW = parent:GetWidth() - GRID_PAD * 2
+            local colW   = math.floor(totalW / GRID_COLS)
+            local totalRows = math.ceil(#gridItems / GRID_COLS)
+
+            for row = 0, totalRows - 1 do
+                local rowFrame = CreateFrame("Frame", nil, parent)
+                PP.Size(rowFrame, totalW, GRID_ROW_H)
+                PP.Point(rowFrame, "TOPLEFT", parent, "TOPLEFT", GRID_PAD, y - row * GRID_ROW_H)
+                rowFrame._skipRowDivider = true
+                EllesmereUI.RowBg(rowFrame, parent)
+
+                for d = 1, GRID_COLS - 1 do
+                    local div = rowFrame:CreateTexture(nil, "ARTWORK")
+                    div:SetColorTexture(1, 1, 1, 0.06)
+                    if div.SetSnapToPixelGrid then div:SetSnapToPixelGrid(false); div:SetTexelSnappingBias(0) end
+                    div:SetWidth(1)
+                    PP.Point(div, "TOP",    rowFrame, "TOPLEFT", d * colW, 0)
+                    PP.Point(div, "BOTTOM", rowFrame, "BOTTOMLEFT", d * colW, 0)
+                end
+
+                for col = 0, GRID_COLS - 1 do
+                    local idx = row * GRID_COLS + col + 1
+                    local item = gridItems[idx]
+                    if not item then break end
+
+                    local cell = CreateFrame("Frame", nil, rowFrame)
+                    cell:SetSize(colW, GRID_ROW_H)
+                    cell:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", col * colW, 0)
+
+                    local label = EllesmereUI.MakeFont(cell, 13, nil, 1, 1, 1)
+                    label:SetPoint("LEFT", cell, "LEFT", GRID_SIDE, 0)
+                    label:SetText(item.label)
+
+                    local box = CreateFrame("Frame", nil, cell)
+                    box:SetSize(GRID_BOX_SZ, GRID_BOX_SZ)
+                    box:SetPoint("RIGHT", cell, "RIGHT", -GRID_SIDE, 0)
+
+                    local boxBg = box:CreateTexture(nil, "BACKGROUND")
+                    boxBg:SetAllPoints()
+                    boxBg:SetColorTexture(0.12, 0.12, 0.14, 1)
+                    if boxBg.SetSnapToPixelGrid then boxBg:SetSnapToPixelGrid(false); boxBg:SetTexelSnappingBias(0) end
+
+                    local boxBrd = EllesmereUI.MakeBorder(box, 0.25, 0.25, 0.28, 0.6, EllesmereUI.PanelPP)
+
+                    local check = box:CreateTexture(nil, "ARTWORK")
+                    check:SetPoint("TOPLEFT", box, "TOPLEFT", 3, -3)
+                    check:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -3, 3)
+                    check:SetColorTexture(EG.r, EG.g, EG.b, 1)
+                    if check.SetSnapToPixelGrid then check:SetSnapToPixelGrid(false); check:SetTexelSnappingBias(0) end
+
+                    if not item.enabled then
+                        -- Coming Soon: dim everything, no interaction
+                        label:SetAlpha(0.3)
+                        box:SetAlpha(0.3)
+                        check:Hide()
+                        local block = CreateFrame("Frame", nil, cell)
+                        block:SetAllPoints()
+                        block:SetFrameLevel(cell:GetFrameLevel() + 5)
+                        block:EnableMouse(true)
+                        block:SetScript("OnEnter", function()
+                            EllesmereUI.ShowWidgetTooltip(cell, EllesmereUI.DisabledTooltip and EllesmereUI.DisabledTooltip("Coming Soon") or "Coming Soon")
+                        end)
+                        block:SetScript("OnLeave", function() EllesmereUI.HideWidgetTooltip() end)
+                    else
+                        local btn = CreateFrame("Button", nil, cell)
+                        btn:SetAllPoints(cell)
+                        btn:SetFrameLevel(cell:GetFrameLevel() + 2)
+
+                        local function ApplyVisual()
+                            local on = item.getVal()
+                            if on then
+                                check:Show(); label:SetAlpha(1)
+                                boxBrd:SetColor(EG.r, EG.g, EG.b, 0.15)
+                            else
+                                check:Hide(); label:SetAlpha(0.5)
+                                boxBrd:SetColor(0.25, 0.25, 0.28, 0.6)
+                            end
+                        end
+                        ApplyVisual()
+                        addonGridVisuals[#addonGridVisuals + 1] = ApplyVisual
+
+                        btn:SetScript("OnClick", function()
+                            item.setVal(not item.getVal())
+                            ApplyVisual()
+                        end)
+                        btn:SetScript("OnEnter", function() if not item.getVal() then label:SetAlpha(0.8) end end)
+                        btn:SetScript("OnLeave", function() if not item.getVal() then label:SetAlpha(0.5) end end)
+                    end
+                end
+            end
+
+            y = y - totalRows * GRID_ROW_H
+        end
+
+        -- Extra spacing before Export button
+        _, h = W:Spacer(parent, y, 10);  y = y - h
+
+        -- Export Selected Addons button (with error flash when nothing selected)
+        do
+            local BTN_W = 450
+            local BTN_H = 42
+            local ROW_H_E = BTN_H + 20
+            local btnFrame = CreateFrame("Frame", nil, parent)
+            PP.Size(btnFrame, parent:GetWidth() - (EllesmereUI.CONTENT_PAD or 16) * 2, ROW_H_E)
+            PP.Point(btnFrame, "TOPLEFT", parent, "TOPLEFT", EllesmereUI.CONTENT_PAD or 16, y)
+            local exportAddonBtn = CreateFrame("Button", nil, btnFrame)
+            PP.Size(exportAddonBtn, BTN_W, BTN_H)
+            PP.Point(exportAddonBtn, "CENTER", btnFrame, "CENTER", 0, 0)
+            exportAddonBtn:SetFrameLevel(btnFrame:GetFrameLevel() + 1)
+            local eaBg, eaBrd, eaLbl = EllesmereUI.MakeStyledButton(exportAddonBtn, "Export Selected Addons", 14, EllesmereUI.WB_COLOURS, function()
+                local folders = {}
+                for folder in pairs(selectedAddons) do folders[#folders + 1] = folder end
+                if #folders == 0 then
+                    if exportAddonBtn._flashError then exportAddonBtn._flashError() end
+                    return
+                end
+                local str = EllesmereUI.ExportAddons(folders)
+                if str then EllesmereUI:ShowExportPopup(str) end
+            end)
+            exportAddonBtn._flashError = BuildErrorFlash(exportAddonBtn, eaBrd)
+            y = y - ROW_H_E
+        end
+
+        -------------------------------------------------------------------
+        --  CDM SPELL PROFILE section
+        -------------------------------------------------------------------
+        if C_AddOns.IsAddOnLoaded("EllesmereUICooldownManager") then
+            local cdmHeader
+            cdmHeader, h = W:SectionHeader(parent, "CDM SPELL PROFILE", y);  y = y - h
+
+            -- Per-spec checkbox grid
+            local selectedSpecs = {}
+            local cdmGridVisuals = {}
+            do
+                local specProfiles = EllesmereUI.GetCDMSpecProfiles()
+                local GRID_COLS  = 4
+                local GRID_ROW_H = 50
+                local GRID_BOX_SZ = 18
+                local GRID_PAD   = EllesmereUI.CONTENT_PAD or 16
+                local GRID_SIDE  = 20
+                local ICON_SZ    = 22
+
+                local gridItems = {}
+                for _, sp in ipairs(specProfiles) do
+                    local key = sp.key
+                    gridItems[#gridItems + 1] = {
+                        label   = sp.name,
+                        icon    = sp.icon,
+                        enabled = true,
+                        getVal  = function() return selectedSpecs[key] or false end,
+                        setVal  = function(v) selectedSpecs[key] = v or nil end,
+                    }
+                end
+
+                local function RefreshCDMGrid()
+                    for _, fn in ipairs(cdmGridVisuals) do fn() end
+                end
+                BuildCheckLinks(cdmHeader, gridItems, RefreshCDMGrid)
+
+                local totalW = parent:GetWidth() - GRID_PAD * 2
+                local colW   = math.floor(totalW / GRID_COLS)
+                local totalRows = math.ceil(#gridItems / GRID_COLS)
+
+                if #gridItems == 0 then
+                    -- No saved spec profiles: show a hint
+                    local hintRow = CreateFrame("Frame", nil, parent)
+                    PP.Size(hintRow, totalW, 40)
+                    PP.Point(hintRow, "TOPLEFT", parent, "TOPLEFT", GRID_PAD, y)
+                    hintRow._skipRowDivider = true
+                    EllesmereUI.RowBg(hintRow, parent)
+                    local hintLbl = EllesmereUI.MakeFont(hintRow, 13, nil, 1, 1, 1)
+                    hintLbl:SetPoint("CENTER")
+                    hintLbl:SetAlpha(0.4)
+                    hintLbl:SetText("No saved spec profiles found. Play each spec once to generate them.")
+                    y = y - 40
+                end
+
+                for row = 0, totalRows - 1 do
+                    local rowFrame = CreateFrame("Frame", nil, parent)
+                    PP.Size(rowFrame, totalW, GRID_ROW_H)
+                    PP.Point(rowFrame, "TOPLEFT", parent, "TOPLEFT", GRID_PAD, y - row * GRID_ROW_H)
+                    rowFrame._skipRowDivider = true
+                    EllesmereUI.RowBg(rowFrame, parent)
+
+                    for d = 1, GRID_COLS - 1 do
+                        local div = rowFrame:CreateTexture(nil, "ARTWORK")
+                        div:SetColorTexture(1, 1, 1, 0.06)
+                        if div.SetSnapToPixelGrid then div:SetSnapToPixelGrid(false); div:SetTexelSnappingBias(0) end
+                        div:SetWidth(1)
+                        PP.Point(div, "TOP",    rowFrame, "TOPLEFT", d * colW, 0)
+                        PP.Point(div, "BOTTOM", rowFrame, "BOTTOMLEFT", d * colW, 0)
+                    end
+
+                    for col = 0, GRID_COLS - 1 do
+                        local idx = row * GRID_COLS + col + 1
+                        local item = gridItems[idx]
+                        if not item then break end
+
+                        local cell = CreateFrame("Frame", nil, rowFrame)
+                        cell:SetSize(colW, GRID_ROW_H)
+                        cell:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", col * colW, 0)
+
+                        -- Spec icon
+                        if item.icon then
+                            local ico = cell:CreateTexture(nil, "ARTWORK")
+                            ico:SetSize(ICON_SZ, ICON_SZ)
+                            ico:SetPoint("LEFT", cell, "LEFT", GRID_SIDE, 0)
+                            ico:SetTexture(item.icon)
+                            ico:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+                            local label = EllesmereUI.MakeFont(cell, 13, nil, 1, 1, 1)
+                            label:SetPoint("LEFT", ico, "RIGHT", 6, 0)
+                            label:SetText(item.label)
+                            item._label = label
+                            item._icon  = ico
+                        else
+                            local label = EllesmereUI.MakeFont(cell, 13, nil, 1, 1, 1)
+                            label:SetPoint("LEFT", cell, "LEFT", GRID_SIDE, 0)
+                            label:SetText(item.label)
+                            item._label = label
+                        end
+
+                        local box = CreateFrame("Frame", nil, cell)
+                        box:SetSize(GRID_BOX_SZ, GRID_BOX_SZ)
+                        box:SetPoint("RIGHT", cell, "RIGHT", -GRID_SIDE, 0)
+
+                        local boxBg = box:CreateTexture(nil, "BACKGROUND")
+                        boxBg:SetAllPoints()
+                        boxBg:SetColorTexture(0.12, 0.12, 0.14, 1)
+                        if boxBg.SetSnapToPixelGrid then boxBg:SetSnapToPixelGrid(false); boxBg:SetTexelSnappingBias(0) end
+
+                        local boxBrd = EllesmereUI.MakeBorder(box, 0.25, 0.25, 0.28, 0.6, EllesmereUI.PanelPP)
+
+                        local check = box:CreateTexture(nil, "ARTWORK")
+                        check:SetPoint("TOPLEFT", box, "TOPLEFT", 3, -3)
+                        check:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -3, 3)
+                        check:SetColorTexture(EG.r, EG.g, EG.b, 1)
+                        if check.SetSnapToPixelGrid then check:SetSnapToPixelGrid(false); check:SetTexelSnappingBias(0) end
+
+                        local btn = CreateFrame("Button", nil, cell)
+                        btn:SetAllPoints(cell)
+                        btn:SetFrameLevel(cell:GetFrameLevel() + 2)
+
+                        local function ApplyVisual()
+                            local on = item.getVal()
+                            if on then
+                                check:Show()
+                                item._label:SetAlpha(1)
+                                if item._icon then item._icon:SetAlpha(1) end
+                                boxBrd:SetColor(EG.r, EG.g, EG.b, 0.15)
+                            else
+                                check:Hide()
+                                item._label:SetAlpha(0.5)
+                                if item._icon then item._icon:SetAlpha(0.5) end
+                                boxBrd:SetColor(0.25, 0.25, 0.28, 0.6)
+                            end
+                        end
+                        ApplyVisual()
+                        cdmGridVisuals[#cdmGridVisuals + 1] = ApplyVisual
+
+                        btn:SetScript("OnClick", function()
+                            item.setVal(not item.getVal())
+                            ApplyVisual()
+                        end)
+                        btn:SetScript("OnEnter", function()
+                            if not item.getVal() then
+                                item._label:SetAlpha(0.8)
+                                if item._icon then item._icon:SetAlpha(0.8) end
+                            end
+                        end)
+                        btn:SetScript("OnLeave", function()
+                            if not item.getVal() then
+                                item._label:SetAlpha(0.5)
+                                if item._icon then item._icon:SetAlpha(0.5) end
+                            end
+                        end)
+                    end
+                end
+
+                if totalRows > 0 then y = y - totalRows * GRID_ROW_H end
+            end
+
+            -- Spacing before buttons
+            _, h = W:Spacer(parent, y, 10);  y = y - h
+
+            -- Export / Import CDM Spell Profile buttons (side-by-side, temporarily disabled)
+            do
+                local ROW_H  = 70
+                local ITEM_H = 36
+                local GAP    = 35
+                local ITEM_W = 220
+
+                local totalW = parent:GetWidth() - EllesmereUI.CONTENT_PAD * 2
+                local rowFrame = CreateFrame("Frame", nil, parent)
+                PP.Size(rowFrame, totalW, ROW_H)
+                PP.Point(rowFrame, "TOPLEFT", parent, "TOPLEFT", EllesmereUI.CONTENT_PAD, y)
+
+                local groupW = ITEM_W * 2 + GAP
+                local startX = math.floor((totalW - groupW) / 2)
+
+                local DISABLED_TIP = "This option is coming soon"
+
+                -- Export CDM Spell Profile
+                local exportCDMBtn = CreateFrame("Button", nil, rowFrame)
+                PP.Size(exportCDMBtn, ITEM_W, ITEM_H)
+                PP.Point(exportCDMBtn, "TOPLEFT", rowFrame, "TOPLEFT", startX, -math.floor((ROW_H - ITEM_H) / 2))
+                exportCDMBtn:SetFrameLevel(rowFrame:GetFrameLevel() + 2)
+                EllesmereUI.MakeStyledButton(exportCDMBtn, "Export CDM Spell Profile", 13, EllesmereUI.WB_COLOURS, function() end)
+                exportCDMBtn:SetAlpha(0.3)
+                do
+                    local block = CreateFrame("Frame", nil, exportCDMBtn)
+                    block:SetAllPoints()
+                    block:SetFrameLevel(exportCDMBtn:GetFrameLevel() + 10)
+                    block:EnableMouse(true)
+                    block:SetScript("OnEnter", function()
+                        EllesmereUI.ShowWidgetTooltip(exportCDMBtn, EllesmereUI.DisabledTooltip(DISABLED_TIP))
+                    end)
+                    block:SetScript("OnLeave", function() EllesmereUI.HideWidgetTooltip() end)
+                end
+
+                -- Import CDM Spell Profile
+                local importCDMBtn = CreateFrame("Button", nil, rowFrame)
+                PP.Size(importCDMBtn, ITEM_W, ITEM_H)
+                PP.Point(importCDMBtn, "TOPLEFT", exportCDMBtn, "TOPRIGHT", GAP, 0)
+                importCDMBtn:SetFrameLevel(rowFrame:GetFrameLevel() + 2)
+                EllesmereUI.MakeStyledButton(importCDMBtn, "Import CDM Spell Profile", 13, EllesmereUI.WB_COLOURS, function() end)
+                importCDMBtn:SetAlpha(0.3)
+                do
+                    local block = CreateFrame("Frame", nil, importCDMBtn)
+                    block:SetAllPoints()
+                    block:SetFrameLevel(importCDMBtn:GetFrameLevel() + 10)
+                    block:EnableMouse(true)
+                    block:SetScript("OnEnter", function()
+                        EllesmereUI.ShowWidgetTooltip(importCDMBtn, EllesmereUI.DisabledTooltip(DISABLED_TIP))
+                    end)
+                    block:SetScript("OnLeave", function() EllesmereUI.HideWidgetTooltip() end)
+                end
+
+                y = y - ROW_H
+            end
+        end
+
+        return math.abs(y)
+    end
 
     ---------------------------------------------------------------------------
     --  Enabled Addons page
     ---------------------------------------------------------------------------
 
-    local disabledList = { PAGE_CORE, PAGE_PROFILES }
-    local disabledTips = { [PAGE_CORE] = "Coming Soon", [PAGE_PROFILES] = "Coming Soon" }
+    local disabledList = { PAGE_CORE }
+    local disabledTips = { [PAGE_CORE] = "Coming Soon" }
 
     EllesmereUI:RegisterModule(GLOBAL_KEY, {
         title       = "Global Settings",
         description = "General options for all EllesmereUI addons.",
-        pages       = { PAGE_GENERAL, PAGE_CORE, PAGE_COLORS, PAGE_PROFILES },
+        pages       = { PAGE_GENERAL, PAGE_PROFILES, PAGE_CORE, PAGE_COLORS, "Disable Addons" },
         disabledPages = disabledList,
         disabledPageTooltips = disabledTips,
         buildPage   = function(pageName, parent, yOffset)
@@ -2740,6 +3852,8 @@ initFrame:SetScript("OnEvent", function(self)
                 return BuildColorsPage(pageName, parent, yOffset)
             elseif pageName == PAGE_CORE then
                 return BuildCoreOptionsPage(pageName, parent, yOffset)
+            elseif pageName == PAGE_PROFILES then
+                return BuildProfilesPage(pageName, parent, yOffset)
             end
         end,
         onReset     = function()
@@ -2749,6 +3863,15 @@ initFrame:SetScript("OnEvent", function(self)
             end
             -- Reset style/theme settings (accent color, custom theme, class-colored)
             EllesmereUI.ResetTheme()
+            -- Reset all custom class, power, and resource colors to defaults
+            if EllesmereUIDB then
+                EllesmereUIDB.customColors = nil
+            end
+            -- Reset fonts to defaults
+            if EllesmereUIDB then
+                EllesmereUIDB.fonts = nil
+            end
+            EllesmereUI.ApplyColorsToOUF()
             -- Reset panel scale to 100%
             if EllesmereUI.SetPanelScale then
                 EllesmereUI:SetPanelScale(1.0)
@@ -2760,11 +3883,16 @@ initFrame:SetScript("OnEvent", function(self)
                 EllesmereUIDB.showSecondaryStats = false
                 EllesmereUIDB.guildChatPrivacy = false
                 EllesmereUIDB.repairWarning = nil
+                -- Reset UI scale so next reload re-snapshots from Blizzard default
+                EllesmereUIDB.ppUIScale = nil
+                EllesmereUIDB.ppUIScaleAuto = nil
+                EllesmereUIDB.blizzUIScale = nil
                 -- Developer settings defaults
                 EllesmereUIDB.errorGrabber = false
                 EllesmereUIDB.errorSound = false
                 EllesmereUIDB.showSpellID = false
                 EllesmereUIDB.suppressErrors = true
+                EllesmereUIDB.crosshairSize = "None"
             end
             if EllesmereUI._applyRightClickTarget then
                 EllesmereUI._applyRightClickTarget()
@@ -2774,6 +3902,9 @@ initFrame:SetScript("OnEvent", function(self)
             end
             if EllesmereUI._applySecondaryStats then
                 EllesmereUI._applySecondaryStats()
+            end
+            if EllesmereUI._applyCrosshair then
+                EllesmereUI._applyCrosshair()
             end
             if EllesmereUI._applyGuildChatPrivacy then
                 EllesmereUI._applyGuildChatPrivacy()

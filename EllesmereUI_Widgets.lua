@@ -1,4 +1,4 @@
--------------------------------------------------------------------------------
+﻿-------------------------------------------------------------------------------
 --  EllesmereUI_Widgets.lua
 --  Shared Widget Helpers + Widget Factory
 --  Split from EllesmereUI.lua -- see EllesmereUI.lua for constants & utilities
@@ -73,6 +73,221 @@ local CB = {
     BOX_R = EllesmereUI.CB_BOX_R, BOX_G = EllesmereUI.CB_BOX_G, BOX_B = EllesmereUI.CB_BOX_B,
     BRD_A = EllesmereUI.CB_BRD_A, ACT_BRD_A = EllesmereUI.CB_ACT_BRD_A,
 }
+
+-------------------------------------------------------------------------------
+--  Physical-pixel sizing for toggle / checkbox widgets
+--
+--  The panel runs at baseScale * userScale.  At userScale ~= 1.0 the
+--  coordinate system no longer maps 1:1 to physical pixels, so sub-pixel
+--  drift causes uneven padding on inner elements (knob, checkmark).
+--
+--  Fix: convert hardcoded physical-pixel counts into panel coordinates
+--  using PP.SnapForES(pixelCount * onePixel, es) where onePixel is the
+--  size of 1 physical pixel in panel coords.  This guarantees every
+--  dimension lands on an exact physical pixel boundary regardless of
+--  scroll position, because relative offsets between parent and child
+--  cancel out any sub-pixel scroll drift.
+-------------------------------------------------------------------------------
+local function GetPanelEffectiveScale()
+    local mf = EllesmereUI._mainFrame
+    if mf then return mf:GetEffectiveScale() end
+    -- Fallback before mainFrame exists
+    local physW = (GetPhysicalScreenSize())
+    local baseScale = GetScreenWidth() / physW
+    local userScale = (EllesmereUIDB and EllesmereUIDB.panelScale) or 1.0
+    return baseScale * userScale
+end
+
+local function PixelsToPanel(px, es)
+    -- Convert a physical pixel count to panel coordinate units,
+    -- snapped so it maps to exactly that many physical pixels.
+    local RealPP = EllesmereUI.PP
+    local onePixel = RealPP.perfect / es
+    return px * onePixel
+end
+
+
+
+-------------------------------------------------------------------------------
+
+--  BuildToggleControl(parent, frameLevel, getValue, setValue, opts)
+
+--
+
+--  Creates a toggle switch (track + knob) with animated on/off transition.
+
+--  Returns: toggle (Button), applyVisual (fn), snapToState (fn)
+
+--
+
+--  opts (optional table):
+
+--    .sizeRatio  -- multiplier on track/knob sizes (default 1.0)
+
+--    .noAnim     -- if true, snap instead of animate (used by cog popup)
+
+--    .offColors  -- {trackR,trackG,trackB,trackA, knobR,knobG,knobB,knobA}
+
+--    .onColors   -- {trackA, knobR,knobG,knobB,knobA}  (track RGB = accent)
+
+-------------------------------------------------------------------------------
+
+local function BuildToggleControl(parent, frameLevel, getValue, setValue, opts)
+    opts = opts or {}
+    local RealPP = EllesmereUI.PP
+
+    local TOGGLE_W, TOGGLE_H = 40, 20
+    local KNOB_SZ  = 16
+    local KNOB_PAD = 2
+
+    if opts.sizeRatio and opts.sizeRatio ~= 1 then
+        local r = opts.sizeRatio
+        TOGGLE_W = math.floor(TOGGLE_W * r + 0.5)
+        TOGGLE_H = math.floor(TOGGLE_H * r + 0.5)
+        KNOB_SZ  = TOGGLE_H - KNOB_PAD * 2
+    end
+
+    local offTR = opts.offColors and opts.offColors[1] or TG.OFF_R
+    local offTG = opts.offColors and opts.offColors[2] or TG.OFF_G
+    local offTB = opts.offColors and opts.offColors[3] or TG.OFF_B
+    local offTA = opts.offColors and opts.offColors[4] or TG.OFF_A
+    local offKR = opts.offColors and opts.offColors[5] or TG.KNOB_OFF_R
+    local offKG = opts.offColors and opts.offColors[6] or TG.KNOB_OFF_G
+    local offKB = opts.offColors and opts.offColors[7] or TG.KNOB_OFF_B
+    local offKA = opts.offColors and opts.offColors[8] or TG.KNOB_OFF_A
+    local onTA  = opts.onColors and opts.onColors[1] or TG.ON_A
+    local onKR  = opts.onColors and opts.onColors[2] or TG.KNOB_ON_R
+    local onKG  = opts.onColors and opts.onColors[3] or TG.KNOB_ON_G
+    local onKB  = opts.onColors and opts.onColors[4] or TG.KNOB_ON_B
+    local onKA  = opts.onColors and opts.onColors[5] or TG.KNOB_ON_A
+
+    local toggle = CreateFrame("Button", nil, parent)
+    RealPP.Size(toggle, TOGGLE_W, TOGGLE_H)
+    toggle:SetFrameLevel(frameLevel)
+
+    local tBg = SolidTex(toggle, "BACKGROUND", offTR, offTG, offTB, offTA)
+    DisablePixelSnap(tBg)
+    tBg:SetAllPoints()
+
+    local knob = toggle:CreateTexture(nil, "ARTWORK")
+    DisablePixelSnap(knob)
+    knob:SetColorTexture(offKR, offKG, offKB, offKA)
+    RealPP.Size(knob, KNOB_SZ, KNOB_SZ)
+    RealPP.Point(knob, "LEFT", toggle, "LEFT", KNOB_PAD, 0)
+
+    local POS_OFF = KNOB_PAD
+    local POS_ON  = TOGGLE_W - KNOB_SZ - KNOB_PAD
+
+    local animProgress = getValue() and 1 or 0
+    local animTarget   = animProgress
+    local ANIM_DUR = 0.075
+
+    local function ApplyVisual(p)
+        local xOff = math.floor(lerp(POS_OFF, POS_ON, p) + 0.5)
+        knob:ClearAllPoints()
+        RealPP.Point(knob, "LEFT", toggle, "LEFT", xOff, 0)
+        tBg:SetColorTexture(
+            lerp(offTR, ELLESMERE_GREEN.r, p),
+            lerp(offTG, ELLESMERE_GREEN.g, p),
+            lerp(offTB, ELLESMERE_GREEN.b, p),
+            lerp(offTA, onTA, p))
+        knob:SetColorTexture(
+            lerp(offKR, onKR, p),
+            lerp(offKG, onKG, p),
+            lerp(offKB, onKB, p),
+            lerp(offKA, onKA, p))
+        DisablePixelSnap(knob)
+    end
+    ApplyVisual(animProgress)
+
+    if opts.noAnim then
+        toggle:SetScript("OnClick", function()
+            local v = not getValue()
+            setValue(v)
+            animProgress = v and 1 or 0
+            animTarget = animProgress
+            ApplyVisual(animProgress)
+        end)
+    else
+        local function AnimOnUpdate(self, elapsed)
+            local dir = (animTarget == 1) and 1 or -1
+            animProgress = animProgress + dir * (elapsed / ANIM_DUR)
+            if (dir == 1 and animProgress >= 1) or (dir == -1 and animProgress <= 0) then
+                animProgress = animTarget
+                self:SetScript("OnUpdate", nil)
+            end
+            ApplyVisual(animProgress)
+        end
+        toggle:SetScript("OnClick", function()
+            local v = not getValue()
+            setValue(v)
+            animTarget = v and 1 or 0
+            toggle:SetScript("OnUpdate", AnimOnUpdate)
+        end)
+    end
+
+    local function SnapToState()
+        local v = getValue() and 1 or 0
+        animProgress = v; animTarget = v
+        ApplyVisual(v)
+        toggle:SetScript("OnUpdate", nil)
+    end
+
+    return toggle, ApplyVisual, SnapToState
+end
+
+
+
+-------------------------------------------------------------------------------
+
+--  BuildCheckboxControl(parent, frameLevel)
+
+--
+
+--  Creates a checkbox (box + border + checkmark texture).
+
+--  Returns: box (Frame), check (Texture), boxBorder, applyVisual (fn)
+
+--  applyVisual(isOn, isHovering) updates colors/visibility.
+
+-------------------------------------------------------------------------------
+
+local function BuildCheckboxControl(parent, frameLevel)
+    local RealPP = EllesmereUI.PP
+    local BOX_SZ  = 18
+    local BOX_PAD = 2
+
+    local box = CreateFrame("Frame", nil, parent)
+    RealPP.Size(box, BOX_SZ, BOX_SZ)
+    box:SetFrameLevel(frameLevel)
+
+    local boxBg = SolidTex(box, "BACKGROUND", CB.BOX_R, CB.BOX_G, CB.BOX_B, 1)
+    DisablePixelSnap(boxBg)
+    boxBg:SetAllPoints()
+    local boxBorder = MakeBorder(box, BORDER_R, BORDER_G, BORDER_B, CB.BRD_A, PP)
+
+    local check = SolidTex(box, "ARTWORK", ELLESMERE_GREEN.r, ELLESMERE_GREEN.g, ELLESMERE_GREEN.b, 1)
+    DisablePixelSnap(check)
+    RealPP.SetInside(check, box, BOX_PAD, BOX_PAD)
+
+    local function ApplyVisual(isOn, isHovering)
+        check:SetColorTexture(ELLESMERE_GREEN.r, ELLESMERE_GREEN.g, ELLESMERE_GREEN.b, 1)
+        if isOn then
+            check:Show()
+            boxBg:SetColorTexture(CB.BOX_R, CB.BOX_G, CB.BOX_B, 1)
+            boxBorder:SetColor(ELLESMERE_GREEN.r, ELLESMERE_GREEN.g, ELLESMERE_GREEN.b, CB.ACT_BRD_A)
+        else
+            check:Hide()
+            local a = isHovering and 1 or 0.8
+            boxBg:SetColorTexture(CB.BOX_R, CB.BOX_G, CB.BOX_B, 1 * a)
+            boxBorder:SetColor(BORDER_R, BORDER_G, BORDER_B, CB.BRD_A * a)
+        end
+    end
+
+    return box, check, boxBorder, ApplyVisual
+end
+
+
 
 -- Button constants
 local BTN_BG_R  = EllesmereUI.BTN_BG_R
@@ -270,7 +485,7 @@ local function BuildDropdownMenu(ddBtn, menuW, order, values, getValue, setValue
         -- Divider support: "---" key inserts a thin separator line
         if key == "---" then
             local div = innerContainer:CreateTexture(nil, "ARTWORK")
-            PP.Height(div, 1)
+            div:SetHeight(1)
             div:SetColorTexture(1, 1, 1, 0.10)
             div:SetPoint("TOPLEFT", innerContainer, "TOPLEFT", 1, -mH - 4)
             div:SetPoint("TOPRIGHT", innerContainer, "TOPRIGHT", -1, -mH - 4)
@@ -441,7 +656,6 @@ local function BuildDropdownMenu(ddBtn, menuW, order, values, getValue, setValue
                     bgTex:SetAllPoints()
                     bgTex:SetTexture(bgPath)
                     bgTex:SetAlpha(0.45)
-                    PP.DisablePixelSnap(bgTex)
                     if _moBgVertexColor then
                         local vr, vg, vb = _moBgVertexColor()
                         if vr then bgTex:SetVertexColor(vr, vg, vb, 1) end
@@ -813,12 +1027,10 @@ local function BuildSliderCore(parent, trackW, trackH, thumbSz, inputW, inputH, 
     trackFrame:SetFrameLevel(parent:GetFrameLevel() + 1)
 
     local trackDark = SolidTex(trackFrame, "BACKGROUND", trkR, trkG, trkB, trkA)
-    PP.DisablePixelSnap(trackDark)
     PP.Size(trackDark, trackW, trackH)
     PP.Point(trackDark, "CENTER", trackFrame, "CENTER", 0, 0)
 
     local trackFill = SolidTex(trackFrame, "BORDER", ELLESMERE_GREEN.r, ELLESMERE_GREEN.g, ELLESMERE_GREEN.b, SL.FILL_A)
-    PP.DisablePixelSnap(trackFill)
     PP.Height(trackFill, trackH)
     PP.Point(trackFill, "LEFT", trackDark, "LEFT", 0, 0)
 
@@ -837,10 +1049,8 @@ local function BuildSliderCore(parent, trackW, trackH, thumbSz, inputW, inputH, 
     local thumbBlocker = thumbBlockerFrame:CreateTexture(nil, "BACKGROUND")
     thumbBlocker:SetAllPoints()
     thumbBlocker:SetColorTexture(DARK_BG.r, DARK_BG.g, DARK_BG.b, 1)
-    PP.DisablePixelSnap(thumbBlocker)
     local thumbTex = SolidTex(thumb, "ARTWORK", ELLESMERE_GREEN.r, ELLESMERE_GREEN.g, ELLESMERE_GREEN.b, 1)
     thumbTex:SetAllPoints()
-    PP.DisablePixelSnap(thumbTex)
 
     -- Value input box
     local valBox = CreateFrame("EditBox", nil, parent)
@@ -960,7 +1170,7 @@ local function BuildSliderCore(parent, trackW, trackH, thumbSz, inputW, inputH, 
         if EllesmereUI._sliderDragging == 0 then
             EllesmereUI._sliderDragging = nil
         end
-        CommitSnap()  -- final setValue runs with _sliderDragging cleared ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ Snap() rounds
+        CommitSnap()  -- final setValue runs with _sliderDragging cleared Snap() rounds
         if not EllesmereUI._sliderDragging then
             -- Fire any deferred drift checks now that all sliders have finished dragging
             if EllesmereUI._deferredDriftChecks then
@@ -1029,9 +1239,7 @@ local function BuildSliderCore(parent, trackW, trackH, thumbSz, inputW, inputH, 
         end
         -- Re-apply accent color (in case theme changed on another tab)
         trackFill:SetColorTexture(ELLESMERE_GREEN.r, ELLESMERE_GREEN.g, ELLESMERE_GREEN.b, SL.FILL_A)
-        PP.DisablePixelSnap(trackFill)
         thumbTex:SetColorTexture(ELLESMERE_GREEN.r, ELLESMERE_GREEN.g, ELLESMERE_GREEN.b, 1)
-        PP.DisablePixelSnap(thumbTex)
     end
     RegisterWidgetRefresh(RefreshSlider)
 
@@ -1384,9 +1592,8 @@ function WidgetFactory:SectionHeader(parent, text, yOffset)
     local sepParent = splitParent or frame
     local sep = sepParent:CreateTexture(nil, "ARTWORK")
     sep:SetColorTexture(BORDER_COLOR.r, BORDER_COLOR.g, BORDER_COLOR.b, 0.02)
-    PP.DisablePixelSnap(sep)
     if splitParent then
-        PP.Height(sep, 1)
+        sep:SetHeight(1)
         PP.Point(sep, "LEFT", splitParent, "LEFT", CONTENT_PAD, 0)
         PP.Point(sep, "RIGHT", splitParent, "RIGHT", -CONTENT_PAD, 0)
         PP.Point(sep, "BOTTOM", frame, "BOTTOM", 0, 0)
@@ -1473,8 +1680,8 @@ end
 function WidgetFactory:Toggle(parent, text, yOffset, getValue, setValue, tooltip)
     local ROW_H = 50
     local frame = CreateFrame("Frame", nil, parent)
-    frame:SetSize(parent:GetWidth() - CONTENT_PAD * 2, ROW_H)
-    frame:SetPoint("TOPLEFT", parent, "TOPLEFT", CONTENT_PAD, yOffset)
+    PP.Size(frame, parent:GetWidth() - CONTENT_PAD * 2, ROW_H)
+    PP.Point(frame, "TOPLEFT", parent, "TOPLEFT", CONTENT_PAD, yOffset)
 
     RowBg(frame, parent)
     TagOptionRow(frame, parent, text)    local label = MakeFont(frame, 14, nil, TEXT_WHITE.r, TEXT_WHITE.g, TEXT_WHITE.b)
@@ -1491,92 +1698,10 @@ function WidgetFactory:Toggle(parent, text, yOffset, getValue, setValue, tooltip
     end
 
     -- Toggle button
-    local TOGGLE_W, TOGGLE_H = 40, 20
-    local KNOB_SZ = 16
-    local KNOB_PAD = 3
-    local ANIM_DURATION = 0.075  -- seconds
-
-    local toggle = CreateFrame("Button", nil, frame)
-    toggle:SetSize(TOGGLE_W, TOGGLE_H)
+    local toggle, _, tgSnap = BuildToggleControl(frame, frame:GetFrameLevel() + 1, getValue, setValue)
     toggle:SetPoint("RIGHT", frame, "RIGHT", -20, 0)
-    toggle:SetFrameLevel(frame:GetFrameLevel() + 1)
 
-    -- Single background track (color will be lerped)
-    local tBg = SolidTex(toggle, "BACKGROUND", TG.OFF_R, TG.OFF_G, TG.OFF_B, TG.OFF_A)
-    DisablePixelSnap(tBg)
-    tBg:SetAllPoints()
-
-    -- Knob (color will be lerped)
-    local knob = toggle:CreateTexture(nil, "ARTWORK")
-    DisablePixelSnap(knob)
-    knob:SetColorTexture(TG.KNOB_OFF_R, TG.KNOB_OFF_G, TG.KNOB_OFF_B, TG.KNOB_OFF_A)
-    PP.Size(knob, KNOB_SZ, KNOB_SZ)
-    PP.Point(knob, "LEFT", toggle, "LEFT", KNOB_PAD, 0)
-
-    -- Color constants
-    local BG_OFF_R, BG_OFF_G, BG_OFF_B, BG_OFF_A = TG.OFF_R, TG.OFF_G, TG.OFF_B, TG.OFF_A
-    local KNOB_OFF_R, KNOB_OFF_G, KNOB_OFF_B, KNOB_OFF_A = TG.KNOB_OFF_R, TG.KNOB_OFF_G, TG.KNOB_OFF_B, TG.KNOB_OFF_A
-    local KNOB_ON_R,  KNOB_ON_G,  KNOB_ON_B,  KNOB_ON_A  = TG.KNOB_ON_R,  TG.KNOB_ON_G,  TG.KNOB_ON_B, TG.KNOB_ON_A
-
-    -- Position constants
-    local POS_OFF = KNOB_PAD
-    local POS_ON  = TOGGLE_W - KNOB_SZ - KNOB_PAD
-
-    -- Animation state
-    local animProgress = getValue() and 1 or 0  -- 0 = off, 1 = on
-    local animTarget   = animProgress
-
-    local function ApplyVisual(t)
-        -- Knob position
-        local xOff = math.floor(lerp(POS_OFF, POS_ON, t) + 0.5)
-        knob:ClearAllPoints()
-        PP.Point(knob, "LEFT", toggle, "LEFT", xOff, 0)
-
-        -- Track color (reads ELLESMERE_GREEN live for theme changes)
-        tBg:SetColorTexture(
-            lerp(BG_OFF_R, ELLESMERE_GREEN.r, t),
-            lerp(BG_OFF_G, ELLESMERE_GREEN.g, t),
-            lerp(BG_OFF_B, ELLESMERE_GREEN.b, t),
-            lerp(BG_OFF_A, TG.ON_A, t)
-        )
-        DisablePixelSnap(tBg)
-
-        -- Knob color
-        knob:SetColorTexture(
-            lerp(KNOB_OFF_R, KNOB_ON_R, t),
-            lerp(KNOB_OFF_G, KNOB_ON_G, t),
-            lerp(KNOB_OFF_B, KNOB_ON_B, t),
-            lerp(KNOB_OFF_A, KNOB_ON_A, t)
-        )
-        DisablePixelSnap(knob)
-    end
-
-    -- Set initial state without animation
-    ApplyVisual(animProgress)
-
-    -- Animation driver (only active during animation)
-    local function AnimOnUpdate(self, elapsed)
-        local dir = (animTarget == 1) and 1 or -1
-        animProgress = animProgress + dir * (elapsed / ANIM_DURATION)
-        if (dir == 1 and animProgress >= 1) or (dir == -1 and animProgress <= 0) then
-            animProgress = animTarget
-            self:SetScript("OnUpdate", nil)  -- stop ticking when done
-        end
-        ApplyVisual(animProgress)
-    end
-
-    toggle:SetScript("OnClick", function()
-        local v = not getValue()
-        setValue(v)
-        animTarget = v and 1 or 0
-        toggle:SetScript("OnUpdate", AnimOnUpdate)  -- start ticking
-    end)
-
-    RegisterWidgetRefresh(function()
-        local v = getValue() and 1 or 0
-        animProgress = v; animTarget = v; ApplyVisual(v)
-        toggle:SetScript("OnUpdate", nil)
-    end)
+    RegisterWidgetRefresh(tgSnap)
 
     return frame, ROW_H
 end
@@ -1642,33 +1767,20 @@ end
 -- Checkbox (small square box with checkmark, label to the right)
 function WidgetFactory:Checkbox(parent, text, yOffset, getValue, setValue, tooltip)
     local ROW_H = 36
-    local BOX_SZ = 18
     local frame = CreateFrame("Frame", nil, parent)
-    PixelUtil.SetSize(frame, parent:GetWidth() - CONTENT_PAD * 2, ROW_H)
-    PixelUtil.SetPoint(frame, "TOPLEFT", parent, "TOPLEFT", CONTENT_PAD, yOffset)
+    PP.Size(frame, parent:GetWidth() - CONTENT_PAD * 2, ROW_H)
+    PP.Point(frame, "TOPLEFT", parent, "TOPLEFT", CONTENT_PAD, yOffset)
 
     RowBg(frame, parent)
     TagOptionRow(frame, parent, text)
 
     local btn = CreateFrame("Button", nil, frame)
-    btn:SetSize(parent:GetWidth() - CONTENT_PAD * 2, ROW_H)
+    PP.Size(btn, parent:GetWidth() - CONTENT_PAD * 2, ROW_H)
     btn:SetAllPoints(frame)
 
-    -- Checkbox box
-    local box = CreateFrame("Frame", nil, btn)
-    box:SetSize(BOX_SZ, BOX_SZ)
-    box:SetPoint("LEFT", btn, "LEFT", 20, 0)
+    local box, check, boxBorder, cbApply = BuildCheckboxControl(btn, frame:GetFrameLevel() + 1)
+    PP.Point(box, "LEFT", btn, "LEFT", 20, 0)
 
-    local boxBg = SolidTex(box, "BACKGROUND", CB.BOX_R, CB.BOX_G, CB.BOX_B, 1)
-    boxBg:SetAllPoints()
-    local boxBorder = MakeBorder(box, BORDER_R, BORDER_G, BORDER_B, CB.BRD_A, PP)
-
-    -- Checkmark (teal filled inner square)
-    local check = SolidTex(box, "ARTWORK", ELLESMERE_GREEN.r, ELLESMERE_GREEN.g, ELLESMERE_GREEN.b, 1)
-    PP.Point(check, "TOPLEFT", box, "TOPLEFT", 4, -4)
-    PP.Point(check, "BOTTOMRIGHT", box, "BOTTOMRIGHT", -4, 4)
-
-    -- Label
     local label = MakeFont(btn, 14, nil, TEXT_WHITE.r, TEXT_WHITE.g, TEXT_WHITE.b)
     label:SetPoint("LEFT", box, "RIGHT", 10, 0)
     label:SetText(text)
@@ -1686,24 +1798,12 @@ function WidgetFactory:Checkbox(parent, text, yOffset, getValue, setValue, toolt
 
     local function ApplyVisual()
         local on = getValue()
-        -- Re-apply accent to checkmark (in case theme changed)
-        check:SetColorTexture(ELLESMERE_GREEN.r, ELLESMERE_GREEN.g, ELLESMERE_GREEN.b, 1)
-        DisablePixelSnap(check)
+        cbApply(on, isHovering)
         if on then
-            -- Active: 100% opacity, teal border at 15%, checkmark visible
-            check:Show()
             label:SetTextColor(TEXT_WHITE.r, TEXT_WHITE.g, TEXT_WHITE.b, 1)
-            boxBg:SetColorTexture(CB.BOX_R, CB.BOX_G, CB.BOX_B, 1)
-            DisablePixelSnap(boxBg)
-            boxBorder:SetColor(ELLESMERE_GREEN.r, ELLESMERE_GREEN.g, ELLESMERE_GREEN.b, CB.ACT_BRD_A)
         else
-            -- Inactive: 80% opacity, or 100% if hovering
-            check:Hide()
             local a = isHovering and 1 or 0.8
             label:SetTextColor(TEXT_WHITE.r * a, TEXT_WHITE.g * a, TEXT_WHITE.b * a, a)
-            boxBg:SetColorTexture(CB.BOX_R, CB.BOX_G, CB.BOX_B, 1 * a)
-            DisablePixelSnap(boxBg)
-            boxBorder:SetColor(BORDER_R, BORDER_G, BORDER_B, CB.BRD_A * a)
         end
     end
     ApplyVisual()
@@ -1729,7 +1829,7 @@ function WidgetFactory:Checkbox(parent, text, yOffset, getValue, setValue, toolt
 end
 
 -------------------------------------------------------------------------------
---  HSV ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â RGB Conversion Helpers
+--  HSV RGB Conversion Helpers
 -------------------------------------------------------------------------------
 local function HSVtoRGB(h, s, v)
     local c = v * s
@@ -1820,7 +1920,6 @@ local function BuildColorPickerPopup()
 
     local bg = popup:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints(); bg:SetColorTexture(0.06, 0.08, 0.10, 1)
-    PP.DisablePixelSnap(bg)
 
     -- Pixel-perfect border (matching popup style)
     MakeBorder(popup, BORDER_R, BORDER_G, BORDER_B, 0.15, PP)
@@ -1845,7 +1944,6 @@ local function BuildColorPickerPopup()
     closeIcon:SetAllPoints()
     closeIcon:SetTexture(MEDIA_PATH .. "icons/close-popup-4.png")
     closeIcon:SetAlpha(0.40)
-    PP.DisablePixelSnap(closeIcon)
     closeIcon:SetSnapToPixelGrid(false)
     closeIcon:SetTexelSnappingBias(0)
     closeBtn:SetScript("OnEnter", function() closeIcon:SetAlpha(0.50) end)
@@ -1891,23 +1989,23 @@ local function BuildColorPickerPopup()
     svPad:EnableMouse(true)
 
     local svHue = svPad:CreateTexture(nil, "BACKGROUND")
-    svHue:SetAllPoints(); svHue:SetColorTexture(1, 0, 0, 1); PP.DisablePixelSnap(svHue)
+    svHue:SetAllPoints(); svHue:SetColorTexture(1, 0, 0, 1)
 
     local svWhite = svPad:CreateTexture(nil, "BORDER")
-    svWhite:SetAllPoints(); svWhite:SetColorTexture(1, 1, 1, 1); PP.DisablePixelSnap(svWhite)
+    svWhite:SetAllPoints(); svWhite:SetColorTexture(1, 1, 1, 1)
     svWhite:SetGradient("HORIZONTAL", CreateColor(1, 1, 1, 1), CreateColor(1, 1, 1, 0))
 
     local svBlack = svPad:CreateTexture(nil, "ARTWORK")
-    svBlack:SetAllPoints(); svBlack:SetColorTexture(0, 0, 0, 1); PP.DisablePixelSnap(svBlack)
+    svBlack:SetAllPoints(); svBlack:SetColorTexture(0, 0, 0, 1)
     svBlack:SetGradient("VERTICAL", CreateColor(0, 0, 0, 1), CreateColor(0, 0, 0, 0))
 
     MakeBorder(svPad, 1, 1, 1, 0.06, PP)
 
     local ARM = 6
-    local chT = svPad:CreateTexture(nil, "OVERLAY", nil, 7); chT:SetSize(1, ARM); chT:SetColorTexture(1,1,1,0.9); PP.DisablePixelSnap(chT)
-    local chB = svPad:CreateTexture(nil, "OVERLAY", nil, 7); chB:SetSize(1, ARM); chB:SetColorTexture(1,1,1,0.9); PP.DisablePixelSnap(chB)
-    local chL = svPad:CreateTexture(nil, "OVERLAY", nil, 7); chL:SetSize(ARM, 1); chL:SetColorTexture(1,1,1,0.9); PP.DisablePixelSnap(chL)
-    local chR = svPad:CreateTexture(nil, "OVERLAY", nil, 7); chR:SetSize(ARM, 1); chR:SetColorTexture(1,1,1,0.9); PP.DisablePixelSnap(chR)
+    local chT = svPad:CreateTexture(nil, "OVERLAY", nil, 7); chT:SetSize(1, ARM); chT:SetColorTexture(1,1,1,0.9)
+    local chB = svPad:CreateTexture(nil, "OVERLAY", nil, 7); chB:SetSize(1, ARM); chB:SetColorTexture(1,1,1,0.9)
+    local chL = svPad:CreateTexture(nil, "OVERLAY", nil, 7); chL:SetSize(ARM, 1); chL:SetColorTexture(1,1,1,0.9)
+    local chR = svPad:CreateTexture(nil, "OVERLAY", nil, 7); chR:SetSize(ARM, 1); chR:SetColorTexture(1,1,1,0.9)
 
     UpdateSVPadHue = function(h)
         local r, g, b = HSVtoRGB(h, 1, 1)
@@ -1959,14 +2057,14 @@ local function BuildColorPickerPopup()
     for i = 1, 6 do
         local seg = hueBar:CreateTexture(nil, "BACKGROUND")
         seg:SetSize(BAR_W, segH); seg:SetPoint("TOPLEFT", hueBar, "TOPLEFT", 0, -(i-1)*segH)
-        seg:SetColorTexture(1,1,1,1); PP.DisablePixelSnap(seg)
+        seg:SetColorTexture(1,1,1,1)
         local top, bot = HUE_COLORS[i], HUE_COLORS[i+1]
         seg:SetGradient("VERTICAL", CreateColor(bot[1],bot[2],bot[3],1), CreateColor(top[1],top[2],top[3],1))
     end
     MakeBorder(hueBar, 1, 1, 1, 0.06, PP)
 
     local hueInd = hueBar:CreateTexture(nil, "OVERLAY", nil, 7)
-    hueInd:SetSize(BAR_W + 4, 2); hueInd:SetColorTexture(1,1,1,1); PP.DisablePixelSnap(hueInd)
+    hueInd:SetSize(BAR_W + 4, 2); hueInd:SetColorTexture(1,1,1,1)
 
     UpdateHueIndicator = function(h)
         hueInd:ClearAllPoints()
@@ -1997,7 +2095,7 @@ local function BuildColorPickerPopup()
     alphaBar:EnableMouse(true)
 
     local CK = 10
-    -- Coarse checkerboard: 2 columns ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â 20 rows = 40 textures (vs 160 before)
+    -- Coarse checkerboard: 2 columns 20 rows = 40 textures (vs 160 before)
     local ckCols = math.ceil(BAR_W / CK)
     local ckRows = math.ceil(SV_SIZE / CK)
     for row = 0, ckRows - 1 do
@@ -2005,15 +2103,15 @@ local function BuildColorPickerPopup()
             local c = ((row + col) % 2 == 0) and 0.3 or 0.15
             local ck = alphaBar:CreateTexture(nil, "BACKGROUND")
             ck:SetSize(CK, CK); ck:SetPoint("TOPLEFT", alphaBar, "TOPLEFT", col * CK, -row * CK)
-            ck:SetColorTexture(c, c, c, 1); PP.DisablePixelSnap(ck)
+            ck:SetColorTexture(c, c, c, 1)
         end
     end
 
     local alphaGrad = alphaBar:CreateTexture(nil, "ARTWORK")
-    alphaGrad:SetAllPoints(); alphaGrad:SetColorTexture(1,0,0,1); PP.DisablePixelSnap(alphaGrad)
+    alphaGrad:SetAllPoints(); alphaGrad:SetColorTexture(1,0,0,1)
 
     local alphaInd = alphaBar:CreateTexture(nil, "OVERLAY", nil, 7)
-    alphaInd:SetSize(BAR_W+4, 2); alphaInd:SetColorTexture(1,1,1,1); PP.DisablePixelSnap(alphaInd)
+    alphaInd:SetSize(BAR_W+4, 2); alphaInd:SetColorTexture(1,1,1,1)
     MakeBorder(alphaBar, 1, 1, 1, 0.06, PP)
 
     -- Reusable CreateColor objects to avoid per-frame allocation during drag
@@ -2058,12 +2156,12 @@ local function BuildColorPickerPopup()
 
     newPreviewTex = rightCol:CreateTexture(nil, "ARTWORK")
     newPreviewTex:SetSize(RIGHT_W, 26); newPreviewTex:SetPoint("TOPLEFT", rightCol, "TOPLEFT", 0, -14)
-    newPreviewTex:SetColorTexture(1,1,1,1); PP.DisablePixelSnap(newPreviewTex)
+    newPreviewTex:SetColorTexture(1,1,1,1)
 
     -- Prev preview (directly below New)
     local prevPrev = rightCol:CreateTexture(nil, "ARTWORK")
     prevPrev:SetSize(RIGHT_W, 26); prevPrev:SetPoint("TOPLEFT", newPreviewTex, "BOTTOMLEFT", 0, -4)
-    prevPrev:SetColorTexture(1,1,1,1); PP.DisablePixelSnap(prevPrev)
+    prevPrev:SetColorTexture(1,1,1,1)
     prevPreviewTex = prevPrev
 
     -- Clickable overlay on prev swatch: clicking restores the previous color
@@ -2089,7 +2187,7 @@ local function BuildColorPickerPopup()
     hexBox:SetMaxLetters(6); hexBox:SetAutoFocus(false); hexBox:EnableMouse(true)
     hexBox:SetJustifyH("CENTER")
     local hbg = hexBox:CreateTexture(nil, "BACKGROUND")
-    hbg:SetAllPoints(); hbg:SetColorTexture(0.22, 0.24, 0.28, 0.5); PP.DisablePixelSnap(hbg)
+    hbg:SetAllPoints(); hbg:SetColorTexture(0.22, 0.24, 0.28, 0.5)
     MakeBorder(hexBox, 1, 1, 1, 0.04, PP)
 
     local lastValidHex = "FFFFFF"
@@ -2248,7 +2346,6 @@ local function BuildColorSwatch(parentFrame, baseLevel, getValue, setValue, hasA
 
     -- Color fill (always created immediately -- 1 texture)
     local sFill = swatch:CreateTexture(nil, "ARTWORK")
-    PP.DisablePixelSnap(sFill)
     sFill:SetAllPoints()
 
     -- Border state (populated lazily)
@@ -2271,16 +2368,16 @@ local function BuildColorSwatch(parentFrame, baseLevel, getValue, setValue, hasA
         rainbowFrame:SetAllPoints()
         rainbowFrame:SetFrameLevel(brdFrame:GetFrameLevel())
         local rbT = rainbowFrame:CreateTexture(nil, "BORDER")
-        rbT:SetTexture(MEDIA_PATH .. "icons\\rainbow-border-top.png"); PP.DisablePixelSnap(rbT)
+        rbT:SetTexture(MEDIA_PATH .. "icons\\rainbow-border-top.png")
         rbT:SetPoint("BOTTOMLEFT", swatch, "TOPLEFT", -T, -T); rbT:SetPoint("BOTTOMRIGHT", swatch, "TOPRIGHT", T, -T); PP.Height(rbT, 2 * T)
         local rbB = rainbowFrame:CreateTexture(nil, "BORDER")
-        rbB:SetTexture(MEDIA_PATH .. "icons\\rainbow-border-bottom.png"); PP.DisablePixelSnap(rbB)
+        rbB:SetTexture(MEDIA_PATH .. "icons\\rainbow-border-bottom.png")
         rbB:SetPoint("TOPLEFT", swatch, "BOTTOMLEFT", -T, T); rbB:SetPoint("TOPRIGHT", swatch, "BOTTOMRIGHT", T, T); PP.Height(rbB, 2 * T)
         local rbL = rainbowFrame:CreateTexture(nil, "BORDER")
-        rbL:SetTexture(MEDIA_PATH .. "icons\\rainbow-border-left.png"); PP.DisablePixelSnap(rbL)
+        rbL:SetTexture(MEDIA_PATH .. "icons\\rainbow-border-left.png")
         rbL:SetPoint("TOPLEFT", rbT, "BOTTOMLEFT", 0, 0); rbL:SetPoint("BOTTOMLEFT", rbB, "TOPLEFT", 0, 0); PP.Width(rbL, 2 * T)
         local rbR = rainbowFrame:CreateTexture(nil, "BORDER")
-        rbR:SetTexture(MEDIA_PATH .. "icons\\rainbow-border-right.png"); PP.DisablePixelSnap(rbR)
+        rbR:SetTexture(MEDIA_PATH .. "icons\\rainbow-border-right.png")
         rbR:SetPoint("TOPRIGHT", rbT, "BOTTOMRIGHT", 0, 0); rbR:SetPoint("BOTTOMRIGHT", rbB, "TOPRIGHT", 0, 0); PP.Width(rbR, 2 * T)
 
         -- Solid white border (shown for colorful/saturated colors)
@@ -2288,16 +2385,16 @@ local function BuildColorSwatch(parentFrame, baseLevel, getValue, setValue, hasA
         whiteFrame:SetAllPoints()
         whiteFrame:SetFrameLevel(brdFrame:GetFrameLevel())
         local wt = whiteFrame:CreateTexture(nil, "BORDER")
-        wt:SetColorTexture(CS.SOLID_R, CS.SOLID_G, CS.SOLID_B, CS.SOLID_A); PP.DisablePixelSnap(wt)
+        wt:SetColorTexture(CS.SOLID_R, CS.SOLID_G, CS.SOLID_B, CS.SOLID_A)
         wt:SetPoint("BOTTOMLEFT", swatch, "TOPLEFT", -T, 0); wt:SetPoint("BOTTOMRIGHT", swatch, "TOPRIGHT", T, 0); PP.Height(wt, T)
         local wb = whiteFrame:CreateTexture(nil, "BORDER")
-        wb:SetColorTexture(CS.SOLID_R, CS.SOLID_G, CS.SOLID_B, CS.SOLID_A); PP.DisablePixelSnap(wb)
+        wb:SetColorTexture(CS.SOLID_R, CS.SOLID_G, CS.SOLID_B, CS.SOLID_A)
         wb:SetPoint("TOPLEFT", swatch, "BOTTOMLEFT", -T, 0); wb:SetPoint("TOPRIGHT", swatch, "BOTTOMRIGHT", T, 0); PP.Height(wb, T)
         local wl = whiteFrame:CreateTexture(nil, "BORDER")
-        wl:SetColorTexture(CS.SOLID_R, CS.SOLID_G, CS.SOLID_B, CS.SOLID_A); PP.DisablePixelSnap(wl)
+        wl:SetColorTexture(CS.SOLID_R, CS.SOLID_G, CS.SOLID_B, CS.SOLID_A)
         wl:SetPoint("TOPLEFT", swatch, "TOPLEFT", -T, 0); wl:SetPoint("BOTTOMLEFT", swatch, "BOTTOMLEFT", -T, 0); PP.Width(wl, T)
         local wr = whiteFrame:CreateTexture(nil, "BORDER")
-        wr:SetColorTexture(CS.SOLID_R, CS.SOLID_G, CS.SOLID_B, CS.SOLID_A); PP.DisablePixelSnap(wr)
+        wr:SetColorTexture(CS.SOLID_R, CS.SOLID_G, CS.SOLID_B, CS.SOLID_A)
         wr:SetPoint("TOPRIGHT", swatch, "TOPRIGHT", T, 0); wr:SetPoint("BOTTOMRIGHT", swatch, "BOTTOMRIGHT", T, 0); PP.Width(wr, T)
 
         -- Crossfade setup
@@ -2661,62 +2758,13 @@ function WidgetFactory:DualRow(parent, yOffset, leftCfg, rightCfg)
             end
 
         elseif t == "toggle" then
-            local TOGGLE_W, TOGGLE_H = 40, 20
-            local KNOB_SZ, KNOB_PAD = 16, 3
-            local toggle = CreateFrame("Button", nil, region)
-            toggle:SetSize(TOGGLE_W, TOGGLE_H)
+            local toggle, _, tgSnap = BuildToggleControl(region, frame:GetFrameLevel() + 2, cfg.getValue, cfg.setValue)
             toggle:SetPoint("RIGHT", region, "RIGHT", -SIDE_PAD, 0)
-            toggle:SetFrameLevel(frame:GetFrameLevel() + 2)
-            local tBg = SolidTex(toggle, "BACKGROUND", TG.OFF_R, TG.OFF_G, TG.OFF_B, TG.OFF_A)
-            DisablePixelSnap(tBg)
-            tBg:SetAllPoints()
-            local knob = toggle:CreateTexture(nil, "ARTWORK")
-            DisablePixelSnap(knob)
-            knob:SetColorTexture(TG.KNOB_OFF_R, TG.KNOB_OFF_G, TG.KNOB_OFF_B, TG.KNOB_OFF_A)
-            PP.Size(knob, KNOB_SZ, KNOB_SZ)
-            PP.Point(knob, "LEFT", toggle, "LEFT", KNOB_PAD, 0)
-            local POS_OFF = KNOB_PAD
-            local POS_ON  = TOGGLE_W - KNOB_SZ - KNOB_PAD
-            local animProgress = cfg.getValue() and 1 or 0
-            local animTarget   = animProgress
-            local function ApplyVisual(p)
-                knob:ClearAllPoints()
-                PP.Point(knob, "LEFT", toggle, "LEFT", math.floor(lerp(POS_OFF, POS_ON, p) + 0.5), 0)
-                tBg:SetColorTexture(
-                    lerp(TG.OFF_R, ELLESMERE_GREEN.r, p),
-                    lerp(TG.OFF_G, ELLESMERE_GREEN.g, p),
-                    lerp(TG.OFF_B, ELLESMERE_GREEN.b, p),
-                    lerp(TG.OFF_A, TG.ON_A, p))
-                knob:SetColorTexture(
-                    lerp(TG.KNOB_OFF_R, TG.KNOB_ON_R, p),
-                    lerp(TG.KNOB_OFF_G, TG.KNOB_ON_G, p),
-                    lerp(TG.KNOB_OFF_B, TG.KNOB_ON_B, p),
-                    lerp(TG.KNOB_OFF_A, TG.KNOB_ON_A, p))
-            end
-            ApplyVisual(animProgress)
-            local ANIM_DUR = 0.075
-            local function AnimOnUpdate(self, elapsed)
-                local dir = (animTarget == 1) and 1 or -1
-                animProgress = animProgress + dir * (elapsed / ANIM_DUR)
-                if (dir == 1 and animProgress >= 1) or (dir == -1 and animProgress <= 0) then
-                    animProgress = animTarget
-                    self:SetScript("OnUpdate", nil)
-                end
-                ApplyVisual(animProgress)
-            end
-            toggle:SetScript("OnClick", function()
-                local v = not cfg.getValue()
-                cfg.setValue(v)
-                animTarget = v and 1 or 0
-                toggle:SetScript("OnUpdate", AnimOnUpdate)
-            end)
             controlFrame = toggle
             controlAnchor = toggle
             AddControlDisabledTooltip(toggle, cfg)
             RegisterWidgetRefresh(function()
-                local v = cfg.getValue() and 1 or 0
-                animProgress = v; animTarget = v; ApplyVisual(v)
-                toggle:SetScript("OnUpdate", nil)
+                tgSnap()
                 ApplyDisabledState()
             end)
             ApplyDisabledState()
@@ -3019,60 +3067,12 @@ function WidgetFactory:TripleRow(parent, yOffset, leftCfg, midCfg, rightCfg, spl
             end
 
         elseif t == "toggle" then
-            local TOGGLE_W, TOGGLE_H = 40, 20
-            local KNOB_SZ, KNOB_PAD = 16, 3
-            local toggle = CreateFrame("Button", nil, region)
-            toggle:SetSize(TOGGLE_W, TOGGLE_H)
+            local toggle, _, tgSnap = BuildToggleControl(region, frame:GetFrameLevel() + 2, cfg.getValue, cfg.setValue)
             toggle:SetPoint("RIGHT", region, "RIGHT", -SIDE_PAD, 0)
-            toggle:SetFrameLevel(frame:GetFrameLevel() + 2)
-            local tBg = SolidTex(toggle, "BACKGROUND", TG.OFF_R, TG.OFF_G, TG.OFF_B, TG.OFF_A)
-            DisablePixelSnap(tBg)
-            tBg:SetAllPoints()
-            local knob = toggle:CreateTexture(nil, "ARTWORK")
-            DisablePixelSnap(knob)
-            knob:SetColorTexture(TG.KNOB_OFF_R, TG.KNOB_OFF_G, TG.KNOB_OFF_B, TG.KNOB_OFF_A)
-            PP.Size(knob, KNOB_SZ, KNOB_SZ)
-            PP.Point(knob, "LEFT", toggle, "LEFT", KNOB_PAD, 0)
-            local POS_OFF = KNOB_PAD
-            local POS_ON  = TOGGLE_W - KNOB_SZ - KNOB_PAD
-            local animProgress = cfg.getValue() and 1 or 0
-            local animTarget   = animProgress
-            local function ApplyVisual(p)
-                knob:ClearAllPoints()
-                PP.Point(knob, "LEFT", toggle, "LEFT", math.floor(lerp(POS_OFF, POS_ON, p) + 0.5), 0)
-                tBg:SetColorTexture(
-                    lerp(TG.OFF_R, ELLESMERE_GREEN.r, p),
-                    lerp(TG.OFF_G, ELLESMERE_GREEN.g, p),
-                    lerp(TG.OFF_B, ELLESMERE_GREEN.b, p),
-                    lerp(TG.OFF_A, TG.ON_A, p))
-                knob:SetColorTexture(
-                    lerp(TG.KNOB_OFF_R, TG.KNOB_ON_R, p),
-                    lerp(TG.KNOB_OFF_G, TG.KNOB_ON_G, p),
-                    lerp(TG.KNOB_OFF_B, TG.KNOB_ON_B, p),
-                    lerp(TG.KNOB_OFF_A, TG.KNOB_ON_A, p))
-            end
-            ApplyVisual(animProgress)
-            local ANIM_DUR = 0.075
-            local function AnimOnUpdate(self, elapsed)
-                local dir = (animTarget == 1) and 1 or -1
-                animProgress = animProgress + dir * (elapsed / ANIM_DUR)
-                if (dir == 1 and animProgress >= 1) or (dir == -1 and animProgress <= 0) then
-                    animProgress = animTarget
-                    self:SetScript("OnUpdate", nil)
-                end
-                ApplyVisual(animProgress)
-            end
-            toggle:SetScript("OnClick", function()
-                local v = not cfg.getValue()
-                cfg.setValue(v)
-                animTarget = v and 1 or 0
-                toggle:SetScript("OnUpdate", AnimOnUpdate)
-            end)
             controlFrame = toggle
+            AddControlDisabledTooltip(toggle, cfg)
             RegisterWidgetRefresh(function()
-                local v = cfg.getValue() and 1 or 0
-                animProgress = v; animTarget = v; ApplyVisual(v)
-                toggle:SetScript("OnUpdate", nil)
+                tgSnap()
                 ApplyDisabledState()
             end)
             ApplyDisabledState()
@@ -3087,23 +3087,13 @@ function WidgetFactory:TripleRow(parent, yOffset, leftCfg, midCfg, rightCfg, spl
         elseif t == "checkbox" then
             -- Hide the generic label; checkbox draws its own label+box
             label:Hide()
-            local BOX_SZ = 18
             local btn = CreateFrame("Button", nil, region)
             btn:SetSize(region:GetWidth(), ROW_H)
             btn:SetAllPoints(region)
             btn:SetFrameLevel(frame:GetFrameLevel() + 2)
 
-            local box = CreateFrame("Frame", nil, btn)
-            box:SetSize(BOX_SZ, BOX_SZ)
+            local box, check, boxBorder, cbApply = BuildCheckboxControl(btn, frame:GetFrameLevel() + 2)
             box:SetPoint("LEFT", btn, "LEFT", SIDE_PAD, 0)
-
-            local boxBg = SolidTex(box, "BACKGROUND", CB.BOX_R, CB.BOX_G, CB.BOX_B, 1)
-            boxBg:SetAllPoints()
-            local boxBorder = MakeBorder(box, BORDER_R, BORDER_G, BORDER_B, CB.BRD_A, PP)
-
-            local check = SolidTex(box, "ARTWORK", ELLESMERE_GREEN.r, ELLESMERE_GREEN.g, ELLESMERE_GREEN.b, 1)
-            PP.Point(check, "TOPLEFT", box, "TOPLEFT", 4, -4)
-            PP.Point(check, "BOTTOMRIGHT", box, "BOTTOMRIGHT", -4, 4)
 
             local cbLabel = MakeFont(btn, 14, nil, TEXT_WHITE_R, TEXT_WHITE_G, TEXT_WHITE_B)
             cbLabel:SetPoint("LEFT", box, "RIGHT", 10, 0)
@@ -3112,21 +3102,12 @@ function WidgetFactory:TripleRow(parent, yOffset, leftCfg, midCfg, rightCfg, spl
             local isHovering = false
             local function ApplyCBVisual()
                 local on = cfg.getValue()
-                check:SetColorTexture(ELLESMERE_GREEN.r, ELLESMERE_GREEN.g, ELLESMERE_GREEN.b, 1)
-                DisablePixelSnap(check)
+                cbApply(on, isHovering)
                 if on then
-                    check:Show()
                     cbLabel:SetTextColor(TEXT_WHITE_R, TEXT_WHITE_G, TEXT_WHITE_B, 1)
-                    boxBg:SetColorTexture(CB.BOX_R, CB.BOX_G, CB.BOX_B, 1)
-                    DisablePixelSnap(boxBg)
-                    boxBorder:SetColor(ELLESMERE_GREEN.r, ELLESMERE_GREEN.g, ELLESMERE_GREEN.b, CB.ACT_BRD_A)
                 else
-                    check:Hide()
                     local a = isHovering and 1 or 0.8
                     cbLabel:SetTextColor(TEXT_WHITE_R * a, TEXT_WHITE_G * a, TEXT_WHITE_B * a, a)
-                    boxBg:SetColorTexture(CB.BOX_R, CB.BOX_G, CB.BOX_B, 1 * a)
-                    DisablePixelSnap(boxBg)
-                    boxBorder:SetColor(BORDER_R, BORDER_G, BORDER_B, CB.BRD_A * a)
                 end
             end
             ApplyCBVisual()
@@ -3142,7 +3123,6 @@ function WidgetFactory:TripleRow(parent, yOffset, leftCfg, midCfg, rightCfg, spl
             controlFrame = btn
             RegisterWidgetRefresh(function() ApplyCBVisual(); ApplyDisabledState() end)
             ApplyDisabledState()
-
         elseif t == "button" then
             label:Hide()
             local btn = CreateFrame("Button", nil, region)
@@ -3184,7 +3164,7 @@ function WidgetFactory:TripleRow(parent, yOffset, leftCfg, midCfg, rightCfg, spl
         local div = frame:CreateTexture(nil, "ARTWORK")
         div:SetColorTexture(1, 1, 1, 0.06)
         if div.SetSnapToPixelGrid then div:SetSnapToPixelGrid(false); div:SetTexelSnappingBias(0) end
-        PP.Width(div, 1)
+        div:SetWidth(1)
         PP.Point(div, "TOP", rgn, "TOPRIGHT", 0, 0)
         PP.Point(div, "BOTTOM", rgn, "BOTTOMRIGHT", 0, 0)
     end
@@ -3515,7 +3495,7 @@ function WidgetFactory:Spacer(parent, yOffset, height)
 end
 
 -------------------------------------------------------------------------------
---  BuildCogPopup  ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“ reusable cog settings popup with consistent layout
+--  BuildCogPopup reusable cog settings popup with consistent layout
 --
 --  opts = {
 --    title = "Popup Title",
@@ -3667,37 +3647,13 @@ local function BuildCogPopup(opts)
                 lbl:SetText(row.label)
                 lbl:SetPoint("LEFT", pf, "TOPLEFT", SIDE_PAD, curY - TOGGLE_ROW_H / 2 - 1)
 
-                -- Toggle button
-                local tBtn = CreateFrame("Button", nil, pf)
-                tBtn:SetSize(TG_W, TG_H)
-                tBtn:SetPoint("RIGHT", pf, "TOPRIGHT", -SIDE_PAD, curY - TOGGLE_ROW_H / 2)
-                tBtn:SetFrameLevel(pf:GetFrameLevel() + 2)
+                -- Toggle button (cog popup, smaller)
+                local cogToggle, _, cogSnap = BuildToggleControl(pf, pf:GetFrameLevel() + 2, row.get, function(v) row.set(v) end, { sizeRatio = 0.8, noAnim = true })
+                cogToggle:SetPoint("RIGHT", pf, "TOPRIGHT", -SIDE_PAD, curY - TOGGLE_ROW_H / 2)
 
-                local tBg = SolidTex(tBtn, "BACKGROUND", 0.18, 0.18, 0.18, 0.85)
-                DisablePixelSnap(tBg)
-                tBg:SetAllPoints()
-                local knob = tBtn:CreateTexture(nil, "ARTWORK")
-                DisablePixelSnap(knob)
-                knob:SetColorTexture(0.55, 0.55, 0.55, 1)
-                PP.Size(knob, KNOB_SZ, KNOB_SZ)
-
-                local function UpdateToggleVisual()
-                    local on = row.get()
-                    if on then
-                        tBg:SetColorTexture(ELLESMERE_GREEN.r, ELLESMERE_GREEN.g, ELLESMERE_GREEN.b, 0.45)
-                        knob:SetColorTexture(1, 1, 1, 0.95)
-                        knob:ClearAllPoints()
-                        PP.Point(knob, "RIGHT", tBtn, "RIGHT", -KNOB_PAD, 0)
-                    else
-                        tBg:SetColorTexture(0.18, 0.18, 0.18, 0.85)
-                        knob:SetColorTexture(0.55, 0.55, 0.55, 1)
-                        knob:ClearAllPoints()
-                        PP.Point(knob, "LEFT", tBtn, "LEFT", KNOB_PAD, 0)
-                    end
-                end
+                local function UpdateToggleVisual() cogSnap() end
                 UpdateToggleVisual()
-
-                tBtn:SetScript("OnClick", function()
+                cogToggle:SetScript("OnClick", function()
                     local cur = row.get()
                     row.set(not cur)
                     UpdateToggleVisual()
@@ -4033,7 +3989,6 @@ local function BuildSegmentedControl(cfg)
     local bg = pillBody:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()
     bg:SetColorTexture(0, 0, 0, 0)  -- transparent; per-segment segBg handles background
-    PP.DisablePixelSnap(bg)
 
     -------------------------------------------------------------------
     -- Pill caps
@@ -4047,40 +4002,34 @@ local function BuildSegmentedControl(cfg)
     capLeftFill:SetSize(capW, SEG_H)
     capLeftFill:SetTexture(CAP_FILL_L_TEX)
     capLeftFill:SetVertexColor(PILL_BG[1], PILL_BG[2], PILL_BG[3], PILL_BGA)
-    PP.DisablePixelSnap(capLeftFill)
 
     local capLeftBdr = pillBody:CreateTexture(nil, "BACKGROUND", nil, 2)
     capLeftBdr:SetSize(capW, SEG_H)
     capLeftBdr:SetTexture(CAP_BORDER_L_TEX)
-    PP.DisablePixelSnap(capLeftBdr)
 
     local capRightFill = pillBody:CreateTexture(nil, "BACKGROUND", nil, 1)
     capRightFill:SetSize(capW, SEG_H)
     capRightFill:SetTexture(CAP_FILL_R_TEX)
     capRightFill:SetVertexColor(PILL_BG[1], PILL_BG[2], PILL_BG[3], PILL_BGA)
-    PP.DisablePixelSnap(capRightFill)
 
     local capRightBdr = pillBody:CreateTexture(nil, "BACKGROUND", nil, 2)
     capRightBdr:SetSize(capW, SEG_H)
     capRightBdr:SetTexture(CAP_BORDER_R_TEX)
-    PP.DisablePixelSnap(capRightBdr)
 
     -- Cap accent overlays (5% accent tint when checked, using same pill cap PNGs)
     local capLeftAccent = pillBody:CreateTexture(nil, "BACKGROUND", nil, 3)
     capLeftAccent:SetSize(capW, SEG_H)
     capLeftAccent:SetTexture(CAP_FILL_L_TEX)
     capLeftAccent:SetVertexColor(ACCENT.r, ACCENT.g, ACCENT.b, 0.05)
-    PP.DisablePixelSnap(capLeftAccent)
     capLeftAccent:Hide()
 
     local capRightAccent = pillBody:CreateTexture(nil, "BACKGROUND", nil, 3)
     capRightAccent:SetSize(capW, SEG_H)
     capRightAccent:SetTexture(CAP_FILL_R_TEX)
     capRightAccent:SetVertexColor(ACCENT.r, ACCENT.g, ACCENT.b, 0.05)
-    PP.DisablePixelSnap(capRightAccent)
     capRightAccent:Hide()
 
-    -- Cap click zones ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â anchored to pillBody for now, re-anchored after segments
+    -- Cap click zones anchored to pillBody for now, re-anchored after segments
     local capLeftBtn = CreateFrame("Button", nil, frame)
     capLeftBtn:SetSize(capW, SEG_H)
     PP.Point(capLeftBtn, "RIGHT", pillBody, "LEFT", 0, 0)
@@ -4136,7 +4085,7 @@ local function BuildSegmentedControl(cfg)
     end)
 
     -------------------------------------------------------------------
-    -- Segments ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â each has full 1px border; adjacent segments overlap by 1px
+    -- Segments each has full 1px border; adjacent segments overlap by 1px
     -------------------------------------------------------------------
     local segments = {}
     local BASE_LEVEL = pillBody:GetFrameLevel() + 3
@@ -4159,43 +4108,37 @@ local function BuildSegmentedControl(cfg)
         local segBg = btn:CreateTexture(nil, "BACKGROUND", nil, 1)
         segBg:SetAllPoints()
         segBg:SetColorTexture(PILL_BG[1], PILL_BG[2], PILL_BG[3], PILL_BGA)
-        PP.DisablePixelSnap(segBg)
 
         -- Accent tint overlay for checked/active segments (5% opacity)
         local accentBg = btn:CreateTexture(nil, "BACKGROUND", nil, 2)
         accentBg:SetAllPoints()
         accentBg:SetColorTexture(ACCENT.r, ACCENT.g, ACCENT.b, 0.05)
-        PP.DisablePixelSnap(accentBg)
         accentBg:Hide()
 
-        -- Full 1px border on all 4 sides ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â matches MakeBorder's pixel-perfect
+        -- Full 1px border on all 4 sides matches MakeBorder's pixel-perfect
         -- technique: vertical edges inset by 1px to avoid overlapping corners.
         local segTop = btn:CreateTexture(nil, "ARTWORK", nil, 7)
         segTop:SetColorTexture(INACTIVE_R, INACTIVE_G, INACTIVE_B, INACTIVE_A)
-        PP.DisablePixelSnap(segTop)
-        PP.Height(segTop, 1)
+        segTop:SetHeight(1)
         PP.Point(segTop, "TOPLEFT", btn, "TOPLEFT", 0, 0)
         PP.Point(segTop, "TOPRIGHT", btn, "TOPRIGHT", 0, 0)
 
         local segBot = btn:CreateTexture(nil, "ARTWORK", nil, 7)
         segBot:SetColorTexture(INACTIVE_R, INACTIVE_G, INACTIVE_B, INACTIVE_A)
-        PP.DisablePixelSnap(segBot)
-        PP.Height(segBot, 1)
+        segBot:SetHeight(1)
         PP.Point(segBot, "BOTTOMLEFT", btn, "BOTTOMLEFT", 0, 0)
         PP.Point(segBot, "BOTTOMRIGHT", btn, "BOTTOMRIGHT", 0, 0)
 
         -- Vertical edges anchored to horizontal edges (inset 1px) to avoid bright corners
         local segLeft = btn:CreateTexture(nil, "ARTWORK", nil, 7)
         segLeft:SetColorTexture(INACTIVE_R, INACTIVE_G, INACTIVE_B, INACTIVE_A)
-        PP.DisablePixelSnap(segLeft)
-        PP.Width(segLeft, 1)
+        segLeft:SetWidth(1)
         PP.Point(segLeft, "TOPLEFT", segTop, "BOTTOMLEFT", 0, 0)
         PP.Point(segLeft, "BOTTOMLEFT", segBot, "TOPLEFT", 0, 0)
 
         local segRight = btn:CreateTexture(nil, "ARTWORK", nil, 7)
         segRight:SetColorTexture(INACTIVE_R, INACTIVE_G, INACTIVE_B, INACTIVE_A)
-        PP.DisablePixelSnap(segRight)
-        PP.Width(segRight, 1)
+        segRight:SetWidth(1)
         PP.Point(segRight, "TOPRIGHT", segTop, "BOTTOMRIGHT", 0, 0)
         PP.Point(segRight, "BOTTOMRIGHT", segBot, "TOPRIGHT", 0, 0)
 
@@ -4294,10 +4237,10 @@ local function BuildSegmentedControl(cfg)
                 br, bg2, bb, ba = INACTIVE_R, INACTIVE_G, INACTIVE_B, INACTIVE_A
             end
 
-            seg.segTop:SetColorTexture(br, bg2, bb, ba); PP.DisablePixelSnap(seg.segTop)
-            seg.segBot:SetColorTexture(br, bg2, bb, ba); PP.DisablePixelSnap(seg.segBot)
-            seg.segLeft:SetColorTexture(br, bg2, bb, ba); PP.DisablePixelSnap(seg.segLeft)
-            seg.segRight:SetColorTexture(br, bg2, bb, ba); PP.DisablePixelSnap(seg.segRight)
+            seg.segTop:SetColorTexture(br, bg2, bb, ba)
+            seg.segBot:SetColorTexture(br, bg2, bb, ba)
+            seg.segLeft:SetColorTexture(br, bg2, bb, ba)
+            seg.segRight:SetColorTexture(br, bg2, bb, ba)
 
             -- All 4 borders visible, except: first segment hides left,
             -- last segment hides right (the pill caps handle those edges).
@@ -4310,20 +4253,20 @@ local function BuildSegmentedControl(cfg)
 
             -- Background: disabled = 50% opacity, hover = lighten by 4%, normal = PILL_BGA
             if disabled then
-                seg.segBg:SetColorTexture(PILL_BG[1], PILL_BG[2], PILL_BG[3], 0.50); PP.DisablePixelSnap(seg.segBg)
+                seg.segBg:SetColorTexture(PILL_BG[1], PILL_BG[2], PILL_BG[3], 0.50)
                 seg.accentBg:Hide()
             elseif isHover then
                 local hr, hg, hb = PILL_BG[1] + BG_HOVER_BOOST, PILL_BG[2] + BG_HOVER_BOOST, PILL_BG[3] + BG_HOVER_BOOST
-                seg.segBg:SetColorTexture(hr, hg, hb, PILL_BGA); PP.DisablePixelSnap(seg.segBg)
+                seg.segBg:SetColorTexture(hr, hg, hb, PILL_BGA)
                 if checked then
-                    seg.accentBg:SetColorTexture(ACCENT.r, ACCENT.g, ACCENT.b, 0.05); PP.DisablePixelSnap(seg.accentBg); seg.accentBg:Show()
+                    seg.accentBg:SetColorTexture(ACCENT.r, ACCENT.g, ACCENT.b, 0.05); seg.accentBg:Show()
                 else
                     seg.accentBg:Hide()
                 end
             else
-                seg.segBg:SetColorTexture(PILL_BG[1], PILL_BG[2], PILL_BG[3], PILL_BGA); PP.DisablePixelSnap(seg.segBg)
+                seg.segBg:SetColorTexture(PILL_BG[1], PILL_BG[2], PILL_BG[3], PILL_BGA)
                 if checked then
-                    seg.accentBg:SetColorTexture(ACCENT.r, ACCENT.g, ACCENT.b, 0.05); PP.DisablePixelSnap(seg.accentBg); seg.accentBg:Show()
+                    seg.accentBg:SetColorTexture(ACCENT.r, ACCENT.g, ACCENT.b, 0.05); seg.accentBg:Show()
                 else
                     seg.accentBg:Hide()
                 end
@@ -4387,7 +4330,7 @@ end
 
 
 -------------------------------------------------------------------------------
---  Exports  (widget helpers ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ EllesmereUI table for EllesmereUI_Presets.lua)
+--  Exports  (widget helpers EllesmereUI table for EllesmereUI_Presets.lua)
 -------------------------------------------------------------------------------
 EllesmereUI.MakeStyledButton    = MakeStyledButton
 EllesmereUI.WB_COLOURS          = WB_COLOURS
@@ -4723,10 +4666,32 @@ end
 EllesmereUI.BuildSliderCore     = BuildSliderCore
 EllesmereUI.BuildDropdownControl = BuildDropdownControl
 EllesmereUI.BuildColorSwatch    = BuildColorSwatch
+EllesmereUI.BuildToggleControl   = BuildToggleControl
+EllesmereUI.BuildCheckboxControl = BuildCheckboxControl
 EllesmereUI.BuildCogPopup       = BuildCogPopup
 EllesmereUI.BuildSyncIcon       = BuildSyncIcon
 EllesmereUI.ShowWidgetTooltip   = ShowWidgetTooltip
 EllesmereUI.HideWidgetTooltip   = HideWidgetTooltip
 EllesmereUI.DisabledTooltip     = DisabledTooltip
 EllesmereUI.BuildSegmentedControl = BuildSegmentedControl
+
+-------------------------------------------------------------------------------
+--  SharedMedia helpers: append LSM fonts/textures to dropdown tables
+--  Called from each options file after building its local font/texture tables.
+-------------------------------------------------------------------------------
+
+-- Eagerly build the SM font name→path lookup so ResolveFontName works
+-- immediately after deferred init (before any options page is opened).
+do
+    local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+    if LSM then
+        local smFonts = LSM:HashTable("font")
+        if smFonts then
+            local lut = {}
+            for name, path in pairs(smFonts) do lut[name] = path end
+            EllesmereUI._smFontPaths = lut
+        end
+    end
+end
+
 end  -- end deferred init

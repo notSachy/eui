@@ -308,7 +308,6 @@ do
             local totalW = parent:GetWidth() - EllesmereUI.CONTENT_PAD * 2
             local sep = parent:CreateTexture(nil, "ARTWORK", nil, 7)
             sep:SetColorTexture(EllesmereUI.BORDER_R, EllesmereUI.BORDER_G, EllesmereUI.BORDER_B, 0.02)
-            EllesmereUI.DisablePixelSnap(sep)
             PP.Size(sep, totalW, 1)
             PP.Point(sep, "TOPLEFT", parent, "TOPLEFT", EllesmereUI.CONTENT_PAD, y + 1)
         end

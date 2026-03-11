@@ -62,7 +62,7 @@ initFrame:SetScript("OnEvent", function(self)
     end
 
     ---------------------------------------------------------------------------
-    --  Preview Header â€” shows potential buff/aura icons for current class/spec
+    --  Preview Header shows potential buff/aura icons for current class/spec
     ---------------------------------------------------------------------------
     local _previewHeaderBuilder
     local _previewIcons = {}
@@ -246,7 +246,7 @@ initFrame:SetScript("OnEvent", function(self)
                     elseif entry.autocast and _G._EABR_StartAutoCastShine then
                         _G._EABR_StartAutoCastShine(btn._glowWrapper, sz, gc.r, gc.g, gc.b, 1.0)
                     elseif _G._EABR_StartFlipBookGlow then
-                        -- FlipBook glow (GCD, Modern WoW, Classic WoW) â€” use shared live function
+                        -- FlipBook glow (GCD, Modern WoW, Classic WoW) use shared live function
                         _G._EABR_StartFlipBookGlow(btn._glowWrapper, sz, entry, gc.r, gc.g, gc.b)
                     end
                     btn._glowWrapper:Show()
@@ -273,7 +273,7 @@ initFrame:SetScript("OnEvent", function(self)
             btn:Show()
         end
 
-        -- Recalculate total preview height and compensate scroll offset
+        -- Recalculate total preview height: hardcoded 80px
         do
             local textYOff2 = d.textYOffset or -2
             local textSz2 = d.textSize or 11
@@ -281,11 +281,15 @@ initFrame:SetScript("OnEvent", function(self)
             local CONTAINER_H = sz + textOverhang2
             if _previewContainer then
                 _previewContainer:SetHeight(CONTAINER_H)
+                _previewContainer:ClearAllPoints()
+                _previewContainer:SetPoint("CENTER", _previewContainer:GetParent(), "CENTER", 0, 0)
             end
-            local TOTAL_H = 15 + CONTAINER_H + 15
+            local TOTAL_H = 80
             _eabrHeaderBaseH = TOTAL_H
             local hintH = (_previewHintFS and _previewHintFS:IsShown()) and 35 or 0
-            EllesmereUI:UpdateContentHeaderHeight(TOTAL_H + hintH)
+            -- Use the silent variant so resizing the header never triggers
+            -- scroll compensation (the height rarely changes here).
+            EllesmereUI:SetContentHeaderHeightSilent(TOTAL_H + hintH)
         end
     end
 
@@ -421,22 +425,10 @@ initFrame:SetScript("OnEvent", function(self)
         btn:SetFrameLevel(frameLevelOverride or (anchor:GetFrameLevel() + 20))
         btn:RegisterForClicks("LeftButtonDown")
         local c = EllesmereUI.ELLESMERE_GREEN
-        local function MkHL()
-            local t = btn:CreateTexture(nil, "OVERLAY", nil, 7)
-            t:SetColorTexture(c.r, c.g, c.b, 1)
-            if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
-            return t
-        end
-        local ht = MkHL(); PP.Height(ht, 2); ht:SetPoint("TOPLEFT", btn, "TOPLEFT"); ht:SetPoint("TOPRIGHT", btn, "TOPRIGHT")
-        local hb = MkHL(); PP.Height(hb, 2); hb:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT"); hb:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT")
-        local hl = MkHL(); PP.Width(hl, 2); hl:SetPoint("TOPLEFT", ht, "BOTTOMLEFT"); hl:SetPoint("BOTTOMLEFT", hb, "TOPLEFT")
-        local hr = MkHL(); PP.Width(hr, 2); hr:SetPoint("TOPRIGHT", ht, "BOTTOMRIGHT"); hr:SetPoint("BOTTOMRIGHT", hb, "TOPRIGHT")
-        btn._hlTextures = { ht, hb, hl, hr }
-        local function ShowHL() for _, t in ipairs(btn._hlTextures) do t:Show() end end
-        local function HideHL() for _, t in ipairs(btn._hlTextures) do t:Hide() end end
-        HideHL()
-        btn:SetScript("OnEnter", function() ShowHL() end)
-        btn:SetScript("OnLeave", function() HideHL() end)
+        local brd = EllesmereUI.PP.CreateBorder(btn, c.r, c.g, c.b, 1, 2, "OVERLAY", 7)
+        brd:Hide()
+        btn:SetScript("OnEnter", function() brd:Show() end)
+        btn:SetScript("OnLeave", function() brd:Hide() end)
         btn:SetScript("OnMouseDown", function() EABRNavigateToSetting(mappingKey) end)
         _eabrHitOverlays[#_eabrHitOverlays + 1] = btn
         return btn
@@ -453,13 +445,13 @@ initFrame:SetScript("OnEvent", function(self)
         local tc = d and d.textColor or {r=1, g=1, b=1}
         local opacity = d and d.opacity or 1.0
 
-        -- Container for icons
+        -- Container for icons (centered within hardcoded 80px header)
         local textYOff = d and d.textYOffset or -2
         local textSz = d and d.textSize or 11
         local textOverhang = showText and (math.abs(textYOff) + textSz) or 0
         local container = CreateFrame("Frame", nil, hdr)
         container:SetSize(hdrW, sz + textOverhang)
-        container:SetPoint("TOP", hdr, "TOP", 0, -15)
+        container:SetPoint("CENTER", hdr, "CENTER", 0, 0)
         _previewContainer = container
 
         -- Create icon frames
@@ -511,7 +503,7 @@ initFrame:SetScript("OnEvent", function(self)
                 -- Use per-item key if available, fall back to category
                 local mappingKey = pIcon.data.itemKey and ("item:" .. pIcon.data.itemKey) or (pIcon.data.cat or "display")
                 EABRCreateHitOverlay(pIcon.frame, mappingKey, overlayLevel)
-                -- Hit overlay on text label â†’ scrolls to Show Text setting
+                -- Hit overlay on text label scrolls to Show Text setting
                 if pIcon.frame._text and showText then
                     EABRCreateHitOverlay(pIcon.frame._text, "showText", overlayLevel)
                 end
@@ -523,11 +515,7 @@ initFrame:SetScript("OnEvent", function(self)
             _previewHintFS = nil
         end
         local hintShown = not IsPreviewHintDismissed()
-        local textYOff = d and d.textYOffset or -2
-        local textSize = d and d.textSize or 11
-        local textOverhang = showText and (math.abs(textYOff) + textSize) or 0
-        local CONTAINER_H = sz + textOverhang
-        local TOTAL_H = 15 + CONTAINER_H + 15
+        local TOTAL_H = 80
         _eabrHeaderBaseH = TOTAL_H
 
         if hintShown then
@@ -596,7 +584,7 @@ initFrame:SetScript("OnEvent", function(self)
                 local div = rowFrame:CreateTexture(nil, "ARTWORK")
                 div:SetColorTexture(1, 1, 1, 0.06)
                 if div.SetSnapToPixelGrid then div:SetSnapToPixelGrid(false); div:SetTexelSnappingBias(0) end
-                PP.Width(div, 1)
+                div:SetWidth(1)
                 local xPos = d * colW
                 PP.Point(div, "TOP", rowFrame, "TOPLEFT", xPos, 0)
                 PP.Point(div, "BOTTOM", rowFrame, "BOTTOMLEFT", xPos, 0)
@@ -693,7 +681,7 @@ initFrame:SetScript("OnEvent", function(self)
         local y = yOffset
         local _, h, row
 
-        -- Cell reference table for preview icon â†’ specific toggle navigation
+        -- Cell reference table for preview icon specific toggle navigation
         local _gridCellRefs = {}
 
         -- Set up the preview header
@@ -1183,7 +1171,7 @@ initFrame:SetScript("OnEvent", function(self)
                 local c = CDB()
                 local current = c and c.inkyBlackZones or ""
                 EllesmereUI:ShowInputPopup({
-                    title = "Inky Black Potion â€” Zone IDs",
+                    title = "Inky Black Potion Zone IDs",
                     message = "Enter map zone IDs separated by commas.\nThe potion reminder will only show in these zones.",
                     placeholder = "e.g. 2248, 2339",
                     initialText = current,
@@ -1340,7 +1328,7 @@ initFrame:SetScript("OnEvent", function(self)
         end
 
         -----------------------------------------------------------------------
-        --  SECTION: ADD REMINDER (no header â€” clean layout)
+        --  SECTION: ADD REMINDER (no header clean layout)
         -----------------------------------------------------------------------
 
         -- Helper: build comma-separated zone label from selectedZoneMap
@@ -1739,7 +1727,7 @@ initFrame:SetScript("OnEvent", function(self)
                 bg:SetColorTexture(0, 0, 0, alpha)
                 local div = emptyRow:CreateTexture(nil, "ARTWORK")
                 div:SetColorTexture(1, 1, 1, 0.06)
-                PP.Width(div, 1)
+                div:SetWidth(1)
                 PP.Point(div, "TOP", emptyRow, "TOP", 0, 0)
                 PP.Point(div, "BOTTOM", emptyRow, "BOTTOM", 0, 0)
                 local emptyFS = emptyRow:CreateFontString(nil, "OVERLAY")
@@ -1773,7 +1761,7 @@ initFrame:SetScript("OnEvent", function(self)
                 -- Center divider
                 local div = row:CreateTexture(nil, "ARTWORK")
                 div:SetColorTexture(1, 1, 1, 0.06)
-                PP.Width(div, 1)
+                div:SetWidth(1)
                 PP.Point(div, "TOP", row, "TOP", 0, 0)
                 PP.Point(div, "BOTTOM", row, "BOTTOM", 0, 0)
                 return row
@@ -1787,7 +1775,7 @@ initFrame:SetScript("OnEvent", function(self)
                 local row = MakeListRow(-totalH)
                 local capturedIdx = idx
 
-                -- === LEFT HALF: delete (Ã—) | zone name | talent name + icon ===
+                -- === LEFT HALF: delete (—) | zone name | talent name + icon ===
 
                 -- Delete button (far left)
                 local delBtn = CreateFrame("Button", nil, row)
@@ -2039,7 +2027,7 @@ initFrame:SetScript("OnEvent", function(self)
         onPageCacheRestore = function(pageName)
             if pageName == PAGE_REMINDERS then
                 UpdatePreviewHeader()
-                -- Refresh hint visibility â€” never recreate here, just show/hide
+                -- Refresh hint visibility never recreate here, just show/hide
                 local dismissed = IsPreviewHintDismissed()
                 if _previewHintFS then
                     if dismissed then

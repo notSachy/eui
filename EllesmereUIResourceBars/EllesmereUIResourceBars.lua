@@ -109,6 +109,7 @@ local POWER_COLORS = {
     ["SOUL_FRAGMENTS_DEVOURER"]  = { 0.64, 0.19, 0.79 },
     ["MAELSTROM_WEAPON"] = { 0.00, 0.44, 0.87 },
     ["MAELSTROM_BAR"]    = { 0.00, 0.50, 1.00 },
+    ["INSANITY_BAR"]     = { 0.40, 0.00, 0.80 },
     ["TIP_OF_THE_SPEAR"] = { 0.67, 0.83, 0.45 },
     ["WHIRLWIND_STACKS"] = { 0.78, 0.61, 0.43 },
     ["BREWMASTER_STAGGER"] = { 0.52, 1.00, 0.52 },  -- green (light stagger default)
@@ -151,7 +152,10 @@ local function GetPrimaryPowerType()
         -- All shaman specs use Mana as primary; Maelstrom is a class resource
         -- displayed as a secondary bar (Elemental) or pips (Enhancement).
     end
-    if classFile == "PRIEST" and spec == 3 then return PT.INSANITY end
+    if classFile == "PRIEST" then
+        -- All priest specs use Mana as primary; Insanity is a class resource
+        -- displayed as a secondary bar (Shadow).
+    end
     if classFile == "MONK" then
         if spec == 1 then return PT.ENERGY end  -- Brewmaster
         if spec == 2 then return PT.MANA end    -- Mistweaver
@@ -219,6 +223,12 @@ local function GetSecondaryResource()
         if issecretvalue and issecretvalue(mx) then mx = 100 end
         if not mx or mx <= 0 then mx = 100 end
         return { power = "MAELSTROM_BAR", max = mx, type = "bar" }
+    elseif classFile == "PRIEST" and spec == 3 then
+        -- Shadow: Insanity as a bar (like Elemental maelstrom)
+        local mx = UnitPowerMax("player", PT.INSANITY)
+        if issecretvalue and issecretvalue(mx) then mx = 100 end
+        if not mx or mx <= 0 then mx = 100 end
+        return { power = "INSANITY_BAR", max = mx, type = "bar" }
     elseif classFile == "SHAMAN" and spec == 2 then
         -- Base max 5, or 10 with Raging Maelstrom talent; BuildBars
         -- overrides from GetMaelstromWeapon() at runtime.
@@ -232,9 +242,34 @@ local function GetSecondaryResource()
     return nil
 end
 
-
 -------------------------------------------------------------------------------
---  Defaults � per-element scale, border, colors, text, alerts
+--  ColorCurve helper for secret-value-safe bar threshold coloring
+--  Builds a two-point step curve: base color below threshold, threshold color
+--  at or above. Pass the curve to UnitPowerPercent as the 4th arg � WoW
+--  evaluates the secret value on the C side and returns a Color object.
+-------------------------------------------------------------------------------
+local _barColorCurve = nil
+local _barColorCurveHash = nil
+
+local function GetBarThresholdCurve(baseR, baseG, baseB, threshR, threshG, threshB, threshPct)
+    if not C_CurveUtil or not C_CurveUtil.CreateColorCurve then return nil end
+    local hash = format("%.3f,%.3f,%.3f|%.3f,%.3f,%.3f|%.1f", baseR, baseG, baseB, threshR, threshG, threshB, threshPct)
+    if _barColorCurveHash == hash then return _barColorCurve end
+    local curve = C_CurveUtil.CreateColorCurve()
+    local t = math.max(0, math.min(1, threshPct / 100))
+    local EPSILON = 0.0001
+    curve:AddPoint(0.0, CreateColor(baseR, baseG, baseB, 1))
+    if t > EPSILON then
+        curve:AddPoint(t - EPSILON, CreateColor(baseR, baseG, baseB, 1))
+    end
+    curve:AddPoint(t,   CreateColor(threshR, threshG, threshB, 1))
+    curve:AddPoint(1.0, CreateColor(threshR, threshG, threshB, 1))
+    _barColorCurve = curve
+    _barColorCurveHash = hash
+    return curve
+end
+
+-- per-element scale, border, colors, text, alerts
 -------------------------------------------------------------------------------
 local _, playerClassFile = UnitClass("player")
 local playerCC = CLASS_COLORS[playerClassFile] or { 0.15, 0.75, 0.30 }
@@ -262,6 +297,9 @@ local DEFAULTS = {
             barAlpha    = 1.0,
             visibility  = "always",  -- "always","combat","target"
             orientation = "HORIZONTAL",  -- "HORIZONTAL","VERTICAL_UP","VERTICAL_DOWN"
+            thresholdEnabled = false,
+            thresholdPct     = 30,
+            thresholdR = 1.0, thresholdG = 0.2, thresholdB = 0.2, thresholdA = 1,
         },
         primary = {
             enabled     = true,
@@ -274,15 +312,19 @@ local DEFAULTS = {
             customColored = false,
             fillR       = playerPowerCC[1], fillG = playerPowerCC[2], fillB = playerPowerCC[3], fillA = 1,
             bgR         = 0x11/255, bgG = 0x11/255, bgB = 0x11/255, bgA = 0.75,
-            textFormat  = "perpp",  -- "none","curpp","perpp","both"
+            textFormat  = "perpp",  -- "none","smart","curpp","perpp","both"
+            showPercent = true,
             textSize    = 10,
             textXOffset = 0,
             textYOffset = 0,
             offsetX     = 0,
-            offsetY     = -52,
+            offsetY     = -54,
             barAlpha    = 1.0,
             visibility  = "always",  -- "always","combat","target"
             orientation = "HORIZONTAL",  -- "HORIZONTAL","VERTICAL_UP","VERTICAL_DOWN"
+            thresholdEnabled = false,
+            thresholdPct     = 30,
+            thresholdR = 1.0, thresholdG = 0.2, thresholdB = 0.2, thresholdA = 1,
         },
         secondary = {
             enabled     = true,
@@ -290,6 +332,7 @@ local DEFAULTS = {
             pipWidth    = 214,
             pipHeight   = 20,
             pipSpacing  = 1,
+            pipOrientation = "HORIZONTAL",
             borderSize  = 1,
             borderR     = 0, borderG = 0, borderB = 0, borderA = 1,
             darkTheme   = false,
@@ -306,6 +349,7 @@ local DEFAULTS = {
             thresholdCount   = 3,
             thresholdPartialOnly = false,
             thresholdR = 0x0c/255, thresholdG = 0xd2/255, thresholdB = 0x9d/255, thresholdA = 1,
+            chargedR = 0.44, chargedG = 0.77, chargedB = 1.00, chargedA = 1,
             visibility  = "always",  -- "always","combat","target"
             oocAlpha    = 1.0,
             offsetX     = 0,
@@ -313,20 +357,17 @@ local DEFAULTS = {
         },
         castBar = {
             enabled       = true,
+            showIcon      = true,
             width         = 220,
             height        = 20,
             anchorX       = 0,
-            anchorY       = -50,
+            anchorY       = -54,
             fillR         = playerCC[1], fillG = playerCC[2], fillB = playerCC[3], fillA = 1,
             gradientEnabled = false,
             gradientR     = 0.20, gradientG = 0.20, gradientB = 0.80, gradientA = 1,
             gradientDir   = "HORIZONTAL",  -- "HORIZONTAL","VERTICAL"
             texture       = "none",
             showSpark     = true,
-            showIcon      = true,
-            iconSize      = 20,
-            iconX         = 0,
-            iconY         = 0,
             borderSize    = 1,
             borderR       = 0, borderG = 0, borderB = 0, borderA = 1,
             bgR           = 0, bgG = 0, bgB = 0, bgA = 0.7,
@@ -334,8 +375,11 @@ local DEFAULTS = {
             timerSize     = 11,
             timerX        = 0,
             timerY        = 0,
+            showSpellText = true,
+            spellTextSize = 11,
+            spellTextX    = 0,
+            spellTextY    = 0,
             scale         = 1.0,
-            iconAttach    = true,
             unlockPos     = nil,
         },
         general = {
@@ -418,19 +462,8 @@ local function ApplyBarOrientation(bar, orientation)
 end
 
 -------------------------------------------------------------------------------
---  Pixel-perfect border helper � supports variable thickness via size param
---  Uses PixelUtil for positioning and disables pixel snapping AFTER
---  SetColorTexture (WoW re-enables snapping on color/texture changes).
+--  Bar texture helper
 -------------------------------------------------------------------------------
-local function DisablePixelSnap(obj)
-    local PP = EllesmereUI and EllesmereUI.PP
-    if PP then PP.DisablePixelSnap(obj); return end
-    if obj.SetSnapToPixelGrid then
-        obj:SetSnapToPixelGrid(false)
-        obj:SetTexelSnappingBias(0)
-    end
-end
-
 local function ApplyBarTexture(bar, texKey)
     if not bar then return end
     local texLookup = _G._ERB_BarTextures
@@ -440,10 +473,40 @@ local function ApplyBarTexture(bar, texKey)
     else
         bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
     end
-    local ft = bar:GetStatusBarTexture()
-    if ft then PP.DisablePixelSnap(ft) end
 end
 
+
+-- Compute pixel-snapped pip geometry for a given frame's effective scale.
+-- Returns a table of {x0, x1} pairs (in logical units, snapped to physical
+-- pixels) for each pip index 1..numPips. Spacing between every adjacent pair
+-- is guaranteed to be exactly pipSp physical pixels at any UI scale.
+local function CalcPipGeometry(totalW, numPips, pipSp, frame)
+    local es = frame:GetEffectiveScale()
+    if es <= 0 then es = 1 end
+    -- 1 physical pixel in this frame's coordinate space
+    local onePixel = PP.perfect / es
+
+    -- Snap spacing to nearest whole physical pixel (minimum 1px)
+    local spPx = math.max(1, math.floor(pipSp / onePixel + 0.5))
+
+    -- Total physical pixels for the whole bar
+    local totalPx = math.floor(totalW / onePixel + 0.5)
+    local gapPx   = spPx * (numPips - 1)
+    local pipPx   = totalPx - gapPx
+    local basePx  = math.floor(pipPx / numPips)
+    local extraPx = pipPx - basePx * numPips -- first extraPx pips get +1px
+
+    -- Build per-pip positions in physical pixels, convert to logical units once.
+    local slots = {}
+    local cursor = 0
+    for i = 1, numPips do
+        local w = basePx + (i <= extraPx and 1 or 0)
+        slots[i] = { x0 = cursor * onePixel, x1 = (cursor + w) * onePixel }
+        cursor = cursor + w + spPx
+    end
+
+    return slots, spPx * onePixel, onePixel
+end
 
 local function MakePixelBorder(parent, r, g, b, a, size)
     local alpha = a or 1
@@ -452,50 +515,20 @@ local function MakePixelBorder(parent, r, g, b, a, size)
     bf:SetAllPoints(parent)
     bf:SetFrameLevel(parent:GetFrameLevel() + 1)
 
-    local function MkEdge()
-        local t = bf:CreateTexture(nil, "OVERLAY", nil, 7)
-        t:SetColorTexture(r, g, b, alpha)
-        PP.DisablePixelSnap(t)
-        return t
-    end
-    local eT = MkEdge()
-    PP.Height(eT, sz)
-    PP.Point(eT, "TOPLEFT",  bf, "TOPLEFT",  0, 0)
-    PP.Point(eT, "TOPRIGHT", bf, "TOPRIGHT", 0, 0)
-    local eB = MkEdge()
-    PP.Height(eB, sz)
-    PP.Point(eB, "BOTTOMLEFT",  bf, "BOTTOMLEFT",  0, 0)
-    PP.Point(eB, "BOTTOMRIGHT", bf, "BOTTOMRIGHT", 0, 0)
-    -- Vertical edges inset by size to avoid corner overlap
-    local eL = MkEdge()
-    PP.Width(eL, sz)
-    PP.Point(eL, "TOPLEFT",    eT, "BOTTOMLEFT",  0, 0)
-    PP.Point(eL, "BOTTOMLEFT", eB, "TOPLEFT",     0, 0)
-    local eR = MkEdge()
-    PP.Width(eR, sz)
-    PP.Point(eR, "TOPRIGHT",    eT, "BOTTOMRIGHT",  0, 0)
-    PP.Point(eR, "BOTTOMRIGHT", eB, "TOPRIGHT",     0, 0)
+    -- Use the unified PP border system (raw integer sizes, never scaled)
+    PP.CreateBorder(bf, r, g, b, alpha, sz, "OVERLAY", 7)
 
     return {
         _frame = bf,
-        edges = { eT, eB, eL, eR },
+        edges = bf._ppBorders,
         SetColor = function(self, cr, cg, cb, ca)
-            local na = ca or 1
-            for _, e in ipairs(self.edges) do
-                e:SetColorTexture(cr, cg, cb, na)
-                PP.DisablePixelSnap(e)
-            end
+            PP.SetBorderColor(bf, cr, cg, cb, ca or 1)
         end,
         SetSize = function(self, newSz)
-            PP.Height(eT, newSz)
-            PP.Height(eB, newSz)
-            PP.Width(eL, newSz)
-            PP.Width(eR, newSz)
+            PP.SetBorderSize(bf, newSz)
         end,
         SetShown = function(self, shown)
-            for _, e in ipairs(self.edges) do
-                if shown then e:Show() else e:Hide() end
-            end
+            if shown then PP.ShowBorder(bf) else PP.HideBorder(bf) end
         end,
     }
 end
@@ -588,7 +621,14 @@ local function CreatePip(parent, w, h, idx, borderSize, borderR, borderG, border
         else
             self._fill:SetTexture("Interface\\Buttons\\WHITE8x8")
         end
-        PP.DisablePixelSnap(self._fill)
+        -- Keep recharge bar texture in sync if it exists
+        if self._rechargeBar then
+            if path then
+                self._rechargeBar:SetStatusBarTexture(path)
+            else
+                self._rechargeBar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+            end
+        end
     end
 
     pip._active = false
@@ -598,7 +638,6 @@ local function CreatePip(parent, w, h, idx, borderSize, borderR, borderG, border
         self._active = active
         if active then
             self._fill:SetVertexColor(r, g, b, a or 1)
-            PP.DisablePixelSnap(self._fill)
             self._fill:Show()
         else
             self._fill:Hide()
@@ -844,7 +883,8 @@ local function RegisterUnlockElements()
         getFrame = function() return castBarFrame end,
         getSize = function()
             local cb = ERB.db.profile.castBar
-            return cb.width, cb.height
+            local iconW = (cb.showIcon ~= false) and cb.height or 0
+            return cb.width + iconW, cb.height
         end,
         getScale = function()
             return ERB.db.profile.castBar.scale or 1.0
@@ -868,7 +908,7 @@ local function RegisterUnlockElements()
         clearPosition = function()
             local cb = ERB.db.profile.castBar
             cb.unlockPos = nil
-            cb.anchorX = 0; cb.anchorY = -50
+            cb.anchorX = 0; cb.anchorY = -54
         end,
         applyPosition = function()
             local cb = ERB.db.profile.castBar
@@ -916,7 +956,7 @@ end
 -- anchorPos: "left"/"right"/"top"/"bottom"
 -- frame: the bar frame to position
 -- offsetX, offsetY: additional offsets
--- growthDir: "UP", "DOWN", "LEFT", "RIGHT" � which direction the bar grows from the anchor edge
+-- growthDir: "UP", "DOWN", "LEFT", "RIGHT" -- which direction the bar grows from the anchor edge
 -- growCentered: true = bar centered on anchor edge midpoint; false = bar corner at anchor edge midpoint
 -- Recursively set mouse passthrough on a frame and all its children.
 -- Stores original state on first call so it can be restored.
@@ -961,7 +1001,7 @@ local function ApplyBarAnchor(frame, anchorKey, anchorPos, offsetX, offsetY, gro
     growthDir = growthDir or "UP"
     local centered = (growCentered ~= false)
 
-    -- Determine the frame's own anchor point � always the near edge center.
+    -- Determine the frame's own anchor point -- always the near edge center.
     -- LayoutCDMBar-equivalent offset logic handles non-centered icon positioning.
     --   grow RIGHT -> near edge = LEFT   -> "LEFT"
     --   grow LEFT  -> near edge = RIGHT  -> "RIGHT"
@@ -1057,7 +1097,7 @@ local function ApplyBarAnchor(frame, anchorKey, anchorPos, offsetX, offsetY, gro
 end
 
 -------------------------------------------------------------------------------
---  BuildBars � applies per-element scale, border, colors, text positioning
+--  BuildBars -- applies per-element scale, border, colors, text positioning
 -------------------------------------------------------------------------------
 
 local function BuildBars()
@@ -1096,7 +1136,7 @@ local function BuildBars()
                 hp.borderSize, hp.borderR, hp.borderG, hp.borderB, hp.borderA)
         end
         if hp.unlockPos and hp.unlockPos.point then
-            -- Position fully managed by unlock mode � no animations, just apply directly
+            -- Position fully managed by unlock mode -- no animations, just apply directly
             local rp = hp.unlockPos.relPoint or hp.unlockPos.point
             local ow, oh = OrientedSize(hp.width, hp.height, hpOri)
             healthBar:SetScale(hp.scale)
@@ -1118,10 +1158,10 @@ local function BuildBars()
                 local w = healthBar["_barAnim_w"] or hp.width or 214
                 local h2 = healthBar["_barAnim_h"] or hp.height or 16
                 local ow, oh = OrientedSize(w, h2, hpOri)
-                healthBar:SetScale(s)
-                healthBar:SetSize(ow, oh)
                 healthBar:ClearAllPoints()
                 healthBar:SetPoint("CENTER", mainFrame, "CENTER", ox, oy)
+                healthBar:SetScale(s)
+                healthBar:SetSize(ow, oh)
             end
             SmoothBarAnimate(healthBar, "scale", hp.scale or 1, function() ApplyHealthBarTransform() end)
             SmoothBarAnimate(healthBar, "ox", hp.offsetX or 0, function() ApplyHealthBarTransform() end)
@@ -1172,7 +1212,7 @@ local function BuildBars()
                 pp.borderSize, pp.borderR, pp.borderG, pp.borderB, pp.borderA)
         end
         if pp.unlockPos and pp.unlockPos.point then
-            -- Position fully managed by unlock mode � no animations, just apply directly
+            -- Position fully managed by unlock mode -- no animations, just apply directly
             local rp = pp.unlockPos.relPoint or pp.unlockPos.point
             local ow, oh = OrientedSize(pp.width, pp.height, ppOri)
             primaryBar:SetScale(pp.scale)
@@ -1190,18 +1230,18 @@ local function BuildBars()
             local function ApplyPowerBarTransform()
                 local s = primaryBar["_barAnim_scale"] or pp.scale or 1
                 local ox = primaryBar["_barAnim_ox"] or pp.offsetX or 0
-                local oy = primaryBar["_barAnim_oy"] or pp.offsetY or -52
+                local oy = primaryBar["_barAnim_oy"] or pp.offsetY or -54
                 local w = primaryBar["_barAnim_w"] or pp.width or 214
                 local h2 = primaryBar["_barAnim_h"] or pp.height or 4
                 local ow, oh = OrientedSize(w, h2, ppOri)
-                primaryBar:SetScale(s)
-                primaryBar:SetSize(ow, oh)
                 primaryBar:ClearAllPoints()
                 primaryBar:SetPoint("CENTER", mainFrame, "CENTER", ox, oy)
+                primaryBar:SetScale(s)
+                primaryBar:SetSize(ow, oh)
             end
             SmoothBarAnimate(primaryBar, "scale", pp.scale or 1, function() ApplyPowerBarTransform() end)
             SmoothBarAnimate(primaryBar, "ox", pp.offsetX or 0, function() ApplyPowerBarTransform() end)
-            SmoothBarAnimate(primaryBar, "oy", pp.offsetY or -52, function() ApplyPowerBarTransform() end)
+            SmoothBarAnimate(primaryBar, "oy", pp.offsetY or -54, function() ApplyPowerBarTransform() end)
             SmoothBarAnimate(primaryBar, "w", pp.width or 214, function() ApplyPowerBarTransform() end)
             SmoothBarAnimate(primaryBar, "h", pp.height or 4, function() ApplyPowerBarTransform() end)
         end
@@ -1245,6 +1285,7 @@ local function BuildBars()
     if sp.enabled ~= false and cachedSecondary then
         if not secondaryFrame then
             secondaryFrame = CreateFrame("Frame", "ERB_SecondaryFrame", mainFrame)
+            secondaryFrame:SetClipsChildren(true)
         end
 
         local maxPts = cachedSecondary.max or 5
@@ -1266,48 +1307,49 @@ local function BuildBars()
         end
         local pipH = sp.pipHeight or 20
         local pipSp = sp.pipSpacing or 1
+        local pipOri = sp.pipOrientation or "HORIZONTAL"
+        local isVertical = (pipOri ~= "HORIZONTAL")
+        local isReversed = (pipOri == "VERTICAL_UP")
         local totalW
 
         local isBarType = cachedSecondary.type == "bar"
         if isBarType then
-            -- Bar-style secondary uses primary bar's width for consistency
             totalW = ERB.db.profile.primary.width or 214
         else
-            -- pipWidth is the total bar width; divide evenly across pips.
-            -- Any remainder pixels are distributed one-per-pip from the left
-            -- so spacing is always exactly pipSp and never varies.
             totalW = sp.pipWidth or 214
         end
 
+        -- Frame dimensions: vertical flips width/height axes
+        local frameW = isVertical and pipH or totalW
+        local frameH = isVertical and totalW or pipH
+
         if sp.unlockPos and sp.unlockPos.point then
-            -- Position fully managed by unlock mode
             secondaryFrame:SetScale(sp.scale or 1)
-            secondaryFrame:SetSize(totalW, pipH)
+            secondaryFrame:SetSize(frameW, frameH)
             secondaryFrame:ClearAllPoints()
             secondaryFrame:SetPoint(sp.unlockPos.point, UIParent, sp.unlockPos.relPoint or sp.unlockPos.point, sp.unlockPos.x or 0, sp.unlockPos.y or 0)
         elseif sp.anchorTo and sp.anchorTo ~= "none" then
             secondaryFrame:SetScale(sp.scale or 1)
-            secondaryFrame:SetSize(totalW, pipH)
+            secondaryFrame:SetSize(frameW, frameH)
             ApplyBarAnchor(secondaryFrame, sp.anchorTo, sp.anchorPosition, sp.anchorOffsetX, sp.anchorOffsetY, sp.growthDirection, sp.growCentered)
         else
-            -- Clear any mouse-tracking OnUpdate from a previous anchor
             ApplyBarAnchor(secondaryFrame, "none")
             local function ApplySecondaryBarTransform()
-                local s = secondaryFrame["_barAnim_scale"] or sp.scale or 1
+                local s  = secondaryFrame["_barAnim_scale"] or sp.scale or 1
                 local ox = secondaryFrame["_barAnim_ox"] or sp.offsetX or 0
                 local oy = secondaryFrame["_barAnim_oy"] or sp.offsetY or -38
-                local w = secondaryFrame["_barAnim_w"] or totalW
-                local h2 = secondaryFrame["_barAnim_h"] or pipH
-                secondaryFrame:SetScale(s)
-                secondaryFrame:SetSize(w, h2)
+                local w  = secondaryFrame["_barAnim_w"] or frameW
+                local h2 = secondaryFrame["_barAnim_h"] or frameH
                 secondaryFrame:ClearAllPoints()
                 secondaryFrame:SetPoint("CENTER", mainFrame, "CENTER", ox, oy)
+                secondaryFrame:SetScale(s)
+                secondaryFrame:SetSize(w, h2)
             end
             SmoothBarAnimate(secondaryFrame, "scale", sp.scale or 1, function() ApplySecondaryBarTransform() end)
             SmoothBarAnimate(secondaryFrame, "ox", sp.offsetX or 0, function() ApplySecondaryBarTransform() end)
             SmoothBarAnimate(secondaryFrame, "oy", sp.offsetY or -38, function() ApplySecondaryBarTransform() end)
-            SmoothBarAnimate(secondaryFrame, "w", totalW, function() ApplySecondaryBarTransform() end)
-            SmoothBarAnimate(secondaryFrame, "h", pipH, function() ApplySecondaryBarTransform() end)
+            SmoothBarAnimate(secondaryFrame, "w", frameW, function() ApplySecondaryBarTransform() end)
+            SmoothBarAnimate(secondaryFrame, "h", frameH, function() ApplySecondaryBarTransform() end)
         end
 
         -- Create/reuse pips or bar
@@ -1338,7 +1380,7 @@ local function BuildBars()
                 secondaryBar:GetStatusBarTexture():SetVertexColor(DARK_FILL_R, DARK_FILL_G, DARK_FILL_B, DARK_FILL_A)
                 secondaryBar._bg:SetColorTexture(DARK_BG_R, DARK_BG_G, DARK_BG_B, DARK_BG_A)
             elseif sp.classColored ~= false then
-                -- classColored is true (default) � use class color, or power color if no class color
+                -- classColored is true (default) -- use class color, or power color if no class color
                 local cc = CLASS_COLORS[cachedClass]
                 if cc then
                     secondaryBar:GetStatusBarTexture():SetVertexColor(cc[1], cc[2], cc[3], sp.fillA or 1)
@@ -1347,13 +1389,15 @@ local function BuildBars()
                 end
                 secondaryBar._bg:SetColorTexture(sp.bgR, sp.bgG, sp.bgB, sp.bgA)
             else
-                -- classColored explicitly false � use custom fill color
+                -- classColored explicitly false -- use custom fill color
                 secondaryBar:GetStatusBarTexture():SetVertexColor(sp.fillR, sp.fillG, sp.fillB, sp.fillA)
                 secondaryBar._bg:SetColorTexture(sp.bgR, sp.bgG, sp.bgB, sp.bgA)
             end
             secondaryBar:ApplyBorder(0, 0, 0, 0, 0)
             secondaryBar:Show()
         elseif cachedSecondary.type == "runes" then
+            local numPips = 6
+            local slots = CalcPipGeometry(totalW, numPips, pipSp, secondaryFrame)
             for i = 1, 6 do
                 if not runeFrames[i] then
                     runeFrames[i] = CreatePip(secondaryFrame, 20, pipH, i,
@@ -1364,29 +1408,30 @@ local function BuildBars()
                     cdText:SetPoint("CENTER")
                     runeFrames[i]._cdText = cdText
                 end
-                -- Distribute total width evenly: base pip width + 1 extra pixel for
-                -- the first (remainder) pips so spacing is always exactly pipSp.
-                local numPips = 6
-                local baseW = math.floor((totalW - (numPips - 1) * pipSp) / numPips)
-                local remainder = totalW - (numPips - 1) * pipSp - baseW * numPips
-                local x0 = 0
-                for j = 1, i - 1 do
-                    local w = baseW + (j <= remainder and 1 or 0)
-                    x0 = x0 + w + pipSp
-                end
-                local x1 = x0 + baseW + (i <= remainder and 1 or 0)
+                local x0 = slots[i].x0
+                local x1 = slots[i].x1
                 local rf = runeFrames[i]
                 local function ApplyRunePos()
-                    local ax0 = rf["_barAnim_x0"] or x0
-                    local ax1 = rf["_barAnim_x1"] or x1
+                    local ap0 = rf["_barAnim_x0"] or x0
+                    local aw  = rf["_barAnim_x1"] or (x1 - x0)
                     local ah  = rf["_barAnim_ph"] or pipH
                     rf:ClearAllPoints()
-                    rf:SetPoint("LEFT", secondaryFrame, "LEFT", ax0, 0)
-                    rf:SetPoint("RIGHT", secondaryFrame, "LEFT", ax1, 0)
-                    rf:SetHeight(ah)
+                    if isVertical then
+                        if isReversed then
+                            rf:SetPoint("BOTTOM", secondaryFrame, "BOTTOM", 0, ap0)
+                        else
+                            rf:SetPoint("TOP", secondaryFrame, "TOP", 0, -ap0)
+                        end
+                        rf:SetHeight(aw)
+                        rf:SetWidth(ah)
+                    else
+                        rf:SetPoint("LEFT", secondaryFrame, "LEFT", ap0, 0)
+                        rf:SetWidth(aw)
+                        rf:SetHeight(ah)
+                    end
                 end
                 SmoothBarAnimate(rf, "x0", x0, function() ApplyRunePos() end)
-                SmoothBarAnimate(rf, "x1", x1, function() ApplyRunePos() end)
+                SmoothBarAnimate(rf, "x1", x1 - x0, function() ApplyRunePos() end)
                 SmoothBarAnimate(rf, "ph", pipH, function() ApplyRunePos() end)
                 runeFrames[i]:ApplyBorder(0, 0, 0, 0, 0)
                 runeFrames[i]:ApplyTexture(g.barTexture or "none")
@@ -1402,33 +1447,36 @@ local function BuildBars()
             for i = 7, #pips do if pips[i] then pips[i]:Hide() end end
             if secondaryBar then secondaryBar:Hide() end
         else
+            local slots = CalcPipGeometry(totalW, maxPts, pipSp, secondaryFrame)
             for i = 1, maxPts do
                 if not pips[i] then
                     pips[i] = CreatePip(secondaryFrame, 20, pipH, i,
                         0, 0, 0, 0, 0)
                 end
-                -- Distribute total width evenly: base pip width + 1 extra pixel for
-                -- the first (remainder) pips so spacing is always exactly pipSp.
-                local baseW = math.floor((totalW - (maxPts - 1) * pipSp) / maxPts)
-                local remainder = totalW - (maxPts - 1) * pipSp - baseW * maxPts
-                local x0 = 0
-                for j = 1, i - 1 do
-                    local w = baseW + (j <= remainder and 1 or 0)
-                    x0 = x0 + w + pipSp
-                end
-                local x1 = x0 + baseW + (i <= remainder and 1 or 0)
+                local x0 = slots[i].x0
+                local x1 = slots[i].x1
                 local pip = pips[i]
                 local function ApplyPipPos()
-                    local ax0 = pip["_barAnim_x0"] or x0
-                    local ax1 = pip["_barAnim_x1"] or x1
+                    local ap0 = pip["_barAnim_x0"] or x0
+                    local aw  = pip["_barAnim_x1"] or (x1 - x0)
                     local ah  = pip["_barAnim_ph"] or pipH
                     pip:ClearAllPoints()
-                    pip:SetPoint("LEFT", secondaryFrame, "LEFT", ax0, 0)
-                    pip:SetPoint("RIGHT", secondaryFrame, "LEFT", ax1, 0)
-                    pip:SetHeight(ah)
+                    if isVertical then
+                        if isReversed then
+                            pip:SetPoint("BOTTOM", secondaryFrame, "BOTTOM", 0, ap0)
+                        else
+                            pip:SetPoint("TOP", secondaryFrame, "TOP", 0, -ap0)
+                        end
+                        pip:SetHeight(aw)
+                        pip:SetWidth(ah)
+                    else
+                        pip:SetPoint("LEFT", secondaryFrame, "LEFT", ap0, 0)
+                        pip:SetWidth(aw)
+                        pip:SetHeight(ah)
+                    end
                 end
                 SmoothBarAnimate(pip, "x0", x0, function() ApplyPipPos() end)
-                SmoothBarAnimate(pip, "x1", x1, function() ApplyPipPos() end)
+                SmoothBarAnimate(pip, "x1", x1 - x0, function() ApplyPipPos() end)
                 SmoothBarAnimate(pip, "ph", pipH, function() ApplyPipPos() end)
                 pips[i]:ApplyBorder(0, 0, 0, 0, 0)
                 pips[i]:ApplyTexture(g.barTexture or "none")
@@ -1466,7 +1514,6 @@ local function BuildBars()
         secondaryFrame._barBg:ClearAllPoints()
         secondaryFrame._barBg:SetAllPoints(secondaryFrame)
         secondaryFrame._barBg:SetColorTexture(sp.barBgR or 0, sp.barBgG or 0, sp.barBgB or 0, sp.barBgA or 0.5)
-        PP.DisablePixelSnap(secondaryFrame._barBg)
 
         -- Count text
         if sp.showText then
@@ -1510,28 +1557,39 @@ local function UpdateHealthBar()
 
     local cur = UnitHealth("player")
     local mx = UnitHealthMax("player")
-    if not mx or mx <= 0 then return end
+    if not cur or not mx or mx <= 0 then return end
 
     healthBar:SetMinMaxValues(0, mx)
 
-    local pctRaw = UnitHealthPercent and UnitHealthPercent("player", true, CurveConstants and CurveConstants.ScaleTo100) or 0
-    local pctTainted = issecretvalue and issecretvalue(pctRaw)
-    local pct01 = (not pctTainted) and (pctRaw / 100) or 1
+    local curTainted = issecretvalue and issecretvalue(cur)
+    local pctRaw = (not curTainted) and (cur / mx * 100) or 0
+    local pct01  = (not curTainted) and (cur / mx) or 1
 
     -- Color: dark theme and custom colored are handled in BuildBars,
-    -- but we need to re-apply class color + low health lerp dynamically
-    if not hp.darkTheme and not hp.customColored then
-        local r, g, b
-        local cc = CLASS_COLORS[cachedClass]
-        if cc then r, g, b = cc[1], cc[2], cc[3] else r, g, b = 0.15, 0.75, 0.30 end
-
-        -- Low health warning removed � color stays class color
-        healthBar:GetStatusBarTexture():SetVertexColor(r, g, b, 1)
+    -- but we need to re-apply class color + low health lerp dynamically.
+    -- When threshold is enabled, always re-apply color so we can swap
+    -- between normal and threshold colors each tick.
+    local applyThreshold = hp.thresholdEnabled and not curTainted and pctRaw <= (hp.thresholdPct or 30)
+    if applyThreshold then
+        healthBar:GetStatusBarTexture():SetVertexColor(
+            hp.thresholdR or 1, hp.thresholdG or 0.2, hp.thresholdB or 0.2, hp.thresholdA or 1)
+    elseif hp.thresholdEnabled or (not hp.darkTheme and not hp.customColored) then
+        -- Re-apply normal color (needed every tick when threshold is enabled
+        -- so the bar reverts when health rises above the threshold)
+        if hp.darkTheme then
+            healthBar:GetStatusBarTexture():SetVertexColor(DARK_FILL_R, DARK_FILL_G, DARK_FILL_B, DARK_FILL_A)
+        elseif hp.customColored then
+            healthBar:GetStatusBarTexture():SetVertexColor(hp.fillR, hp.fillG, hp.fillB, hp.fillA)
+        else
+            local r, g, b
+            local cc = CLASS_COLORS[cachedClass]
+            if cc then r, g, b = cc[1], cc[2], cc[3] else r, g, b = 0.15, 0.75, 0.30 end
+            healthBar:GetStatusBarTexture():SetVertexColor(r, g, b, 1)
+        end
     end
 
     -- Smooth animation
-    local tainted = issecretvalue and issecretvalue(cur)
-    if not tainted then
+    if not curTainted then
         healthBar._smoothTarget = cur
     else
         healthBar:SetValue(cur)
@@ -1547,6 +1605,10 @@ local function UpdateHealthBar()
             txt = AbbreviateLargeNumbers(cur)
         elseif fmt == "perhp" then
             txt = format("%d", pctRaw) .. "%"
+        elseif fmt == "perhpnosign" then
+            txt = format("%d", pctRaw)
+        elseif fmt == "perhpnum" then
+            txt = format("%d", pctRaw) .. "% | " .. AbbreviateLargeNumbers(cur)
         else
             txt = format("%d", pctRaw) .. "%"
         end
@@ -1572,13 +1634,34 @@ local function UpdatePrimaryBar()
     local pctTainted = issecretvalue and issecretvalue(pctRaw)
     local pct01 = (not pctTainted) and (pctRaw / 100) or 1
 
-    -- Color: dark theme and custom colored handled in BuildBars,
-    -- re-apply power type color dynamically for default mode
-    if not pp.darkTheme and not pp.customColored then
+    -- Color: threshold via ColorCurve (secret-safe) for non-mana specs;
+    -- otherwise dark/custom/power-type color applied directly.
+    local ft = primaryBar:GetStatusBarTexture()
+    if pp.thresholdEnabled and cachedPrimary ~= PT.MANA and ft and UnitPowerPercent then
+        local baseR, baseG, baseB
+        if pp.darkTheme then
+            baseR, baseG, baseB = DARK_FILL_R, DARK_FILL_G, DARK_FILL_B
+        elseif pp.customColored then
+            baseR, baseG, baseB = pp.fillR, pp.fillG, pp.fillB
+        else
+            local pc = POWER_COLORS[cachedPrimary]
+            if pc then baseR, baseG, baseB = pc[1], pc[2], pc[3] else baseR, baseG, baseB = 1, 1, 1 end
+        end
+        local curve = GetBarThresholdCurve(
+            baseR, baseG, baseB,
+            pp.thresholdR or 1, pp.thresholdG or 0.2, pp.thresholdB or 0.2,
+            pp.thresholdPct or 30)
+        if curve then
+            local ok, colorResult = pcall(UnitPowerPercent, "player", cachedPrimary, false, curve)
+            if ok and colorResult and colorResult.GetRGBA then
+                ft:SetVertexColor(colorResult:GetRGBA())
+            end
+        end
+    elseif not pp.darkTheme and not pp.customColored then
         local r, g, b
         local pc = POWER_COLORS[cachedPrimary]
         if pc then r, g, b = pc[1], pc[2], pc[3] else r, g, b = 1, 1, 1 end
-        primaryBar:GetStatusBarTexture():SetVertexColor(r, g, b, 1)
+        ft:SetVertexColor(r, g, b, 1)
     end
 
     -- Smooth animation
@@ -1592,13 +1675,18 @@ local function UpdatePrimaryBar()
     -- Text
     if pp.textFormat ~= "none" then
         local fmt = pp.textFormat
+        local percentSuffix = (pp.showPercent == false) and "" or "%"
+        local percentText = format("%d", pctRaw) .. percentSuffix
         local txt
-        if fmt == "both" then
-            txt = AbbreviateLargeNumbers(cur) .. " | " .. format("%d", pctRaw) .. "%"
+        if fmt == "smart" then
+            local isPercent = EllesmereUI.IsSmartPowerPercent and EllesmereUI.IsSmartPowerPercent()
+            txt = isPercent and percentText or AbbreviateLargeNumbers(cur)
+        elseif fmt == "both" then
+            txt = AbbreviateLargeNumbers(cur) .. " | " .. percentText
         elseif fmt == "curpp" then
             txt = AbbreviateLargeNumbers(cur)
         elseif fmt == "perpp" then
-            txt = format("%d", pctRaw) .. "%"
+            txt = percentText
         else
             txt = AbbreviateLargeNumbers(cur)
         end
@@ -1609,6 +1697,13 @@ local function UpdatePrimaryBar()
     end
 end
 
+-- Pre-allocated rune sorting buffers to avoid per-tick table creation.
+-- Uses parallel arrays instead of tables-of-tables for zero GC pressure.
+local _runeOrder = {}       -- [slot] = rune index (1-6)
+local _runeRemaining = {}   -- [rune index] = remaining time
+local _runeStart = {}       -- [rune index] = cooldown start
+local _runeDuration = {}    -- [rune index] = cooldown duration
+local _runeReady = {}       -- [rune index] = true/false
 
 local function UpdateSecondaryResource()
     if not secondaryFrame or not secondaryFrame:IsShown() then return end
@@ -1616,6 +1711,7 @@ local function UpdateSecondaryResource()
 
     local powerType = cachedSecondary.power
     local maxPts = cachedSecondary.max or 5
+
     local sp = ERB.db.profile.secondary
     local pc = POWER_COLORS[powerType]
     local r, g, b, a = 1, 1, 1, 1
@@ -1624,29 +1720,128 @@ local function UpdateSecondaryResource()
     if sp.darkTheme then
         r, g, b = DARK_FILL_R, DARK_FILL_G, DARK_FILL_B
     elseif sp.classColored ~= false then
-        -- classColored is true (default) � use class color
+        -- classColored is true (default) -- use class color
         local cc = CLASS_COLORS[cachedClass]
         if cc then r, g, b = cc[1], cc[2], cc[3] end
         a = sp.fillA or 1
     else
-        -- classColored explicitly false � custom fill
+        -- classColored explicitly false -- custom fill
         r, g, b, a = sp.fillR, sp.fillG, sp.fillB, sp.fillA or 1
     end
 
     if cachedSecondary.type == "runes" then
+        -- Sort runes: ready first (left), then cooling down sorted by
+        -- ascending remaining time so they deplete right-to-left.
+        -- Uses pre-allocated parallel arrays to avoid per-tick table creation.
+        local now = GetTime()
+        local readyN, cdN = 0, 0
         for i = 1, 6 do
-            local rf = runeFrames[i]
+            local start, duration, ready = GetRuneCooldown(i)
+            _runeStart[i] = start
+            _runeDuration[i] = duration
+            if ready then
+                _runeReady[i] = true
+                _runeRemaining[i] = 0
+                readyN = readyN + 1
+                _runeOrder[readyN] = i
+            else
+                _runeReady[i] = false
+                _runeRemaining[i] = (start and duration and duration > 0)
+                    and max(0, start + duration - now) or 999
+                cdN = cdN + 1
+            end
+        end
+        -- Append cd runes after ready runes in _runeOrder
+        local ci = readyN
+        for i = 1, 6 do
+            if not _runeReady[i] then
+                ci = ci + 1
+                _runeOrder[ci] = i
+            end
+        end
+        -- Insertion-sort the cd portion (indices readyN+1..readyN+cdN) by
+        -- remaining time. Max 6 elements so this is faster than table.sort
+        -- and avoids creating a comparator closure each tick.
+        for i = readyN + 2, readyN + cdN do
+            local key = _runeOrder[i]
+            local keyRem = _runeRemaining[key]
+            local j = i - 1
+            while j > readyN and _runeRemaining[_runeOrder[j]] > keyRem do
+                _runeOrder[j + 1] = _runeOrder[j]
+                j = j - 1
+            end
+            _runeOrder[j + 1] = key
+        end
+        local totalRunes = readyN + cdN
+
+        -- Compute pixel-snapped pip geometry (spacing guaranteed >= 1 physical pixel)
+        local numPips = 6
+        local totalW = sp.pipWidth or 214
+        local pipSp = sp.pipSpacing or 1
+        local slots = CalcPipGeometry(totalW, numPips, pipSp, secondaryFrame)
+
+        for pos = 1, totalRunes do
+            local runeIdx = _runeOrder[pos]
+            local rf = runeFrames[runeIdx]
             if rf and rf:IsShown() then
-                local start, duration, ready = GetRuneCooldown(i)
-                if ready then
+                local slot = slots[pos]
+                local x0 = slot.x0
+                local w  = slot.x1 - slot.x0
+                local pipOri = sp.pipOrientation or "HORIZONTAL"
+                rf:ClearAllPoints()
+                if pipOri == "VERTICAL_UP" then
+                    rf:SetPoint("BOTTOM", secondaryFrame, "BOTTOM", 0, x0)
+                    rf:SetHeight(w)
+                elseif pipOri == "VERTICAL_DOWN" or pipOri == "VERTICAL" then
+                    rf:SetPoint("TOP", secondaryFrame, "TOP", 0, -x0)
+                    rf:SetHeight(w)
+                else
+                    rf:SetPoint("LEFT", secondaryFrame, "LEFT", x0, 0)
+                    rf:SetWidth(w)
+                end
+
+                if _runeReady[runeIdx] then
+                    -- Ready rune: full brightness, hide recharge overlay
                     rf:SetActive(true, r, g, b, a)
+                    if rf._rechargeBar then rf._rechargeBar:Hide() end
                     if rf._cdText then rf._cdText:SetText("") end
                 else
+                    -- Cooling-down rune: hide normal fill, show recharge bar
                     rf:SetActive(false, r, g, b, a)
-                    if rf._cdText and start and duration and duration > 0 then
-                        local remaining = start + duration - GetTime()
-                        if remaining > 0 then
-                            rf._cdText:SetText(format("%.1f", remaining))
+
+                    -- Lazily create a StatusBar overlay for recharge progress
+                    if not rf._rechargeBar then
+                        local sb = CreateFrame("StatusBar", nil, rf)
+                        sb:SetAllPoints(rf)
+                        sb:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+                        sb:SetFrameLevel(rf:GetFrameLevel())
+                        sb:SetMinMaxValues(0, 1)
+                        -- Apply the same bar texture if one is set
+                        if rf._texKey then
+                            local texLookup = _G._ERB_BarTextures
+                            local path = texLookup and texLookup[rf._texKey]
+                            if path then sb:SetStatusBarTexture(path) end
+                        end
+                        rf._rechargeBar = sb
+                    end
+
+                    -- Compute recharge fraction (0 = just started, 1 = almost ready)
+                    local frac = 0
+                    local rStart, rDur = _runeStart[runeIdx], _runeDuration[runeIdx]
+                    if rStart and rDur and rDur > 0 then
+                        local elapsed = now - rStart
+                        frac = max(0, min(1, elapsed / rDur))
+                    end
+                    rf._rechargeBar:SetValue(frac)
+                    -- 75% brightness while recharging (subtle dim)
+                    rf._rechargeBar:SetStatusBarColor(r * 0.75, g * 0.75, b * 0.75, a)
+                    rf._rechargeBar:Show()
+
+                    -- Show duration text if Resource Text is enabled (DK runes use it for cooldown)
+                    if rf._cdText then
+                        local rem = _runeRemaining[runeIdx]
+                        if sp.showText and rem > 0 and rem < 999 then
+                            rf._cdText:SetText(format("%d", ceil(rem)))
                         else
                             rf._cdText:SetText("")
                         end
@@ -1664,6 +1859,11 @@ local function UpdateSecondaryResource()
             elseif powerType == "MAELSTROM_BAR" then
                 cur = UnitPower("player", PT.MAELSTROM) or 0
                 maxC = UnitPowerMax("player", PT.MAELSTROM) or maxPts
+                if issecretvalue and issecretvalue(maxC) then maxC = maxPts end
+                if maxC <= 0 then maxC = maxPts end
+            elseif powerType == "INSANITY_BAR" then
+                cur = UnitPower("player", PT.INSANITY) or 0
+                maxC = UnitPowerMax("player", PT.INSANITY) or maxPts
                 if issecretvalue and issecretvalue(maxC) then maxC = maxPts end
                 if maxC <= 0 then maxC = maxPts end
             elseif powerType == "BREWMASTER_STAGGER" then
@@ -1691,9 +1891,35 @@ local function UpdateSecondaryResource()
             -- Apply fill color (dark theme / class colored / custom).
             -- Brewmaster stagger uses threshold colors when neither override
             -- is active; all other cases use r,g,b,a from above.
+            -- For bar-type resources (Maelstrom, Insanity), threshold triggers
+            -- at or above thresholdCount treated as a percent value.
             if powerType ~= "BREWMASTER_STAGGER" or sp.darkTheme or sp.classColored then
                 local ft = secondaryBar:GetStatusBarTexture()
-                if ft then ft:SetVertexColor(r, g, b, a) end
+                if ft then
+                    local pType = (powerType == "MAELSTROM_BAR") and PT.MAELSTROM
+                               or (powerType == "INSANITY_BAR") and PT.INSANITY
+                               or nil
+                    if sp.thresholdEnabled and pType and UnitPowerPercent then
+                        -- Use ColorCurve + UnitPowerPercent: WoW evaluates the secret
+                        -- value against the curve on the C side, returns a Color object.
+                        local curve = GetBarThresholdCurve(
+                            r, g, b,
+                            sp.thresholdR or 1, sp.thresholdG or 0.2, sp.thresholdB or 0.2,
+                            sp.thresholdCount or 30)
+                        if curve then
+                            local ok, colorResult = pcall(UnitPowerPercent, "player", pType, false, curve)
+                            if ok and colorResult and colorResult.GetRGBA then
+                                ft:SetVertexColor(colorResult:GetRGBA())
+                            else
+                                ft:SetVertexColor(r, g, b, a)
+                            end
+                        else
+                            ft:SetVertexColor(r, g, b, a)
+                        end
+                    else
+                        ft:SetVertexColor(r, g, b, a)
+                    end
+                end
             end
             -- Secret-aware update: pass secret values directly to the
             -- StatusBar (the C widget handles them natively).  Only use
@@ -1718,6 +1944,13 @@ local function UpdateSecondaryResource()
                     -- Secret value path: try UnitPowerPercent first, fall back to tostring
                     if powerType == "MAELSTROM_BAR" then
                         local pct = UnitPowerPercent and UnitPowerPercent("player", PT.MAELSTROM) or 0
+                        if not issecretvalue(pct) then
+                            secondaryFrame._countText:SetText(format("%d", pct) .. "%")
+                        else
+                            secondaryFrame._countText:SetText(tostring(cur))
+                        end
+                    elseif powerType == "INSANITY_BAR" then
+                        local pct = UnitPowerPercent and UnitPowerPercent("player", PT.INSANITY) or 0
                         if not issecretvalue(pct) then
                             secondaryFrame._countText:SetText(format("%d", pct) .. "%")
                         else
@@ -1776,7 +2009,7 @@ local function UpdateSecondaryResource()
                         sb:SetAllPoints(pip._fill)
                         sb:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
                         sb:SetStatusBarColor(r, g, b, a)
-                        sb:SetFrameLevel(pip:GetFrameLevel() + 1)
+                        sb:SetFrameLevel(pip:GetFrameLevel())
                         pip._secretBar = sb
                     end
                     pip._secretBar:SetMinMaxValues(i - 1, i)
@@ -1787,7 +2020,7 @@ local function UpdateSecondaryResource()
                     pip._fill:Hide()
                 end
             end
-            -- Count text � tostring handles secret values safely
+            -- Count text -- tostring handles secret values safely
             if sp.showText and secondaryFrame._countText then
                 secondaryFrame._countText:SetText(tostring(cur))
             end
@@ -1822,10 +2055,31 @@ local function UpdateSecondaryResource()
         local cur = UnitPower("player", powerType)
         local useThresh = sp.thresholdEnabled and cur >= sp.thresholdCount
         local tr, tg, tb = sp.thresholdR, sp.thresholdG, sp.thresholdB
+
+        -- Charged combo points (e.g. Supercharger talent)
+        local chargedSet
+        if powerType == PT.COMBO then
+            local fn = GetUnitChargedPowerPoints
+            if fn then
+                local pts = fn("player")
+                if pts and #pts > 0 then
+                    chargedSet = {}
+                    for _, idx in ipairs(pts) do chargedSet[idx] = true end
+                end
+            end
+        end
+        local cr, cg, cb, ca = sp.chargedR or 0.44, sp.chargedG or 0.77, sp.chargedB or 1.00, sp.chargedA or 1
+
         for i = 1, maxPts do
             if pips[i] and pips[i]:IsShown() then
                 local active = i <= cur
-                if active and useThresh then
+                if chargedSet and chargedSet[i] then
+                    if active then
+                        pips[i]:SetActive(true, cr, cg, cb, ca)
+                    else
+                        pips[i]:SetActive(true, cr * 0.5, cg * 0.5, cb * 0.5, ca)
+                    end
+                elseif active and useThresh then
                     if sp.thresholdPartialOnly and i < sp.thresholdCount then
                         pips[i]:SetActive(true, r, g, b, a)
                     else
@@ -1870,10 +2124,12 @@ local function UpdateVisibility()
     mainFrame:Show()
     mainFrame:SetAlpha(1)
 
+    local inVehicle = ERB._inVehicle
+
     -- Health bar visibility
     if healthBar then
         local hp = ERB.db.profile.health
-        if hp and hp.enabled and ShouldShowBar(hp) then
+        if hp and hp.enabled and ShouldShowBar(hp) and not inVehicle then
             healthBar:Show()
             healthBar:SetAlpha(hp.barAlpha or 1)
         else
@@ -1884,7 +2140,7 @@ local function UpdateVisibility()
     -- Power bar visibility
     if primaryBar then
         local pp = ERB.db.profile.primary
-        if pp and pp.enabled ~= false and ShouldShowBar(pp) then
+        if pp and pp.enabled ~= false and ShouldShowBar(pp) and not inVehicle then
             primaryBar:Show()
             primaryBar:SetAlpha(pp.barAlpha or 1)
         else
@@ -1895,7 +2151,7 @@ local function UpdateVisibility()
     -- Secondary resource visibility + ooc alpha
     if secondaryFrame then
         local sp = ERB.db.profile.secondary
-        if sp and sp.enabled ~= false and cachedSecondary and ShouldShowSecondary() then
+        if sp and sp.enabled ~= false and cachedSecondary and ShouldShowSecondary() and not inVehicle then
             secondaryFrame:Show()
             local base = sp.barAlpha or 1
             local ooc = isInCombat and 1 or (sp.oocAlpha or 1)
@@ -1958,26 +2214,13 @@ local function OnUpdate(self, dt)
         end
     end
 
-    -- DK rune cooldown text updates (throttled to ~10 fps)
+    -- DK rune updates (throttled to ~10 fps) � calls the full sorted
+    -- update so rune positions stay consistent with depletion order.
     if cachedSecondary and cachedSecondary.type == "runes" then
         _runeThrottle = _runeThrottle + dt
         if _runeThrottle >= 0.1 then
             _runeThrottle = 0
-            for i = 1, 6 do
-                local rf = runeFrames[i]
-                if rf and rf:IsShown() then
-                    local start, duration, ready = GetRuneCooldown(i)
-                    if not ready and start and duration and duration > 0 then
-                        local remaining = start + duration - GetTime()
-                        if remaining > 0 then
-                            rf._cdText:SetText(format("%.1f", remaining))
-                        else
-                            rf._cdText:SetText("")
-                            rf:SetActive(true, POWER_COLORS[PT.RUNES][1], POWER_COLORS[PT.RUNES][2], POWER_COLORS[PT.RUNES][3])
-                        end
-                    end
-                end
-            end
+            UpdateSecondaryResource()
         end
     end
 
@@ -2083,6 +2326,48 @@ local BAR_TEXTURE_NAMES = {
 _G._ERB_BarTextures     = BAR_TEXTURES
 _G._ERB_BarTextureOrder = BAR_TEXTURE_ORDER
 _G._ERB_BarTextureNames = BAR_TEXTURE_NAMES
+
+-------------------------------------------------------------------------------
+--  Append SharedMedia statusbar textures to both texture tables
+--  (deferred to OnInitialize so all addons have registered their textures)
+-------------------------------------------------------------------------------
+local function AppendSharedMediaTextures()
+    local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+    if not LSM then return end
+    local smTextures = LSM:HashTable("statusbar")
+    if not smTextures then return end
+
+    -- Collect and sort SharedMedia texture names alphabetically
+    local sorted = {}
+    for name in pairs(smTextures) do
+        -- Skip any that duplicate our built-in keys
+        local lk = name:lower():gsub("%s+", "-")
+        if not CAST_BAR_TEXTURES[lk] and not BAR_TEXTURES[lk] then
+            sorted[#sorted + 1] = name
+        end
+    end
+    table.sort(sorted)
+
+    if #sorted > 0 then
+        -- Add separator + SharedMedia entries to cast bar textures
+        CAST_BAR_TEXTURE_ORDER[#CAST_BAR_TEXTURE_ORDER + 1] = "---"
+        for _, name in ipairs(sorted) do
+            local key = "sm:" .. name
+            CAST_BAR_TEXTURES[key] = smTextures[name]
+            CAST_BAR_TEXTURE_ORDER[#CAST_BAR_TEXTURE_ORDER + 1] = key
+            CAST_BAR_TEXTURE_NAMES[key] = name
+        end
+
+        -- Add separator + SharedMedia entries to bar textures
+        BAR_TEXTURE_ORDER[#BAR_TEXTURE_ORDER + 1] = "---"
+        for _, name in ipairs(sorted) do
+            local key = "sm:" .. name
+            BAR_TEXTURES[key] = smTextures[name]
+            BAR_TEXTURE_ORDER[#BAR_TEXTURE_ORDER + 1] = key
+            BAR_TEXTURE_NAMES[key] = name
+        end
+    end
+end
 
 
 -------------------------------------------------------------------------------
@@ -2240,29 +2525,32 @@ BuildCastBar = function()
 
     -- Apply settings
     local w, h = cb.width, cb.height
+    local bs = cb.borderSize
+    local hasIcon = cb.showIcon ~= false
+    -- Total frame width includes icon (h x h) only when icon is shown
+    local totalW = hasIcon and (w + h) or w
     if cb.unlockPos and cb.unlockPos.point then
-        -- Position managed by unlock mode � only animate size changes
+        -- Position managed by unlock mode -- only animate size changes
         local rp = cb.unlockPos.relPoint or cb.unlockPos.point
         local px, py = cb.unlockPos.x or 0, cb.unlockPos.y or 0
         local function ApplyCastUnlockTransform()
-            local aw = castBarFrame["_barAnim_w"] or w
+            local aw = castBarFrame["_barAnim_w"] or totalW
             local ah = castBarFrame["_barAnim_h"] or h
             castBarFrame:SetScale(cb.scale or 1)
             castBarFrame:SetSize(aw, ah)
             castBarFrame:ClearAllPoints()
             castBarFrame:SetPoint(cb.unlockPos.point, UIParent, rp, px, py)
         end
-        SmoothBarAnimate(castBarFrame, "w", w, function() ApplyCastUnlockTransform() end)
+        SmoothBarAnimate(castBarFrame, "w", totalW, function() ApplyCastUnlockTransform() end)
         SmoothBarAnimate(castBarFrame, "h", h, function() ApplyCastUnlockTransform() end)
     else
         castBarFrame:SetScale(cb.scale or 1)
-        castBarFrame:SetSize(w, h)
+        castBarFrame:SetSize(totalW, h)
         castBarFrame:ClearAllPoints()
         castBarFrame:SetPoint("CENTER", UIParent, "CENTER", cb.anchorX, cb.anchorY)
     end
 
-    -- Border
-    local bs = cb.borderSize
+    -- Border (wraps the full container including icon)
     local br, bg2, bb, ba = cb.borderR, cb.borderG, cb.borderB, cb.borderA
     for _, edge in ipairs({ castBarFrame._bT, castBarFrame._bB, castBarFrame._bL, castBarFrame._bR }) do
         edge:SetColorTexture(br, bg2, bb, ba)
@@ -2284,10 +2572,23 @@ BuildCastBar = function()
     castBarFrame._bR:SetPoint("BOTTOMRIGHT", castBarFrame._bB, "TOPRIGHT", 0, 0)
     castBarFrame._bR:SetWidth(bs)
 
-    -- Bar inset by border
+    -- Icon: left side of the container, inset by border size to sit within the border
+    local iconFrame = castBarFrame._iconFrame
+    if hasIcon then
+        local iSize = h - 2 * bs
+        if iSize < 1 then iSize = 1 end
+        iconFrame:SetSize(iSize, iSize)
+        iconFrame:ClearAllPoints()
+        iconFrame:SetPoint("TOPLEFT", castBarFrame, "TOPLEFT", bs, -bs)
+        iconFrame:Show()
+    else
+        iconFrame:Hide()
+    end
+
+    -- Bar: right of the icon (or full width when no icon), inset by border
     local bar = castBarFrame._bar
     bar:ClearAllPoints()
-    bar:SetPoint("TOPLEFT", castBarFrame, "TOPLEFT", bs, -bs)
+    bar:SetPoint("TOPLEFT", castBarFrame, "TOPLEFT", (hasIcon and h or 0) + bs, -bs)
     bar:SetPoint("BOTTOMRIGHT", castBarFrame, "BOTTOMRIGHT", -bs, bs)
 
     -- Bar texture
@@ -2370,17 +2671,6 @@ BuildCastBar = function()
         spark:Hide()
     end
 
-    -- Icon
-    local iconFrame = castBarFrame._iconFrame
-    if cb.showIcon then
-        local iSize = (cb.iconAttach and h) or (cb.iconSize or h)
-        iconFrame:SetSize(iSize, iSize)
-        iconFrame:ClearAllPoints()
-        iconFrame:SetPoint("RIGHT", castBarFrame, "LEFT", cb.iconX or 0, cb.iconY or 0)
-        iconFrame:Show()
-    else
-        iconFrame:Hide()
-    end
 
     -- Timer text
     local timerText = castBarFrame._timerText
@@ -2391,6 +2681,18 @@ BuildCastBar = function()
         timerText:Show()
     else
         timerText:Hide()
+    end
+
+    -- Spell name text
+    local nameText = castBarFrame._nameText
+    if cb.showSpellText then
+        SetRBFont(nameText, GetRBFont(), cb.spellTextSize or 11)
+        nameText:ClearAllPoints()
+        nameText:SetPoint("LEFT", bar, "LEFT", 4 + (cb.spellTextX or 0), cb.spellTextY or 0)
+        nameText:SetWidth(cb.width * 0.9)
+        nameText:Show()
+    else
+        nameText:Hide()
     end
 
     -- Hide pips when not empowering
@@ -2481,10 +2783,10 @@ OnCastStart = function()
     castBarFrame._numStages = 0
 
     -- Icon
-    if cb.showIcon then
+    do
         local spellInfo = C_Spell.GetSpellInfo(spellID)
         local iconTex = spellInfo and spellInfo.iconID
-        if iconTex then
+        if iconTex and ERB.db.profile.castBar.showIcon ~= false then
             castBarFrame._icon:SetTexture(iconTex)
             castBarFrame._iconFrame:Show()
         else
@@ -2520,10 +2822,10 @@ OnChannelStart = function()
     castBarFrame._numStages = 0
 
     -- Icon
-    if cb.showIcon then
+    do
         local spellInfo = C_Spell.GetSpellInfo(spellID)
         local iconTex = spellInfo and spellInfo.iconID
-        if iconTex then
+        if iconTex and ERB.db.profile.castBar.showIcon ~= false then
             castBarFrame._icon:SetTexture(iconTex)
             castBarFrame._iconFrame:Show()
         else
@@ -2535,7 +2837,7 @@ OnChannelStart = function()
 end
 
 -- Called for UNIT_SPELLCAST_STOP only (normal cast completion).
--- Ignores the event if the castID doesn't match the active cast � this
+-- Ignores the event if the castID doesn't match the active cast -- this
 -- prevents hiding the bar when a new cast has already started.
 local function OnCastComplete(eventCastID)
     if not castBarFrame then return end
@@ -2625,10 +2927,10 @@ OnEmpowerStart = function()
     castBarFrame._bar:SetValue(0)
 
     -- Icon
-    if cb.showIcon then
+    do
         local spellInfo = C_Spell.GetSpellInfo(spellID)
         local iconTex = spellInfo and spellInfo.iconID
-        if iconTex then
+        if iconTex and ERB.db.profile.castBar.showIcon ~= false then
             castBarFrame._icon:SetTexture(iconTex)
             castBarFrame._iconFrame:Show()
         else
@@ -2636,7 +2938,7 @@ OnEmpowerStart = function()
         end
     end
 
-    -- Stage pips (hash marks) � pixel-perfect positioning
+    -- Stage pips (hash marks) -- pixel-perfect positioning
     local stages = UnitEmpoweredStagePercentages("player")
     if stages then
         local bar = castBarFrame._bar
@@ -2650,7 +2952,7 @@ OnEmpowerStart = function()
         local pixelSize = 1 / effectiveScale          -- 1 physical pixel in UI units
         local pipWidth = max(pixelSize, floor(2 * effectiveScale + 0.5) / effectiveScale) -- at least 1px, target ~2px
 
-        -- Position a pip at each stage boundary (skip the last � it's the bar end)
+        -- Position a pip at each stage boundary (skip the last -- it's the bar end)
         local lastOffset = 0
         for i = 1, numStages - 1 do
             local pip = castBarFrame._pips[i]
@@ -2709,6 +3011,19 @@ function ERB:ApplyAll()
     UpdatePrimaryBar()
     UpdateSecondaryResource()
     UpdateVisibility()
+
+    -- Vehicle proxy: hide resource bars during full vehicle UI ([vehicleui] condition)
+    if not ERB._vehicleProxy then
+        ERB._vehicleProxy = CreateFrame("Frame", nil, UIParent, "SecureHandlerStateTemplate")
+        ERB._vehicleProxy:SetAttribute("_onstate-erbvehicle", [[
+            self:CallMethod("OnVehicleStateChanged", newstate)
+        ]])
+        ERB._vehicleProxy.OnVehicleStateChanged = function(_, state)
+            ERB._inVehicle = (state == "hide")
+            UpdateVisibility()
+        end
+        RegisterStateDriver(ERB._vehicleProxy, "erbvehicle", "[vehicleui][petbattle] hide; show")
+    end
 end
 
 
@@ -2754,6 +3069,8 @@ local function OnEvent(self, event, ...)
         UpdateSecondaryResource()
     elseif event == "RUNE_POWER_UPDATE" then
         UpdateSecondaryResource()
+    elseif event == "UNIT_POWER_POINT_CHARGE" then
+        UpdateSecondaryResource()
     elseif event == "PLAYER_REGEN_DISABLED" then
         isInCombat = true
         UpdateVisibility()
@@ -2773,12 +3090,14 @@ local function OnEvent(self, event, ...)
         BuildCastBar()
         UpdatePrimaryBar()
         UpdateSecondaryResource()
+        UpdateVisibility()
     elseif event == "UPDATE_SHAPESHIFT_FORM" then
         cachedPrimary = GetPrimaryPowerType()
         cachedSecondary = GetSecondaryResource()
         BuildBars()
         UpdatePrimaryBar()
         UpdateSecondaryResource()
+        UpdateVisibility()
     elseif event == "UNIT_AURA" then
         local unit = ...
         if unit == "player" and cachedSecondary and cachedSecondary.type == "custom" then
@@ -2868,14 +3187,11 @@ function ERB:OnInitialize()
     _G._ERB_Apply = function() ERB:ApplyAll() end
     _G._ERB_GetSecondaryResource = GetSecondaryResource
     _G._ERB_PowerColors = POWER_COLORS
+
+    AppendSharedMediaTextures()
 end
 
 function ERB:OnEnable()
-    -- Minimap button (handled by parent addon)
-    if not _EllesmereUI_MinimapRegistered and EllesmereUI and EllesmereUI.CreateMinimapButton then
-        EllesmereUI.CreateMinimapButton()
-    end
-
     local eventFrame = CreateFrame("Frame")
     eventFrame:RegisterUnitEvent("UNIT_HEALTH", "player")
     eventFrame:RegisterUnitEvent("UNIT_MAXHEALTH", "player")
@@ -2903,6 +3219,7 @@ function ERB:OnEnable()
     eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_UPDATE", "player")
     eventFrame:RegisterEvent("PLAYER_DEAD")
     eventFrame:RegisterEvent("PLAYER_ALIVE")
+    eventFrame:RegisterUnitEvent("UNIT_POWER_POINT_CHARGE", "player")
     eventFrame:SetScript("OnEvent", OnEvent)
     eventFrame:SetScript("OnUpdate", OnUpdate)
 end

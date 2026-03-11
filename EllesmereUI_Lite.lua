@@ -219,10 +219,25 @@ end
 
 --------------------------------------------------------------------------------
 --  Logout handler: strip defaults so SavedVariables stay clean
+--  Fires pre-logout callbacks first so systems like Profiles can snapshot
+--  the full profile data before defaults are stripped.
 --------------------------------------------------------------------------------
+local preLogoutCallbacks = {}
+
+--- Register a function to run before StripDefaults on logout.
+--- Used by the profile system to save a complete snapshot.
+function EUILite.RegisterPreLogout(fn)
+    tinsert(preLogoutCallbacks, fn)
+end
+
 local logoutFrame = CreateFrame("Frame")
 logoutFrame:RegisterEvent("PLAYER_LOGOUT")
 logoutFrame:SetScript("OnEvent", function()
+    -- Fire pre-logout callbacks (profile save, etc.) while data is still intact
+    for _, fn in ipairs(preLogoutCallbacks) do
+        safecall(fn)
+    end
+
     for _, db in pairs(dbRegistry) do
         if db._profileDefaults and db.profile then
             StripDefaults(db.profile, db._profileDefaults)
@@ -260,6 +275,12 @@ lifecycleFrame:SetScript("OnEvent", function(self, event, arg1)
 
     -- Process enable queue once logged in
     if IsLoggedIn() then
+        -- Ensure PP.mult is current before any addon's OnEnable runs.
+        -- PP is defined in EllesmereUI.lua (loaded after this file) so it
+        -- exists by the time PLAYER_LOGIN fires.
+        if EllesmereUI and EllesmereUI.PP and EllesmereUI.PP.UpdateMult then
+            EllesmereUI.PP.UpdateMult()
+        end
         while #enableQueue > 0 do
             local addon = tremove(enableQueue, 1)
             if addon.enabledState then

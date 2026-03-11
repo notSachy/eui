@@ -1,7 +1,7 @@
 --------------------------------------------------------------------------------
 --  EllesmereUICdmBarGlows.lua
 --  Bar Glows: Overlay system that reads CDM buff bars and overlays glows
---  on action buttons. Currently disabled — uncomment blocks to re-enable.
+--  on action buttons.
 --------------------------------------------------------------------------------
 local ADDON_NAME, ns = ...
 
@@ -94,14 +94,8 @@ function ns.IsSpellAuraActive(spellID)
     return aura ~= nil
 end
 
--- Stub: Bar Glows disabled — RequestUpdate is a no-op until re-enabled
-local function RequestUpdate() end
-ns.RequestUpdate = RequestUpdate
+-- RequestUpdate and lastSourceStates are defined in the Bar Glows block below
 
--- Declared here so RequestUpdate can safely wipe it even when Bar Glows is disabled
-local lastSourceStates = {}
-
---[[ BAR GLOWS: DISABLED (untested — uncomment to re-enable)
 -------------------------------------------------------------------------------
 --  Bar Glows: Overlay System (reads CDM buff bars, overlays on action buttons)
 -------------------------------------------------------------------------------
@@ -153,7 +147,7 @@ local shownBuffer = {}
 
 local function PackVisibleSlots()
     local root = _G.BuffIconCooldownViewer
-    if not root then return end
+    if not root or not GetSortedSlots then return end
     local slots = GetSortedSlots()
     if not slots then return end
 
@@ -195,6 +189,7 @@ local function PackVisibleSlots()
 end
 
 local function ApplyPerSlotHidingAndPack()
+    if not GetSortedSlots then return end
     local slots = GetSortedSlots()
     if not slots then return end
     ApplyPerSlotAlpha(slots)
@@ -202,11 +197,9 @@ local function ApplyPerSlotHidingAndPack()
 end
 
 local function ApplyPerSlotHidingAndPackSoon()
-    cachedSlots = nil
     lastPackLayout.count = nil
     ApplyPerSlotHidingAndPack()
     C_Timer.After(0.2, function()
-        cachedSlots = nil
         lastPackLayout.count = nil
         ApplyPerSlotHidingAndPack()
     end)
@@ -223,7 +216,6 @@ local function DeferredOverlayVisuals()
 end
 
 local function OnSlotVisibilityChanged()
-    cachedSlots = nil
     lastPackLayout.count = nil
     ApplyPerSlotHidingAndPack()
     if not overlayVisualsPending then
@@ -246,6 +238,7 @@ local function HookAllCDMChildren(root)
         if c and c.GetWidth and c:GetWidth() > 5 then HookCDMSlot(c) end
     end
 end
+ns.HookAllCDMChildren = HookAllCDMChildren
 
 local cdmHookFrame = CreateFrame("Frame")
 local lastChildCount = 0
@@ -278,16 +271,7 @@ local function GetOrCreateOverlay(actionBar, actionButtonIndex, cdmSlotIndex)
 end
 
 local function SetupOverlays()
-    do
-        hasActiveOverlays = false
-        hasHiddenSlots = false
-        if overlayUpdateFrame then overlayUpdateFrame:Hide() end
-        for key, overlay in pairs(overlayFrames) do
-            StopNativeGlow(overlay)
-            overlay:Hide()
-        end
-        return
-    end
+    if not ECME or not ECME.db then return end
     local p = ECME.db.profile
     local bg = p.barGlows
     if not bg or not bg.enabled then
@@ -409,17 +393,16 @@ UpdateOverlayVisuals = function()
         end
     end
 end
---]] -- END BAR GLOWS DISABLED
+-- END BAR GLOWS
 
---[[ BAR GLOWS MASTER UPDATE: DISABLED (part of Bar Glows — uncomment with that block)
+-- BAR GLOWS MASTER UPDATE
 local updatePending = false
 local updateTimer = nil
 
 local function DoUpdate()
     updatePending = false
     updateTimer = nil
-    cachedSlots = nil
-    UpdateAllCDMBorders()
+    if ns.UpdateAllCDMBorders then ns.UpdateAllCDMBorders() end
     SetupOverlays()
 end
 
@@ -450,4 +433,4 @@ overlayUpdateFrame:SetScript("OnUpdate", function(self, elapsed)
         end
     end
 end)
---]] -- END BAR GLOWS MASTER UPDATE DISABLED
+-- END BAR GLOWS MASTER UPDATE

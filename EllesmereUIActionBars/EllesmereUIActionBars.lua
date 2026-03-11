@@ -1,4 +1,4 @@
--------------------------------------------------------------------------------
+﻿-------------------------------------------------------------------------------
 --  EllesmereUIActionBars.lua  Custom Action Bars (full rewrite)
 --
 --  Creates its own secure action bar frames and buttons instead of hooking
@@ -257,6 +257,8 @@ for _, info in ipairs(BAR_CONFIG) do
         alwaysShowButtons = true,
         bgEnabled = false,
         bgColor = { r = 0, g = 0, b = 0, a = 0.5 },
+        outOfRangeColoring = false,
+        outOfRangeColor = { r = 0.8, g = 0.1, b = 0.1 },
         buttonShape = "none",
         shapeBorderEnabled = true,
         shapeBorderColor = { r = 0, g = 0, b = 0, a = 1 },
@@ -306,6 +308,19 @@ local function SafeEnableMouse(frame, enable)
     if frame.IsProtected and frame:IsProtected() and InCombatLockdown() then return end
     if frame.SetMouseClickEnabled then
         frame:SetMouseClickEnabled(enable)
+        frame:SetMouseMotionEnabled(enable)
+    else
+        frame:EnableMouse(enable)
+    end
+end
+
+-- Like SafeEnableMouse but only enables mouse motion (OnEnter/OnLeave),
+-- keeping click-through so clicks pass to frames behind.
+local function SafeEnableMouseMotionOnly(frame, enable)
+    if not frame then return end
+    if frame.IsProtected and frame:IsProtected() and InCombatLockdown() then return end
+    if frame.SetMouseClickEnabled then
+        frame:SetMouseClickEnabled(false)
         frame:SetMouseMotionEnabled(enable)
     else
         frame:EnableMouse(enable)
@@ -427,7 +442,7 @@ local function ResolveBorderThickness(s)
 end
 ns.ResolveBorderThickness = ResolveBorderThickness
 
--- Condense keybind text (CTRL-2 â†’ C2, Mouse Button 4 â†’ M4, etc.)
+-- Condense keybind text (CTRL-2 C2, Mouse Button 4 M4, etc.)
 local function FormatHotkeyText(text)
     if not text or text == "" then return "" end
     text = text:gsub("CTRL%-", "C")
@@ -533,13 +548,21 @@ _secureHandler:SetAttribute("_onattributechanged", [=[
             local barRef = self:GetFrameRef("bar-" .. barKey)
             if btnRef and barRef then
                 btnRef:SetParent(barRef)
-                btnRef:SetID(0)
                 btnRef:ClearAllPoints()
                 btnRef:SetPoint("TOPLEFT", barRef, "TOPLEFT", tonumber(x) or 0, tonumber(y) or 0)
                 btnRef:SetWidth(tonumber(w) or 45)
                 btnRef:SetHeight(tonumber(h) or 45)
-                if actionSlot and actionSlot ~= "" and actionSlot ~= "0" then
-                    btnRef:SetAttribute("action", tonumber(actionSlot))
+                if barKey == "PetBar" then
+                    -- PetActionButtons use their slot index as their frame ID
+                    -- to know which pet ability to display. Must not be reset to 0.
+                    local petIndex = tonumber(actionSlot) or 1
+                    btnRef:SetID(petIndex)
+                    btnRef:SetAttribute("action", nil)
+                else
+                    btnRef:SetID(0)
+                    if actionSlot and actionSlot ~= "" and actionSlot ~= "0" then
+                        btnRef:SetAttribute("action", tonumber(actionSlot))
+                    end
                 end
                 if show == "1" then
                     btnRef:Show()
@@ -731,7 +754,7 @@ local function HideBlizzardBars()
     -- Blizzard's vehicle bar can render.  Combat-safe via attribute driver.
     if ActionBarParent then
         RegisterAttributeDriver(ActionBarParent, "state-visibility",
-            "[vehicleui] show; hide")
+            "[vehicleui][overridebar] show; hide")
     end
     -- Let Blizzard's OverrideActionBar show itself for override bars and
     -- skinned vehicles (quest mini-vehicles, encounter abilities, etc.).
@@ -739,7 +762,7 @@ local function HideBlizzardBars()
     -- Combat-safe via attribute driver -- no direct Hide() calls.
     if OverrideActionBar then
         RegisterAttributeDriver(OverrideActionBar, "state-visibility",
-            "[vehicleui] show; hide")
+            "[vehicleui][overridebar] show; hide")
     end
     -- Wipe Blizzard's actionButtons tables so they don't interfere
     for _, name in ipairs({"MainActionBar", "MainMenuBar", "MultiBarBottomLeft", "MultiBarBottomRight", "MultiBarRight", "MultiBarLeft", "MultiBar5", "MultiBar6", "MultiBar7"}) do
@@ -748,6 +771,11 @@ local function HideBlizzardBars()
             wipe(bar.actionButtons)
         end
     end
+    -- Replace Blizzard's multi-bar button handlers with no-ops.
+    -- After wiping actionButtons, the original functions would error
+    -- if a Blizzard binding fires before our override bindings are set.
+    if MultiActionButtonDown then _G.MultiActionButtonDown = function() end end
+    if MultiActionButtonUp then _G.MultiActionButtonUp = function() end end
     -- Also wipe button container references on MainActionBar
     local mainAB = _G["MainActionBar"]
     if mainAB then
@@ -775,26 +803,26 @@ end
 local allButtons = {}   -- [actionSlot] = button
 local barButtons = {}   -- [barKey] = { btn1, btn2, ... }
 local barFrames  = {}   -- [barKey] = secure header frame
-local dataBarFrames = {} -- [barKey] = data bar frame (XP/Rep) â€” populated later in SetupDataBars
+local dataBarFrames = {} -- [barKey] = data bar frame (XP/Rep) populated later in SetupDataBars
 local blizzMovableHolders = {} -- [barKey] = holder frame for Blizzard movable frames (ExtraAction, Encounter)
 local extraBarHolders = {} -- [barKey] = holder frame for extra bars (MicroBar, BagBar)
 local BLIZZ_MOVABLE_OVERLAY = { -- Fixed overlay sizes for unlock mode movers (not the actual Blizzard frames)
     ExtraActionButton = { w = 100, h = 100 },
     EncounterBar      = { w = 150, h = 40 },
 }
-local barBaseSize = {}  -- [barKey] = { w, h } â€” original button size before any shape/scale
+local barBaseSize = {}  -- [barKey] = { w, h } original button size before any shape/scale
 
 -- Map bar config to action slot ranges
 -- These MUST match Blizzard's internal action slot assignments for each
 -- button prefix.  Confirmed via warcraft.wiki.gg/wiki/ActionSlot:
---   ActionButton1-12           â†’ slots 1-12  (paged via state driver)
---   MultiBarBottomLeftButton   â†’ slots 61-72
---   MultiBarBottomRightButton  â†’ slots 49-60
---   MultiBarRightButton        â†’ slots 25-36
---   MultiBarLeftButton         â†’ slots 37-48
---   MultiBar5Button            â†’ slots 145-156
---   MultiBar6Button            â†’ slots 157-168
---   MultiBar7Button            â†’ slots 169-180
+--   ActionButton1-12           slots 1-12  (paged via state driver)
+--   MultiBarBottomLeftButton   slots 61-72
+--   MultiBarBottomRightButton  slots 49-60
+--   MultiBarRightButton        slots 25-36
+--   MultiBarLeftButton         slots 37-48
+--   MultiBar5Button            slots 145-156
+--   MultiBar6Button            slots 157-168
+--   MultiBar7Button            slots 169-180
 -- Slots 133-144 are reserved/unknown (not used by any bar).
 -- Stance bar: uses StanceButton1-10 (not action slots)
 local BAR_SLOT_OFFSETS = {
@@ -823,6 +851,770 @@ local BINDING_MAP = {
     StanceBar = "SHAPESHIFTBUTTON",
     PetBar = "BONUSACTIONBUTTON",
 }
+
+-------------------------------------------------------------------------------
+--  Custom Spell Flyout System
+--  Replaces Blizzard's SpellFlyout for our action buttons to avoid taint.
+--  Intercepts flyout-type action clicks in the secure environment and opens
+--  our own flyout frame with spell-type buttons (secure casting, no taint).
+-------------------------------------------------------------------------------
+
+-- Layout constants
+local FLYOUT_BTN_SPACING = 4
+
+-- All known flyout IDs in retail WoW
+local KNOWN_FLYOUT_IDS = {
+    1, 8, 9, 10, 11, 12, 66, 67, 84, 92, 93, 96,
+    103, 106, 217, 219, 220, 222, 223, 224, 225, 226, 227, 229,
+}
+
+-- Flyout button mixin (individual spell buttons inside the flyout menu)
+local EABFlyoutBtnMixin = {}
+
+function EABFlyoutBtnMixin:Setup()
+    self:SetAttribute("type", "spell")
+    self:RegisterForClicks("AnyUp", "AnyDown")
+    self:SetScript("OnEnter", self.OnEnter)
+    self:SetScript("OnLeave", self.OnLeave)
+    self:SetScript("PostClick", self.PostClick)
+end
+
+function EABFlyoutBtnMixin:OnEnter()
+    if GetCVarBool("UberTooltips") then
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT", 4, 4)
+        if GameTooltip:SetSpellByID(self.spellID) then
+            self.UpdateTooltip = self.OnEnter
+        else
+            self.UpdateTooltip = nil
+        end
+    else
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(self.spellName, HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b)
+        self.UpdateTooltip = nil
+    end
+end
+
+function EABFlyoutBtnMixin:OnLeave()
+    GameTooltip:Hide()
+end
+
+function EABFlyoutBtnMixin:OnDataChanged()
+    local fid = self:GetAttribute("flyoutID")
+    local idx = self:GetAttribute("flyoutIndex")
+    local sid, overrideSid, known, name = GetFlyoutSlotInfo(fid, idx)
+    local tex = C_Spell.GetSpellTexture(overrideSid)
+    self.icon:SetTexture(tex)
+    self.icon:SetDesaturated(not known)
+    self.spellID = sid
+    self.spellName = name
+    self:Refresh()
+end
+
+function EABFlyoutBtnMixin:PostClick()
+    self:RefreshState()
+end
+
+function EABFlyoutBtnMixin:Refresh()
+    self:RefreshCooldown()
+    self:RefreshState()
+    self:RefreshUsable()
+    self:RefreshCount()
+end
+
+function EABFlyoutBtnMixin:RefreshCooldown()
+    if self.spellID then
+        ActionButton_UpdateCooldown(self)
+    end
+end
+
+function EABFlyoutBtnMixin:RefreshState()
+    if self.spellID then
+        self:SetChecked(C_Spell.IsCurrentSpell(self.spellID) and true)
+    else
+        self:SetChecked(false)
+    end
+end
+
+function EABFlyoutBtnMixin:RefreshUsable()
+    local ico = self.icon
+    local sid = self.spellID
+    if sid then
+        local usable, oom = C_Spell.IsSpellUsable(sid)
+        if oom then
+            ico:SetDesaturated(true)
+            ico:SetVertexColor(0.4, 0.4, 1.0)
+        elseif usable then
+            ico:SetDesaturated(false)
+            ico:SetVertexColor(1, 1, 1)
+        else
+            ico:SetDesaturated(true)
+            ico:SetVertexColor(0.4, 0.4, 0.4)
+        end
+    else
+        ico:SetDesaturated(false)
+        ico:SetVertexColor(1, 1, 1)
+    end
+end
+
+function EABFlyoutBtnMixin:RefreshCount()
+    local sid = self.spellID
+    if sid and C_Spell.IsConsumableSpell(sid) then
+        local ct = C_Spell.GetSpellCastCount(sid)
+        self.Count:SetText(ct > 9999 and "*" or ct)
+    else
+        self.Count:SetText("")
+    end
+end
+
+-- Flyout frame mixin (the container that holds all flyout buttons)
+local EABFlyoutFrameMixin = {}
+
+-- Secure snippet: toggles the flyout open/closed, positions buttons
+local SECURE_TOGGLE = [[
+    local flyoutID = ...
+    local caller = self:GetAttribute("caller")
+
+    -- Toggle off if already open on the same button
+    if self:IsShown() and caller == self:GetParent() then
+        self:Hide()
+        return
+    end
+
+    -- Sync this flyout's data if we haven't seen it before
+    if not EAB_FLYOUT_DATA[flyoutID] then
+        self:SetAttribute("_pendingSyncID", flyoutID)
+        self:CallMethod("EnsureFlyoutSynced")
+    end
+
+    local data = EAB_FLYOUT_DATA[flyoutID]
+    local slotCount = data and data.numSlots or 0
+    local known = data and data.isKnown or false
+
+    self:SetParent(caller)
+
+    if slotCount == 0 or not known then
+        self:Hide()
+        return
+    end
+
+    local dir = caller:GetAttribute("flyoutDirection") or "UP"
+    self:SetAttribute("direction", dir)
+
+    -- Match flyout button size to the caller button
+    local cW = caller:GetWidth()
+    local cH = caller:GetHeight()
+
+    local prev = nil
+    local shown = 0
+
+    for i = 1, slotCount do
+        if data[i].isKnown then
+            shown = shown + 1
+            local btn = EAB_FLYOUT_BTNS[shown]
+            btn:SetWidth(cW)
+            btn:SetHeight(cH)
+            btn:ClearAllPoints()
+
+            if dir == "UP" then
+                if prev then
+                    btn:SetPoint("BOTTOM", prev, "TOP", 0, EAB_FLYOUT_SPACING)
+                else
+                    btn:SetPoint("BOTTOM", self, "BOTTOM", 0, 0)
+                end
+            elseif dir == "DOWN" then
+                if prev then
+                    btn:SetPoint("TOP", prev, "BOTTOM", 0, -EAB_FLYOUT_SPACING)
+                else
+                    btn:SetPoint("TOP", self, "TOP", 0, 0)
+                end
+            elseif dir == "LEFT" then
+                if prev then
+                    btn:SetPoint("RIGHT", prev, "LEFT", -EAB_FLYOUT_SPACING, 0)
+                else
+                    btn:SetPoint("RIGHT", self, "RIGHT", 0, 0)
+                end
+            elseif dir == "RIGHT" then
+                if prev then
+                    btn:SetPoint("LEFT", prev, "RIGHT", EAB_FLYOUT_SPACING, 0)
+                else
+                    btn:SetPoint("LEFT", self, "LEFT", 0, 0)
+                end
+            end
+
+            btn:SetAttribute("spell", data[i].spellID)
+            btn:SetAttribute("flyoutID", flyoutID)
+            btn:SetAttribute("flyoutIndex", i)
+            btn:Enable()
+            btn:Show()
+            btn:CallMethod("OnDataChanged")
+
+            prev = btn
+        end
+    end
+
+    -- Hide unused buttons
+    for i = shown + 1, #EAB_FLYOUT_BTNS do
+        EAB_FLYOUT_BTNS[i]:Hide()
+    end
+
+    if shown == 0 then
+        self:Hide()
+        return
+    end
+
+    local vert = false
+
+    self:ClearAllPoints()
+    if dir == "UP" then
+        self:SetPoint("BOTTOM", caller, "TOP", 0, EAB_FLYOUT_SPACING)
+        vert = true
+    elseif dir == "DOWN" then
+        self:SetPoint("TOP", caller, "BOTTOM", 0, -EAB_FLYOUT_SPACING)
+        vert = true
+    elseif dir == "LEFT" then
+        self:SetPoint("RIGHT", caller, "LEFT", -EAB_FLYOUT_SPACING, 0)
+    elseif dir == "RIGHT" then
+        self:SetPoint("LEFT", caller, "RIGHT", EAB_FLYOUT_SPACING, 0)
+    end
+
+    if vert then
+        self:SetWidth(cW)
+        self:SetHeight((cH + EAB_FLYOUT_SPACING) * shown - EAB_FLYOUT_SPACING)
+    else
+        self:SetWidth((cW + EAB_FLYOUT_SPACING) * shown - EAB_FLYOUT_SPACING)
+        self:SetHeight(cH)
+    end
+
+    self:CallMethod("OnFlyoutOpened")
+    self:Show()
+]]
+
+function EABFlyoutFrameMixin:Init()
+    self.btns = {}
+
+    -- Initialize secure environment tables
+    self:Execute(([[
+        EAB_FLYOUT_DATA = newtable()
+        EAB_FLYOUT_BTNS = newtable()
+        EAB_FLYOUT_SPACING = %d
+    ]]):format(FLYOUT_BTN_SPACING))
+
+    self:SetAttribute("Toggle", SECURE_TOGGLE)
+    self:SetAttribute("_onhide", [[ self:Hide(true) ]])
+
+    self:SyncAllFlyouts()
+end
+
+function EABFlyoutFrameMixin:SyncAllFlyouts()
+    -- Discover flyout IDs from all action slots (covers any flyout, including new ones)
+    local seen = {}
+    local maxSlots = 0
+    for slot = 1, 180 do
+        local aType, aID = GetActionInfo(slot)
+        if aType == "flyout" and aID and not seen[aID] then
+            seen[aID] = true
+            local n = self:SyncFlyoutData(aID)
+            if n > maxSlots then maxSlots = n end
+        end
+    end
+    -- Also sync the known list as a safety net for unbound flyouts
+    for _, fid in ipairs(KNOWN_FLYOUT_IDS) do
+        if not seen[fid] then
+            local n = self:SyncFlyoutData(fid)
+            if n > maxSlots then maxSlots = n end
+        end
+    end
+    self:EnsureButtons(maxSlots)
+end
+
+function EABFlyoutFrameMixin:SyncSingleFlyout(flyoutID)
+    local n = self:SyncFlyoutData(flyoutID)
+    if n > #self.btns then
+        self:EnsureButtons(n)
+        return true
+    end
+    return false
+end
+
+-- Called from the secure toggle via CallMethod when an unknown flyout ID is encountered.
+-- Reads the pending ID from an attribute (secure env can't pass args to CallMethod).
+function EABFlyoutFrameMixin:EnsureFlyoutSynced()
+    local fid = self:GetAttribute("_pendingSyncID")
+    if not fid then return end
+    self:SyncSingleFlyout(fid)
+end
+
+function EABFlyoutFrameMixin:SyncFlyoutData(flyoutID)
+    local _, _, numSlots, isKnown = GetFlyoutInfo(flyoutID)
+
+    self:Execute(([[
+        local fid = %d
+        local ns = %d
+        local kn = %q == "true"
+        local d = EAB_FLYOUT_DATA[fid] or newtable()
+        d.numSlots = ns
+        d.isKnown = kn
+        EAB_FLYOUT_DATA[fid] = d
+        for i = ns + 1, #d do d[i].isKnown = false end
+    ]]):format(flyoutID, numSlots, tostring(isKnown)))
+
+    for slot = 1, numSlots do
+        local sid, _, slotKnown = GetFlyoutSlotInfo(flyoutID, slot)
+        if slotKnown then
+            local petIdx, petName = GetCallPetSpellInfo(sid)
+            if petIdx and not (petName and petName ~= "") then
+                slotKnown = false
+            end
+        end
+        self:Execute(([[
+            local d = EAB_FLYOUT_DATA[%d][%d] or newtable()
+            d.spellID = %d
+            d.isKnown = %q == "true"
+            EAB_FLYOUT_DATA[%d][%d] = d
+        ]]):format(flyoutID, slot, sid, tostring(slotKnown), flyoutID, slot))
+    end
+
+    return numSlots
+end
+
+function EABFlyoutFrameMixin:EnsureButtons(count)
+    for i = #self.btns + 1, count do
+        local btn = self:MakeFlyoutButton(i)
+        self:SetFrameRef("_eabFlySlot", btn)
+        self:Execute([[ tinsert(EAB_FLYOUT_BTNS, self:GetFrameRef("_eabFlySlot")) ]])
+        self.btns[i] = btn
+    end
+end
+
+-- Secure snippet for flyout button clicks: close the flyout on key-up
+local FLYBTN_PRE = [[ if not down then return nil, "close" end ]]
+local FLYBTN_POST = [[ if message == "close" then control:Hide() end ]]
+
+function EABFlyoutFrameMixin:MakeFlyoutButton(idx)
+    local name = "EABFlyoutBtn" .. idx
+    local btn = CreateFrame("CheckButton", name, self,
+        "SmallActionButtonTemplate, SecureActionButtonTemplate")
+    Mixin(btn, EABFlyoutBtnMixin)
+    btn:Setup()
+    self:WrapScript(btn, "OnClick", FLYBTN_PRE, FLYBTN_POST)
+    return btn
+end
+
+function EABFlyoutFrameMixin:ForVisible(method, ...)
+    for _, btn in ipairs(self.btns) do
+        if btn:IsShown() then btn[method](btn, ...) end
+    end
+end
+
+-- Style flyout buttons to match the parent bar's appearance.
+-- Called from the secure toggle via CallMethod after the flyout opens.
+function EABFlyoutFrameMixin:OnFlyoutOpened()
+    local caller = self:GetParent()
+    if not caller then return end
+
+    -- Find the bar key from the caller button
+    local barKey = caller._eabBarKey
+    if not barKey then return end
+
+    local prof = EAB.db and EAB.db.profile
+    if not prof then return end
+    local s = prof.bars and prof.bars[barKey]
+    if not s then return end
+
+    local PP = EllesmereUI and EllesmereUI.PP
+    local shape = s.buttonShape or "none"
+    local zoom = ((s.iconZoom or prof.iconZoom or 5.5)) / 100
+    local brdSz = ResolveBorderThickness(s)
+    local brdOn = brdSz > 0
+    local brdColor = s.borderColor or { r = 0, g = 0, b = 0, a = 1 }
+    local cr, cg, cb, ca = brdColor.r, brdColor.g, brdColor.b, brdColor.a or 1
+    if s.borderClassColor then
+        local _, ct = UnitClass("player")
+        if ct then
+            local cc = RAID_CLASS_COLORS[ct]
+            if cc then cr, cg, cb = cc.r, cc.g, cc.b end
+        end
+    end
+    local shapeBrdColor = s.shapeBorderColor or brdColor
+    local sbR, sbG, sbB, sbA = shapeBrdColor.r, shapeBrdColor.g, shapeBrdColor.b, shapeBrdColor.a or 1
+    if s.borderClassColor then
+        local _, ct = UnitClass("player")
+        if ct then
+            local cc = RAID_CLASS_COLORS[ct]
+            if cc then sbR, sbG, sbB = cc.r, cc.g, cc.b end
+        end
+    end
+
+    for _, btn in ipairs(self.btns) do
+        if btn:IsShown() then
+            -- Strip default SmallActionButton art
+            self:StripFlyoutButtonArt(btn)
+
+            if shape ~= "none" and shape ~= "cropped" and SHAPE_MASKS[shape] then
+                -- Apply shape mask to flyout button
+                self:ApplyFlyoutShape(btn, shape, brdOn, sbR, sbG, sbB, sbA, brdSz, zoom)
+            else
+                -- Square/cropped: apply borders and zoom
+                self:ApplyFlyoutSquare(btn, brdOn, cr, cg, cb, ca, brdSz, zoom, shape == "cropped")
+            end
+
+            -- Apply pushed/highlight/misc texture animations to match the bar
+            -- Only outside combat — SetPushedTexture is restricted on secure buttons in combat.
+            -- The textures persist after being set, so this only needs to run once per button.
+            if not InCombatLockdown() then
+                self:ApplyFlyoutAnimations(btn, prof)
+            end
+        end
+    end
+end
+
+-- Apply pushed/highlight/misc button texture animations to a flyout button,
+-- matching the global animation settings used on all action bar buttons.
+-- NOTE: called via CallMethod (restricted env) — cannot use file-local upvalues.
+-- All texture operations are inlined; texture paths are read from the EAB profile.
+function EABFlyoutFrameMixin:ApplyFlyoutAnimations(btn, prof)
+    local useCC = prof.pushedUseClassColor
+    local customC = prof.pushedCustomColor or { r = 0.973, g = 0.839, b = 0.604, a = 1 }
+    local cr, cg, cb, ca = customC.r, customC.g, customC.b, customC.a or 1
+    if useCC then
+        local _, ct = UnitClass("player")
+        if ct then local cc = RAID_CLASS_COLORS[ct]; if cc then cr, cg, cb = cc.r, cc.g, cc.b end end
+    end
+
+    local mediaDir = "Interface\\AddOns\\EllesmereUIActionBars\\Media\\"
+    local hlTex = {
+        mediaDir .. "highlight-2.png",
+        mediaDir .. "highlight-3.png",
+        mediaDir .. "highlight-4.png",
+    }
+    local function ApplyTex(tex, path)
+        if not tex then return end
+        tex:SetAtlas(nil)
+        tex:SetTexture(path)
+        tex:SetTexCoord(0, 1, 0, 1)
+        tex:ClearAllPoints()
+        tex:SetAllPoints(btn)
+    end
+
+    -- Pushed texture
+    -- Use btn:SetPushedTexture() to register the change with the button system,
+    -- then retrieve the texture object to apply color/coords.
+    local pType = prof.pushedTextureType or 2
+    if pType == 6 then
+        btn:SetPushedTexture("")
+        local pt = btn:GetPushedTexture()
+        if pt then pt:SetAlpha(0) end
+    else
+        local texPath
+        if pType <= 3 then
+            texPath = hlTex[pType] or hlTex[2]
+        elseif pType == 4 then
+            texPath = "Interface\\Buttons\\WHITE8X8"
+        else -- pType == 5
+            texPath = hlTex[1]
+        end
+        btn:SetPushedTexture(texPath)
+        local pt = btn:GetPushedTexture()
+        if pt then
+            pt:SetAlpha(1)
+            pt:SetTexCoord(0, 1, 0, 1)
+            pt:ClearAllPoints()
+            pt:SetAllPoints(btn)
+            if pType == 4 then
+                pt:SetVertexColor(cr, cg, cb, 0.35)
+            else
+                pt:SetVertexColor(cr, cg, cb, 1)
+            end
+        end
+    end
+
+    -- Highlight texture
+    local hType = prof.highlightTextureType or 2
+    local hUseCC = prof.highlightUseClassColor
+    local hCustomC = prof.highlightCustomColor or { r = 0.973, g = 0.839, b = 0.604, a = 1 }
+    local hr, hg, hb = hCustomC.r, hCustomC.g, hCustomC.b
+    if hUseCC then
+        local _, ct = UnitClass("player")
+        if ct then local cc = RAID_CLASS_COLORS[ct]; if cc then hr, hg, hb = cc.r, cc.g, cc.b end end
+    end
+    if btn.HighlightTexture then
+        if hType == 6 then
+            btn.HighlightTexture:SetAlpha(0)
+        else
+            btn.HighlightTexture:SetAlpha(1)
+            if hType <= 3 then
+                ApplyTex(btn.HighlightTexture, hlTex[hType] or hlTex[1])
+                btn.HighlightTexture:SetVertexColor(hr, hg, hb, 1)
+            elseif hType == 4 then
+                btn.HighlightTexture:SetColorTexture(hr, hg, hb, 0.35)
+            elseif hType == 5 then
+                ApplyTex(btn.HighlightTexture, hlTex[1])
+                btn.HighlightTexture:SetVertexColor(hr, hg, hb, 1)
+            end
+        end
+    end
+
+    -- NewActionTexture (uses pushed color)
+    if btn.NewActionTexture then
+        btn.NewActionTexture:SetDesaturated(true)
+        btn.NewActionTexture:SetVertexColor(cr, cg, cb, ca)
+    end
+end
+
+-- Remove default SmallActionButton template art from a flyout button
+function EABFlyoutFrameMixin:StripFlyoutButtonArt(btn)
+    if btn._eabFlyStripped then return end
+    local nt = btn.NormalTexture or btn:GetNormalTexture()
+    if nt then nt:SetAlpha(0) end
+    if btn.SlotBackground then btn.SlotBackground:Hide() end
+    if btn.SlotArt then btn.SlotArt:Hide() end
+    if btn.IconMask then
+        btn.IconMask:Hide()
+        btn.IconMask:SetTexture(nil)
+        btn.IconMask:ClearAllPoints()
+        btn.IconMask:SetSize(0.001, 0.001)
+    end
+    if btn.FlyoutBorderShadow then btn.FlyoutBorderShadow:SetAlpha(0) end
+    -- Ensure icon fills the button
+    local icon = btn.icon or btn.Icon
+    if icon then
+        icon:ClearAllPoints()
+        icon:SetAllPoints(btn)
+    end
+    btn._eabFlyStripped = true
+end
+
+-- Apply square borders and zoom to a flyout button
+function EABFlyoutFrameMixin:ApplyFlyoutSquare(btn, brdOn, cr, cg, cb, ca, brdSz, zoom, cropped)
+    local PP = EllesmereUI and EllesmereUI.PP
+    -- Remove shape mask if previously applied
+    if btn._eabShapeMask then
+        local icon = btn.icon or btn.Icon
+        if icon then pcall(icon.RemoveMaskTexture, icon, btn._eabShapeMask) end
+        if btn.cooldown and not btn.cooldown:IsForbidden() then
+            pcall(btn.cooldown.RemoveMaskTexture, btn.cooldown, btn._eabShapeMask)
+            pcall(btn.cooldown.SetSwipeTexture, btn.cooldown, "")
+        end
+        btn._eabShapeMask:Hide()
+    end
+    if btn._eabShapeBorder then btn._eabShapeBorder:Hide() end
+
+    local icon = btn.icon or btn.Icon
+    if icon then
+        icon:ClearAllPoints()
+        icon:SetAllPoints(btn)
+        if cropped then
+            local z = zoom or 0
+            icon:SetTexCoord(z, 1 - z, z + 0.10, 1 - z - 0.10)
+        elseif zoom > 0 then
+            icon:SetTexCoord(zoom, 1 - zoom, zoom, 1 - zoom)
+        else
+            icon:SetTexCoord(0, 1, 0, 1)
+        end
+    end
+
+    if PP then
+        if brdOn then
+            if not btn._eabBorders then
+                PP.CreateBorder(btn, 0, 0, 0, 1, 1, "OVERLAY", -1)
+                btn._eabBorders = btn._ppBorders
+            end
+            PP.UpdateBorder(btn, brdSz, cr, cg, cb, ca)
+            PP.ShowBorder(btn)
+        elseif btn._eabBorders then
+            PP.HideBorder(btn)
+        end
+    end
+end
+
+-- Apply shape mask, border, and zoom to a flyout button
+function EABFlyoutFrameMixin:ApplyFlyoutShape(btn, shape, brdOn, brdR, brdG, brdB, brdA, brdSz, zoom)
+    local PP = EllesmereUI and EllesmereUI.PP
+    local maskTex = SHAPE_MASKS[shape]
+    if not maskTex then return end
+
+    -- Hide square borders when using shapes
+    if btn._eabBorders and PP then PP.HideBorder(btn) end
+
+    -- Create or reuse shape mask
+    if not btn._eabShapeMask then
+        btn._eabShapeMask = btn:CreateMaskTexture()
+    end
+    local mask = btn._eabShapeMask
+    mask:SetTexture(maskTex, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    mask:ClearAllPoints()
+    if brdSz and brdSz >= 1 then
+        if PP then
+            PP.Point(mask, "TOPLEFT", btn, "TOPLEFT", 1, -1)
+            PP.Point(mask, "BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
+        else
+            mask:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -1)
+            mask:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
+        end
+    else
+        mask:SetAllPoints(btn)
+    end
+    mask:Show()
+
+    local icon = btn.icon or btn.Icon
+    if icon then
+        pcall(icon.RemoveMaskTexture, icon, mask)
+        icon:AddMaskTexture(mask)
+    end
+
+    -- Expand icon for shape inset
+    local shapeOffset = SHAPE_ICON_EXPAND_OFFSETS[shape] or 0
+    local shapeDefault = (SHAPE_ZOOM_DEFAULTS[shape] or 6.0) / 100
+    local iconExp = SHAPE_ICON_EXPAND + shapeOffset + ((zoom or 0) - shapeDefault) * 200
+    if iconExp < 0 then iconExp = 0 end
+    local halfIE = iconExp / 2
+    if icon and PP then
+        icon:ClearAllPoints()
+        PP.Point(icon, "TOPLEFT", btn, "TOPLEFT", -halfIE, halfIE)
+        PP.Point(icon, "BOTTOMRIGHT", btn, "BOTTOMRIGHT", halfIE, -halfIE)
+    end
+
+    -- Expand texcoords for shape
+    local insetPx = SHAPE_INSETS[shape] or 17
+    local visRatio = (128 - 2 * insetPx) / 128
+    local expand = ((1 / visRatio) - 1) * 0.5
+    if icon then icon:SetTexCoord(-expand, 1 + expand, -expand, 1 + expand) end
+
+    -- Mask cooldown frame
+    if btn.cooldown and not btn.cooldown:IsForbidden() then
+        pcall(btn.cooldown.RemoveMaskTexture, btn.cooldown, mask)
+        pcall(btn.cooldown.AddMaskTexture, btn.cooldown, mask)
+        if btn.cooldown.SetSwipeTexture then
+            pcall(btn.cooldown.SetSwipeTexture, btn.cooldown, maskTex)
+        end
+        local useCircular = (shape ~= "square" and shape ~= "csquare")
+        if btn.cooldown.SetUseCircularEdge then
+            pcall(btn.cooldown.SetUseCircularEdge, btn.cooldown, useCircular)
+        end
+    end
+
+    -- Shape border overlay
+    if not btn._eabShapeBorder then
+        btn._eabShapeBorder = btn:CreateTexture(nil, "OVERLAY", nil, 6)
+    end
+    local borderTex = btn._eabShapeBorder
+    pcall(borderTex.RemoveMaskTexture, borderTex, mask)
+    borderTex:ClearAllPoints()
+    borderTex:SetAllPoints(btn)
+    if brdOn and SHAPE_BORDERS[shape] then
+        borderTex:SetTexture(SHAPE_BORDERS[shape])
+        borderTex:SetVertexColor(brdR, brdG, brdB, brdA)
+        borderTex:Show()
+    else
+        borderTex:Hide()
+    end
+end
+
+-- Flyout manager: creates the frame on demand, registers buttons, handles events
+local EABFlyout = CreateFrame("Frame")
+
+-- Secure snippet: intercepts flyout-type action clicks on registered buttons
+local INTERCEPT_CLICK = [[
+    local aType, aID = GetActionInfo(self:GetEffectiveAttribute("action", button))
+    if aType == "flyout" then
+        if not down then
+            control:SetAttribute("caller", self:GetFrameRef("_eabFlyOwner") or self)
+            control:RunAttribute("Toggle", aID)
+        end
+        return false
+    end
+]]
+
+function EABFlyout:GetFrame()
+    if self._frame then return self._frame end
+
+    local f = CreateFrame("Frame", nil, nil, "SecureHandlerShowHideTemplate")
+    Mixin(f, EABFlyoutFrameMixin)
+    f:Init()
+    f:HookScript("OnShow", function() self:OnShown() end)
+    f:HookScript("OnHide", function() self:OnHidden() end)
+
+    self:RegisterEvent("SPELL_FLYOUT_UPDATE")
+    self:RegisterEvent("PET_STABLE_UPDATE")
+    self:SetScript("OnEvent", self.OnEvent)
+
+    self._frame = f
+    return f
+end
+
+function EABFlyout:RegisterButton(button, owner)
+    local f = self:GetFrame()
+    -- Store a reference to the "real" parent button so the secure env
+    -- can reparent the flyout to the correct visual button
+    if owner then
+        SecureHandlerSetFrameRef(button, "_eabFlyOwner", owner)
+    end
+    f:WrapScript(button, "OnClick", INTERCEPT_CLICK)
+end
+
+function EABFlyout:OnEvent(event, arg1)
+    if event == "SPELL_FLYOUT_UPDATE" then
+        if arg1 then
+            if InCombatLockdown() then
+                self._pendingSync = true
+                self:RegisterEvent("PLAYER_REGEN_ENABLED")
+            else
+                self._frame:SyncSingleFlyout(arg1)
+            end
+        end
+        if self._frame then self._frame:ForVisible("Refresh") end
+    elseif event == "PET_STABLE_UPDATE" then
+        if InCombatLockdown() then
+            self._pendingSync = true
+            self:RegisterEvent("PLAYER_REGEN_ENABLED")
+        else
+            self._frame:SyncAllFlyouts()
+        end
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        if self._pendingSync then
+            self._frame:SyncAllFlyouts()
+            self._pendingSync = nil
+        end
+        self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+    elseif event == "CURRENT_SPELL_CAST_CHANGED" then
+        if self._frame then self._frame:ForVisible("RefreshState") end
+    elseif event == "SPELL_UPDATE_COOLDOWN" then
+        if self._frame then self._frame:ForVisible("RefreshCooldown") end
+    elseif event == "SPELL_UPDATE_USABLE" then
+        if self._frame then self._frame:ForVisible("RefreshUsable") end
+    end
+end
+
+function EABFlyout:OnShown()
+    if not self._flyoutVisible then
+        self._flyoutVisible = true
+        self:RegisterEvent("CURRENT_SPELL_CAST_CHANGED")
+        self:RegisterEvent("SPELL_UPDATE_COOLDOWN")
+        self:RegisterEvent("SPELL_UPDATE_USABLE")
+    end
+end
+
+function EABFlyout:OnHidden()
+    if self._flyoutVisible then
+        self._flyoutVisible = nil
+        self:UnregisterEvent("CURRENT_SPELL_CAST_CHANGED")
+        self:UnregisterEvent("SPELL_UPDATE_COOLDOWN")
+        self:UnregisterEvent("SPELL_UPDATE_USABLE")
+    end
+end
+
+-- Public API for checking flyout visibility (used by mouseover fade logic)
+function EABFlyout:IsVisible()
+    return self._frame and self._frame:IsVisible()
+end
+
+function EABFlyout:IsMouseOver(...)
+    return self._frame and self._frame:IsMouseOver(...)
+end
+
+function EABFlyout:GetParent()
+    return self._frame and self._frame:GetParent()
+end
 
 -- Get or create an action button for a given slot
 -- skipProtected: if true, skip SetParent/SetID/Show (used during combat reload;
@@ -913,6 +1705,11 @@ local function CreateBarFrame(info)
     local frame = CreateFrame("Frame", "EABBar_" .. key, UIParent, "SecureHandlerStateTemplate")
     frame:SetSize(1, 1)
     frame:SetPoint("CENTER")
+    -- Bar frames never need to intercept mouse clicks; only buttons do.
+    -- Motion is enabled later by the hover system for OnEnter/OnLeave.
+    if frame.SetMouseClickEnabled then
+        frame:SetMouseClickEnabled(false)
+    end
     frame._barKey = key
     frame._barInfo = info
 
@@ -955,7 +1752,7 @@ local function CreateBarFrame(info)
 end
 
 -------------------------------------------------------------------------------
---  Bar Setup â€” creates frames and buttons for each bar
+--  Bar Setup creates frames and buttons for each bar
 -------------------------------------------------------------------------------
 local function SetupBar(info, skipProtected)
     local key = info.key
@@ -1028,6 +1825,12 @@ local function SetupBar(info, skipProtected)
                 if btn.EnableMouseWheel then
                     btn:EnableMouseWheel(true)
                 end
+                -- Register parent button with our custom flyout system
+                -- (intercepts flyout clicks to avoid Blizzard taint path).
+                -- Stance and pet bar buttons don't have flyout actions.
+                if not info.isStance and not info.isPetBar then
+                    EABFlyout:RegisterButton(btn)
+                end
                 buttons[i] = btn
             end
         end
@@ -1037,10 +1840,12 @@ local function SetupBar(info, skipProtected)
 
     -- Store original button size before any shape/scale modifications.
     -- StanceButtons and PetActionButtons are 30x30; action buttons are 45x45.
+    -- Round to nearest integer to eliminate floating-point noise from Blizzard's
+    -- scaling — the intended sizes are always whole numbers.
     local btn1 = buttons[1]
     barBaseSize[key] = {
-        w = btn1 and btn1:GetWidth() or 45,
-        h = btn1 and btn1:GetHeight() or 45,
+        w = math.floor((btn1 and btn1:GetWidth() or 45) + 0.5),
+        h = math.floor((btn1 and btn1:GetHeight() or 45) + 0.5),
     }
 
     return frame, buttons
@@ -1058,7 +1863,7 @@ local function CaptureBlizzardDefaults()
 
     -- MainActionBar is the Edit Mode frame for Action Bar 1 in modern WoW.
     -- MainMenuBar no longer exists; the parent chain is:
-    -- ActionButton1 â†’ MainActionBarButtonContainer1 â†’ MainActionBar â†’ UIParent
+    -- ActionButton1 MainActionBarButtonContainer1 MainActionBar UIParent
     local mainActionBar = _G["MainActionBar"]
 
     for _, info in ipairs(BAR_CONFIG) do
@@ -1124,7 +1929,7 @@ local function CaptureBlizzardDefaults()
                 data.y = cy - (uiH / 2)
             end
 
-            -- Number of visible buttons â€” try Edit Mode setting 2 first
+            -- Number of visible buttons try Edit Mode setting 2 first
             if bar.GetSettingValue then
                 local ok, val = pcall(bar.GetSettingValue, bar, 2)
                 if ok and val and val >= 6 and val <= 12 then
@@ -1135,7 +1940,7 @@ local function CaptureBlizzardDefaults()
                 data.numIcons = bar.numButtonsShowable
             end
 
-            -- Number of rows â€” try Edit Mode setting 1 first
+            -- Number of rows try Edit Mode setting 1 first
             if bar.GetSettingValue then
                 local ok, val = pcall(bar.GetSettingValue, bar, 1)
                 if ok and val and val >= 1 and val <= 4 then
@@ -1213,15 +2018,16 @@ local function CaptureBlizzardDefaults()
 end
 
 -------------------------------------------------------------------------------
---  Layout Engine â€” positions buttons in a grid
+--  Layout Engine positions buttons in a grid
 -------------------------------------------------------------------------------
--- Snap a value to the nearest physical pixel at a given frame scale
+-- Snap a value to a whole number of physical pixels at the bar's effective scale.
+-- Uses the same approach as the border system: convert to physical pixels,
+-- round to nearest integer, convert back. Every element ends up exactly N
+-- physical pixels, eliminating sub-pixel drift between siblings.
 local function SnapForScale(x, barScale)
     if x == 0 then return 0 end
-    local m = PP.perfect / ((UIParent:GetScale() or 1) * (barScale or 1))
-    if m == 1 then return x end
-    local y = m > 1 and m or -m
-    return x - x % (x < 0 and y or -y)
+    local es = (UIParent:GetScale() or 1) * (barScale or 1)
+    return PP.SnapForES(x, es)
 end
 
 
@@ -1304,8 +2110,8 @@ local function ComputeBarLayout(key)
 
     local totalCols = isVertical and numRows or stride
     local totalRows = isVertical and stride or numRows
-    local frameW = totalCols * btnW + (totalCols - 1) * padding
-    local frameH = totalRows * btnH + (totalRows - 1) * padding
+    local frameW = SnapForScale(totalCols * btnW + (totalCols - 1) * padding, barScale)
+    local frameH = SnapForScale(totalRows * btnH + (totalRows - 1) * padding, barScale)
     return result, max(frameW, 1), max(frameH, 1)
 end
 
@@ -1397,10 +2203,11 @@ local function LayoutBar(key)
 
             if not showEmpty and not gridShown and not ButtonHasAction(btn, info.blizzBtnPrefix) then
                 btn:SetAlpha(0)
+                btn:Hide()
             else
                 -- Don't override alpha here; mouseover system handles it
+                btn:Show()
             end
-            btn:Show()
         end
     end
 
@@ -1410,10 +2217,47 @@ local function LayoutBar(key)
     local frameW = totalCols * btnW + (totalCols - 1) * padding
     local frameH = totalRows * btnH + (totalRows - 1) * padding
     frame:SetSize(max(frameW, 1), max(frameH, 1))
+
+    -- Set flyoutDirection on every button based on bar orientation and actual
+    -- screen position. Divide the screen into thirds on each axis and pick the
+    -- direction that opens away from the nearest screen edge.
+    local flyDir
+    do
+        local cx, cy = frame:GetCenter()
+        local uiW = UIParent:GetWidth()
+        local uiH = UIParent:GetHeight()
+        local uiScale = UIParent:GetEffectiveScale()
+        local fScale  = frame:GetEffectiveScale()
+        -- Convert to UIParent coordinate space
+        if cx and cy then
+            cx = cx * fScale / uiScale
+            cy = cy * fScale / uiScale
+        end
+        if cx and cy then
+            local thirdW = uiW / 3
+            local thirdH = uiH / 3
+            if isVertical then
+                -- Vertical bar: flyout goes left if bar is in the right third, else right
+                flyDir = (cx > thirdW * 2) and "LEFT" or "RIGHT"
+            else
+                -- Horizontal bar: flyout goes down if bar is in the top third, else up
+                flyDir = (cy > thirdH * 2) and "DOWN" or "UP"
+            end
+        else
+            -- Frame not yet on screen — safe fallback
+            flyDir = isVertical and "RIGHT" or "UP"
+        end
+    end
+    for i = 1, #buttons do
+        local btn = buttons[i]
+        if btn and not InCombatLockdown() then
+            btn:SetAttribute("flyoutDirection", flyDir)
+        end
+    end
 end
 
 -------------------------------------------------------------------------------
---  Visual Customization â€” Button Appearance
+--  Visual Customization Button Appearance
 -------------------------------------------------------------------------------
 local function HideSelfDeferred(self)
     -- Reuse a cached closure per frame to avoid allocation on every OnShow
@@ -1459,6 +2303,13 @@ end
 local function MakeButtonSquare(btn)
     if btn._eabSquared then return end
     HideBorder(btn)
+    -- Ensure the button has GetPopupDirection for Blizzard's SpellFlyout system.
+    -- ActionBarButtonTemplate may not always inherit this from FlyoutButtonMixin.
+    if not btn.GetPopupDirection then
+        btn.GetPopupDirection = function(self)
+            return self:GetAttribute("flyoutDirection") or "UP"
+        end
+    end
     if btn.NormalTexture and not btn._eabNTHooked then
         btn.NormalTexture:HookScript("OnShow", HideSelfDeferred)
         btn._eabNTHooked = true
@@ -1532,7 +2383,6 @@ local function MakeButtonSquare(btn)
             local bg = btn:CreateTexture(nil, "BACKGROUND", nil, -1)
             bg:SetAllPoints(btn)
             bg:SetColorTexture(0.15, 0.15, 0.15, 0.5)
-            if PP then PP.DisablePixelSnap(bg) end
             btn._eabSlotBG = bg
         end
     end
@@ -1575,30 +2425,19 @@ end
 local function EnsureBorders(btn)
     if btn._eabBorders then return btn._eabBorders end
     local PP = EllesmereUI and EllesmereUI.PP
-    local b = {}
-    for i = 1, 4 do
-        b[i] = btn:CreateTexture(nil, "OVERLAY", nil, -1)
-        b[i]:SetColorTexture(0, 0, 0, 1)
-        if PP then PP.DisablePixelSnap(b[i]) end
+    if PP then
+        PP.CreateBorder(btn, 0, 0, 0, 1, 1, "OVERLAY", -1)
+        btn._eabBorders = btn._ppBorders
     end
-    btn._eabBorders = b
-    PP.Point(b[1], "TOPLEFT", btn, "TOPLEFT", 0, 0)
-    PP.Point(b[1], "TOPRIGHT", btn, "TOPRIGHT", 0, 0)
-    PP.Point(b[2], "BOTTOMLEFT", btn, "BOTTOMLEFT", 0, 0)
-    PP.Point(b[2], "BOTTOMRIGHT", btn, "BOTTOMRIGHT", 0, 0)
-    PP.Point(b[3], "TOPLEFT", b[1], "BOTTOMLEFT", 0, 0)
-    PP.Point(b[3], "BOTTOMLEFT", b[2], "TOPLEFT", 0, 0)
-    PP.Point(b[4], "TOPRIGHT", b[1], "BOTTOMRIGHT", 0, 0)
-    PP.Point(b[4], "BOTTOMRIGHT", b[2], "TOPRIGHT", 0, 0)
-    return b
+    return btn._eabBorders
 end
 
 local function ApplyButtonBorders(btn, on, cr, cg, cb, ca, sz, zoom)
     MakeButtonSquare(btn)
+    local PP = EllesmereUI and EllesmereUI.PP
     if not on then
         if btn._eabBorders then
-            local b = btn._eabBorders
-            if b[1]:IsShown() then b[1]:Hide(); b[2]:Hide(); b[3]:Hide(); b[4]:Hide() end
+            PP.HideBorder(btn)
         end
         btn._eabBorderKey = nil
     else
@@ -1606,22 +2445,14 @@ local function ApplyButtonBorders(btn, on, cr, cg, cb, ca, sz, zoom)
         local stateKey = cr * 1000000 + cg * 10000 + cb * 100 + ca + sz * 0.001 + zoom * 10000000 + es * 0.0001
         if btn._eabBorderKey == stateKey then return end
         btn._eabBorderKey = stateKey
-        local b = EnsureBorders(btn)
-        for i = 1, 4 do
-            b[i]:SetColorTexture(cr, cg, cb, ca)
-            local PP = EllesmereUI and EllesmereUI.PP
-            if PP then PP.DisablePixelSnap(b[i]) end
-            if not (btn._eabShapeMask and btn._eabShapeMask:IsShown()) then b[i]:Show() end
+        EnsureBorders(btn)
+        PP.UpdateBorder(btn, sz, cr, cg, cb, ca)
+        local b = btn._eabBorders
+        if b then
+            if not (btn._eabShapeMask and btn._eabShapeMask:IsShown()) then
+                PP.ShowBorder(btn)
+            end
         end
-        -- Snap border size to physical pixels at the button's effective scale
-        local bdrMult = PP.perfect / es
-        local snappedSz = sz
-        if bdrMult ~= 1 and sz ~= 0 then
-            local y = bdrMult > 1 and bdrMult or -bdrMult
-            snappedSz = sz - sz % (sz < 0 and y or -y)
-        end
-        b[1]:SetHeight(snappedSz); b[2]:SetHeight(snappedSz)
-        b[3]:SetWidth(snappedSz); b[4]:SetWidth(snappedSz)
     end
     if zoom > 0 then
         local icon = btn.icon or btn.Icon
@@ -1697,7 +2528,7 @@ local function ApplyShapeToButton(btn, shape, brdOn, brdR, brdG, brdB, brdA, brd
             omask:SetSize(0.001, 0.001)
             omask:Hide()
         elseif btn._eabShapeMask then
-            -- Overlays were on the main mask (no border case) â€” clean them off
+            -- Overlays were on the main mask (no border case) clean them off
             local mask = btn._eabShapeMask
             if btn.HighlightTexture then pcall(btn.HighlightTexture.RemoveMaskTexture, btn.HighlightTexture, mask) end
             if btn.PushedTexture then pcall(btn.PushedTexture.RemoveMaskTexture, btn.PushedTexture, mask) end
@@ -1758,7 +2589,7 @@ local function ApplyShapeToButton(btn, shape, brdOn, brdR, brdG, brdB, brdA, brd
         end
         -- Show square borders
         if btn._eabBorders then
-            for i = 1, 4 do btn._eabBorders[i]:Show() end
+            PP.ShowBorder(btn)
         end
         -- Re-enable Blizzard's Border texture (was hidden for custom shapes)
         if btn.Border then
@@ -1842,7 +2673,7 @@ local function ApplyShapeToButton(btn, shape, brdOn, brdR, brdG, brdB, brdA, brd
         PP.Point(overlayMask, "BOTTOMRIGHT", btn, "BOTTOMRIGHT", -inset, inset)
         overlayMask:Show()
     else
-        -- No border â€” overlays share the main mask, hide overlay mask if it exists
+        -- No border overlays share the main mask, hide overlay mask if it exists
         if btn._eabOverlayMask then btn._eabOverlayMask:Hide() end
         overlayMask = mask
     end
@@ -1853,7 +2684,7 @@ local function ApplyShapeToButton(btn, shape, brdOn, brdR, brdG, brdB, brdA, brd
     if btn.CheckedTexture then pcall(btn.CheckedTexture.AddMaskTexture, btn.CheckedTexture, overlayMask) end
     if btn.NewActionTexture then pcall(btn.NewActionTexture.AddMaskTexture, btn.NewActionTexture, overlayMask) end
     if btn.Flash then pcall(btn.Flash.AddMaskTexture, btn.Flash, overlayMask) end
-    -- Hide Blizzard's item quality border (Dragonflight+) for custom shapes â€”
+    -- Hide Blizzard's item quality border (Dragonflight+) for custom shapes
     -- it uses a round atlas that doesn't match non-square shapes.
     if btn.Border then
         btn.Border:Hide()
@@ -1891,7 +2722,7 @@ local function ApplyShapeToButton(btn, shape, brdOn, brdR, brdG, brdB, brdA, brd
 
     -- Hide square borders
     if btn._eabBorders then
-        for i = 1, 4 do btn._eabBorders[i]:Hide() end
+        PP.HideBorder(btn)
     end
 
     -- Shape border texture
@@ -1984,7 +2815,7 @@ local function ApplyShapeToButton(btn, shape, brdOn, brdR, brdG, brdB, brdA, brd
 end
 
 -------------------------------------------------------------------------------
---  EAB Methods â€” Apply functions called by the options UI
+--  EAB Methods Apply functions called by the options UI
 -------------------------------------------------------------------------------
 function EAB:ApplyBordersForBar(barKey)
     if not self.db then return end
@@ -2063,6 +2894,9 @@ function EAB:ApplyScaleForBar(barKey)
     local scale = s.barScale or 1.0
     if scale < 0.1 then scale = 0.1 end
     frame:SetScale(scale)
+    -- Re-snap borders after scale change so they stay pixel-perfect
+    local PP = EllesmereUI and EllesmereUI.PP
+    if PP and PP.ResnapAllBorders then PP.ResnapAllBorders() end
 end
 
 -- Same as ApplyScaleForBar but preserves the bar's visual center.
@@ -2102,6 +2936,9 @@ function EAB:ApplyScalePreserveCenter(barKey)
     else
         frame:SetScale(scale)
     end
+    -- Re-snap borders after scale change so they stay pixel-perfect
+    local PP = EllesmereUI and EllesmereUI.PP
+    if PP and PP.ResnapAllBorders then PP.ResnapAllBorders() end
 end
 
 function EAB:ApplyPaddingForBar(barKey)
@@ -2151,7 +2988,7 @@ function EAB:ApplyFontsForBar(barKey)
     local fontPath = EllesmereUI and EllesmereUI.GetFontPath and EllesmereUI.GetFontPath("actionBars") or FONT_PATH
     local hideKB = s.hideKeybind
     local kbSize = s.keybindFontSize or 12
-    -- Stance/pet bar buttons are smaller (30px vs 45px) â€” shrink keybind text
+    -- Stance/pet bar buttons are smaller (30px vs 45px) shrink keybind text
     -- by 2px so it doesn't overwhelm the icon.
     local info = BAR_LOOKUP[barKey]
     if info and (info.isStance or info.isPetBar) then kbSize = max(kbSize - 2, 6) end
@@ -2293,7 +3130,7 @@ function EAB:ApplyAlwaysShowButtons(barKey)
                 btn._eabSlotBG:SetShown(visible)
             end
             if btn._eabBorders and not (btn._eabShapeMask and btn._eabShapeMask:IsShown()) then
-                for j = 1, 4 do btn._eabBorders[j]:SetShown(visible) end
+                btn._eabBorders:SetShown(visible)
             end
             if btn._eabShapeBorder then
                 btn._eabShapeBorder:SetShown(visible and btn._eabShapeBorder._eabWantsShow == true)
@@ -2301,7 +3138,10 @@ function EAB:ApplyAlwaysShowButtons(barKey)
 
             if not visible then
                 btn:SetAlpha(0)
+                -- Actually hide the frame so it doesn't eat mouse clicks
+                if not InCombatLockdown() then btn:Hide() end
             else
+                if not InCombatLockdown() then btn:Show() end
                 if not s.mouseoverEnabled then
                     btn:SetAlpha(1)
                 end
@@ -2322,6 +3162,207 @@ function EAB:ApplyAlwaysShowButtons(barKey)
     -- OnEnter handler already checks cursor proximity to visible buttons,
     -- so shrinking the frame is unnecessary and can misposition bars
     -- whose anchor point isn't TOPLEFT.
+end
+
+-------------------------------------------------------------------------------
+--  Out-of-Range Icon Coloring
+--
+--  Uses the retail ACTION_RANGE_CHECK_UPDATE event to tint action button
+--  icons when the target is out of range.  Each slot is opted-in via
+--  C_ActionBar.EnableActionRangeCheck so the client fires the event only
+--  for slots we care about.
+-------------------------------------------------------------------------------
+local _rangeSlots = {}          -- [actionSlot] = true  (slots with range checking enabled)
+local _rangeOutOfRange = {}     -- [actionSlot] = true  (currently out of range)
+local _rangeEventFrame          -- lazy-created event frame
+
+-- Resolve the action slot for a button (handles paging for MainBar)
+local function GetButtonActionSlot(btn)
+    if not btn then return nil end
+    local action = btn.action
+    if action and type(action) == "number" and action > 0 then return action end
+    return nil
+end
+
+-- Apply or remove the range tint on a single button
+local function ApplyRangeTint(btn, outOfRange, barSettings)
+    local ico = btn.icon or btn.Icon
+    if not ico then return end
+    if outOfRange and barSettings.outOfRangeColoring then
+        local c = barSettings.outOfRangeColor or { r = 0.7, g = 0.2, b = 0.2 }
+        ico:SetVertexColor(c.r, c.g, c.b)
+        btn._eabRangeTinted = true
+    elseif btn._eabRangeTinted then
+        ico:SetVertexColor(1, 1, 1)
+        btn._eabRangeTinted = nil
+    end
+end
+
+-- Enable range checking for all active button slots on a bar
+local function EnableRangeCheckForBar(barKey)
+    local buttons = barButtons[barKey]
+    if not buttons then return end
+    local s = EAB.db.profile.bars[barKey]
+    if not s or not s.outOfRangeColoring then return end
+    for _, btn in ipairs(buttons) do
+        local slot = GetButtonActionSlot(btn)
+        if slot and not _rangeSlots[slot] then
+            _rangeSlots[slot] = true
+            if C_ActionBar and C_ActionBar.EnableActionRangeCheck then
+                pcall(C_ActionBar.EnableActionRangeCheck, slot, true)
+            end
+        end
+    end
+end
+
+-- Disable range checking for all slots on a bar and clear tints
+local function DisableRangeCheckForBar(barKey)
+    local buttons = barButtons[barKey]
+    if not buttons then return end
+    local s = EAB.db.profile.bars[barKey]
+    for _, btn in ipairs(buttons) do
+        local slot = GetButtonActionSlot(btn)
+        if slot and _rangeSlots[slot] then
+            _rangeSlots[slot] = nil
+            _rangeOutOfRange[slot] = nil
+            if C_ActionBar and C_ActionBar.EnableActionRangeCheck then
+                pcall(C_ActionBar.EnableActionRangeCheck, slot, false)
+            end
+        end
+        if btn._eabRangeTinted then
+            local ico = btn.icon or btn.Icon
+            if ico then ico:SetVertexColor(1, 1, 1) end
+            btn._eabRangeTinted = nil
+        end
+    end
+end
+
+-- Refresh range state for all bars (called from ApplyAll and on setting change)
+function EAB:ApplyRangeColoring()
+    for _, info in ipairs(BAR_CONFIG) do
+        local key = info.key
+        local s = self.db.profile.bars[key]
+        if s and s.outOfRangeColoring then
+            EnableRangeCheckForBar(key)
+        else
+            DisableRangeCheckForBar(key)
+        end
+    end
+
+    -- Hook Blizzard's usability update so our range tint is re-applied
+    -- after Blizzard resets the icon vertex color.
+    for _, info in ipairs(BAR_CONFIG) do
+        local btns = barButtons[info.key]
+        if btns then
+            for _, btn in ipairs(btns) do
+                if not btn._eabRangeHooked and btn.UpdateUsable then
+                    btn._eabRangeHooked = true
+                    hooksecurefunc(btn, "UpdateUsable", function(self)
+                        if not self._eabRangeTinted then return end
+                        local slot = GetButtonActionSlot(self)
+                        if slot and _rangeOutOfRange[slot] then
+                            local s
+                            for _, inf in ipairs(BAR_CONFIG) do
+                                local bs = barButtons[inf.key]
+                                if bs then
+                                    for _, b in ipairs(bs) do
+                                        if b == self then s = EAB.db.profile.bars[inf.key]; break end
+                                    end
+                                end
+                                if s then break end
+                            end
+                            if s and s.outOfRangeColoring then
+                                ApplyRangeTint(self, true, s)
+                            end
+                        end
+                    end)
+                end
+            end
+        end
+    end
+    -- Set up the event listener if not already created
+    if not _rangeEventFrame then
+        _rangeEventFrame = CreateFrame("Frame")
+        _rangeEventFrame:RegisterEvent("ACTION_RANGE_CHECK_UPDATE")
+        _rangeEventFrame:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
+        _rangeEventFrame:RegisterEvent("ACTIONBAR_PAGE_CHANGED")
+        _rangeEventFrame:RegisterEvent("ACTION_USABLE_CHANGED")
+        _rangeEventFrame:SetScript("OnEvent", function(_, event, slot, inRange, checksRange)
+            if event == "ACTION_RANGE_CHECK_UPDATE" then
+                if not _rangeSlots[slot] then return end
+                local wasOut = _rangeOutOfRange[slot]
+                local isOut = checksRange and not inRange
+                if isOut then
+                    _rangeOutOfRange[slot] = true
+                else
+                    _rangeOutOfRange[slot] = nil
+                end
+                -- Only update visuals when state actually changes
+                if (wasOut ~= nil) == (isOut) then return end
+                for _, info in ipairs(BAR_CONFIG) do
+                    local btns = barButtons[info.key]
+                    local s = EAB.db.profile.bars[info.key]
+                    if btns and s and s.outOfRangeColoring then
+                        for _, btn in ipairs(btns) do
+                            if GetButtonActionSlot(btn) == slot then
+                                ApplyRangeTint(btn, isOut, s)
+                            end
+                        end
+                    end
+                end
+            elseif event == "ACTIONBAR_SLOT_CHANGED" then
+                -- When a slot changes (paging, drag, etc.), re-enable range
+                -- checking for the new action and clear stale tint
+                if slot and _rangeSlots[slot] then
+                    _rangeOutOfRange[slot] = nil
+                    if C_ActionBar and C_ActionBar.EnableActionRangeCheck then
+                        pcall(C_ActionBar.EnableActionRangeCheck, slot, true)
+                    end
+                end
+                -- Re-enable for any new slots that appeared
+                for _, info in ipairs(BAR_CONFIG) do
+                    local s = EAB.db.profile.bars[info.key]
+                    if s and s.outOfRangeColoring then
+                        EnableRangeCheckForBar(info.key)
+                    end
+                end
+            elseif event == "ACTIONBAR_PAGE_CHANGED" then
+                -- Page changed: clear all range state and re-enable for new slots
+                wipe(_rangeOutOfRange)
+                for _, info in ipairs(BAR_CONFIG) do
+                    local s = EAB.db.profile.bars[info.key]
+                    if s and s.outOfRangeColoring then
+                        local btns = barButtons[info.key]
+                        if btns then
+                            for _, btn in ipairs(btns) do
+                                if btn._eabRangeTinted then
+                                    local ico = btn.icon or btn.Icon
+                                    if ico then ico:SetVertexColor(1, 1, 1) end
+                                    btn._eabRangeTinted = nil
+                                end
+                            end
+                        end
+                        EnableRangeCheckForBar(info.key)
+                    end
+                end
+            elseif event == "ACTION_USABLE_CHANGED" then
+                -- Blizzard resets icon vertex colors on usability changes;
+                -- re-apply range tint on any out-of-range buttons.
+                for _, info in ipairs(BAR_CONFIG) do
+                    local btns = barButtons[info.key]
+                    local s = EAB.db.profile.bars[info.key]
+                    if btns and s and s.outOfRangeColoring then
+                        for _, btn in ipairs(btns) do
+                            local bSlot = GetButtonActionSlot(btn)
+                            if bSlot and _rangeOutOfRange[bSlot] then
+                                ApplyRangeTint(btn, true, s)
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+    end
 end
 
 -------------------------------------------------------------------------------
@@ -2390,7 +3431,7 @@ local function AttachHoverHooks(barKey)
         C_Timer_After(0.1, function()
             if state.isHovered then return end
             -- Keep bar visible while a spell flyout spawned from this bar is open
-            if SpellFlyout and SpellFlyout:IsShown() and SpellFlyout:IsMouseOver() then return end
+            if EABFlyout:IsVisible() and EABFlyout:IsMouseOver() then return end
             local s = EAB.db.profile.bars[barKey]
             if s and s.mouseoverEnabled and state.fadeDir ~= "out" then
                 state.fadeDir = "out"
@@ -2400,15 +3441,18 @@ local function AttachHoverHooks(barKey)
     end
 
     -- When the flyout closes, re-evaluate whether the bar should fade out
-    if SpellFlyout then
-        SpellFlyout:HookScript("OnHide", function()
-            if state.isHovered then return end
-            local s = EAB.db.profile.bars[barKey]
-            if s and s.mouseoverEnabled and state.fadeDir ~= "out" then
-                state.fadeDir = "out"
-                FadeTo(frame, 0, s.mouseoverSpeed or 0.15)
-            end
-        end)
+    do
+        local flyFrame = EABFlyout:GetFrame()
+        if flyFrame then
+            flyFrame:HookScript("OnHide", function()
+                if state.isHovered then return end
+                local s = EAB.db.profile.bars[barKey]
+                if s and s.mouseoverEnabled and state.fadeDir ~= "out" then
+                    state.fadeDir = "out"
+                    FadeTo(frame, 0, s.mouseoverSpeed or 0.15)
+                end
+            end)
+        end
     end
 
     frame:HookScript("OnEnter", OnEnter)
@@ -2456,6 +3500,124 @@ function EAB:RefreshMouseover()
 end
 
 -------------------------------------------------------------------------------
+--  Visibility Condition Builder
+--  Generates the correct macro condition string for RegisterStateDriver
+--  based on bar type and user settings (combat show/hide).
+--
+--  Bar type rules:
+--    MainBar (bar 1):  Stays visible during vehicle/override (paging handles
+--                      showing the correct actions).  Hides during pet battle.
+--    Bars 2-8:         Hide during vehicle UI, pet battle, and override bar
+--                      (only bar 1 pages to show override/vehicle actions).
+--    StanceBar:        Hide during vehicle UI and pet battle.
+--    PetBar:           Hide during pet battle.  Only show when the player has
+--                      a pet and is not in a vehicle/override/possess state.
+-------------------------------------------------------------------------------
+local function BuildVisibilityString(info, s)
+    local key = info.key
+
+    -- Pet bar has unique logic: it only shows when a pet is active and
+    -- the player is not in a vehicle/override/possess state.
+    if info.isPetBar then
+        local petShow
+        if s.combatShowEnabled then
+            petShow = "[combat] show; hide"
+        elseif s.combatHideEnabled then
+            petShow = "[combat] hide; show"
+        else
+            petShow = "show"
+        end
+        return "[petbattle] hide; [novehicleui,pet,nooverridebar,nopossessbar] " .. petShow .. "; hide"
+    end
+
+    -- Build the hide-prefix based on bar type
+    local hidePrefix
+    if key == "MainBar" then
+        -- MainBar pages to vehicle/override actions -- only hide for pet battle
+        hidePrefix = "[petbattle] hide; "
+    elseif info.isStance then
+        -- Stance bar: hide in vehicles and pet battles
+        hidePrefix = "[vehicleui][petbattle] hide; "
+    else
+        -- All other action bars (2-8): hide in vehicles, pet battles, and
+        -- override bar (only bar 1 pages to show those actions)
+        hidePrefix = "[vehicleui][petbattle][overridebar] hide; "
+    end
+
+    -- Append combat conditions
+    if s.combatShowEnabled then
+        return hidePrefix .. "[combat] show; hide"
+    elseif s.combatHideEnabled then
+        return hidePrefix .. "[combat] hide; show"
+    end
+    return hidePrefix .. "show"
+end
+
+-------------------------------------------------------------------------------
+--  Extra Bar Visibility (Pet Battle / Vehicle Hiding)
+--  MicroBar, BagBar, data bars, and Blizzard movable frames are not
+--  SecureHandlerStateTemplate frames, so we use a single secure proxy
+--  frame that monitors [petbattle] and [vehicleui] conditions and calls
+--  methods to show/hide the extra bar frames.
+-------------------------------------------------------------------------------
+local _extraBarVisProxy  -- created once, reused
+
+function EAB:ApplyExtraBarVisibility()
+    if not _extraBarVisProxy then
+        _extraBarVisProxy = CreateFrame("Frame", nil, UIParent, "SecureHandlerStateTemplate")
+        _extraBarVisProxy:SetAttribute("_onstate-extravis", [[
+            self:CallMethod("OnExtraVisChanged", newstate)
+        ]])
+        _extraBarVisProxy.OnExtraVisChanged = function(_, state)
+            -- state is "hide" during pet battle, "show" otherwise
+            local shouldHide = (state == "hide")
+            for _, info in ipairs(EXTRA_BARS) do
+                local key = info.key
+                local s = EAB.db and EAB.db.profile.bars[key]
+                if s and not s.alwaysHidden then
+                    local frame
+                    if info.isDataBar then
+                        frame = dataBarFrames[key]
+                    elseif info.isBlizzardMovable then
+                        frame = blizzMovableHolders[key]
+                    else
+                        -- MicroBar, BagBar: hide the Blizzard frame directly
+                        frame = _G[info.frameName]
+                    end
+                    if frame then
+                        if shouldHide then
+                            frame:Hide()
+                        else
+                            frame:Show()
+                            -- Restore correct alpha: mouseover bars fade to 0 when not hovered,
+                            -- so Show() alone leaves them invisible after a pet battle ends.
+                            if s.mouseoverEnabled then
+                                local hstate = hoverStates[key]
+                                local isHovered = hstate and hstate.isHovered
+                                if not isHovered then
+                                    frame:SetAlpha(0)
+                                else
+                                    frame:SetAlpha(s.mouseoverAlpha or 1)
+                                end
+                            else
+                                frame:SetAlpha(s.mouseoverAlpha or 1)
+                            end
+                            -- Data bars may need to re-evaluate (XP at max, etc.)
+                            if info.isDataBar then
+                                local df = dataBarFrames[key]
+                                if df and df._updateFunc then df._updateFunc() end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    -- Register the state driver: hide during pet battle, show otherwise
+    RegisterStateDriver(_extraBarVisProxy, "extravis", "[petbattle] hide; show")
+end
+
+-------------------------------------------------------------------------------
 --  Combat Show/Hide, Always Hidden, Click-Through, Housing
 -------------------------------------------------------------------------------
 function EAB:ApplyCombatVisibility()
@@ -2465,25 +3627,19 @@ function EAB:ApplyCombatVisibility()
         if not s then break end
         local frame = barFrames[key] or (info.isDataBar and dataBarFrames[key]) or (info.isBlizzardMovable and blizzMovableHolders[key]) or (extraBarHolders[key]) or (info.visibilityOnly and _G[info.frameName])
         if frame and not info.visibilityOnly then
-            -- Always-hidden bars: no attribute driver at all â€” ApplyAlwaysHidden
+            -- Always-hidden bars: no attribute driver -- ApplyAlwaysHidden
             -- owns their visibility entirely.
             if s.alwaysHidden then
                 UnregisterAttributeDriver(frame, "state-visibility")
             else
-                -- Hide during full vehicle UI so Blizzard's vehicle bar shows.
-                -- Override bar (quest mini-vehicles) pages bar 1 to show
-                -- override actions â€” no need to hide.
-                local vehiclePrefix = "[vehicleui] hide; "
-                if s.combatShowEnabled then
-                    RegisterAttributeDriver(frame, "state-visibility", vehiclePrefix .. "[combat] show; hide")
-                elseif s.combatHideEnabled then
-                    RegisterAttributeDriver(frame, "state-visibility", vehiclePrefix .. "[combat] hide; show")
-                else
-                    RegisterAttributeDriver(frame, "state-visibility", vehiclePrefix .. "show")
-                end
+                RegisterAttributeDriver(frame, "state-visibility", BuildVisibilityString(info, s))
             end
         end
     end
+    -- Apply pet battle / vehicle hiding for extra bars (MicroBar, BagBar,
+    -- data bars).  These use a dedicated secure proxy since they are not
+    -- SecureHandlerStateTemplate frames themselves.
+    self:ApplyExtraBarVisibility()
 end
 
 function EAB:ApplyAlwaysHidden()
@@ -2504,22 +3660,20 @@ function EAB:ApplyAlwaysHidden()
                 SafeEnableMouse(frame, false)
             else
                 -- Re-register the attribute driver so combat visibility and
-                -- vehicle hide work again.  This mirrors ApplyCombatVisibility
-                -- logic so the two functions stay in sync.
+                -- vehicle/pet battle/override hiding work again.
                 if not info.visibilityOnly and not InCombatLockdown() then
-                    local vehiclePrefix = "[vehicleui] hide; "
-                    if s.combatShowEnabled then
-                        RegisterAttributeDriver(frame, "state-visibility", vehiclePrefix .. "[combat] show; hide")
-                    elseif s.combatHideEnabled then
-                        RegisterAttributeDriver(frame, "state-visibility", vehiclePrefix .. "[combat] hide; show")
-                    else
-                        RegisterAttributeDriver(frame, "state-visibility", vehiclePrefix .. "show")
-                    end
+                    RegisterAttributeDriver(frame, "state-visibility", BuildVisibilityString(info, s))
                 end
                 if not s.combatShowEnabled then
                     frame:Show()
                 end
-                SafeEnableMouse(frame, not s.clickThrough)
+                -- Action bar frames only need mouse motion (hover detection);
+                -- clicks pass through to buttons or frames behind.
+                if barFrames[key] and frame == barFrames[key] then
+                    SafeEnableMouseMotionOnly(frame, not s.clickThrough)
+                else
+                    SafeEnableMouse(frame, not s.clickThrough)
+                end
                 -- Data bars may need to re-hide (e.g. XP at max level, Rep with no watched faction)
                 if info.isDataBar and frame._updateFunc then
                     frame._updateFunc()
@@ -2528,6 +3682,7 @@ function EAB:ApplyAlwaysHidden()
         end
     end
 end
+
 
 function EAB:ApplySmartNumIcons(barKey)
     -- Only applies to action bars 1-8 (not stance/pet/extra bars)
@@ -2589,7 +3744,9 @@ function EAB:ApplyClickThroughForBar(barKey)
     if not buttons then return end
 
     local enable = not s.clickThrough
-    SafeEnableMouse(frame, enable)
+    -- Bar frame only needs mouse motion (for hover detection); clicks pass through
+    -- to the buttons or to frames behind the bar.
+    SafeEnableMouseMotionOnly(frame, enable)
     for i = 1, #buttons do
         local btn = buttons[i]
         if btn then SafeEnableMouse(btn, enable) end
@@ -2745,7 +3902,7 @@ local PROC_START_TYPES = {
 ns.PROC_START_TYPES = PROC_START_TYPES
 
 -------------------------------------------------------------------------------
---  Glow Engines â€” provided by shared EllesmereUI_Glows.lua
+--  Glow Engines provided by shared EllesmereUI_Glows.lua
 -------------------------------------------------------------------------------
 local _G_Glows = EllesmereUI.Glows
 local StartProceduralAnts = _G_Glows.StartProceduralAnts
@@ -3295,7 +4452,7 @@ function EAB:ApplyMiscTextures()
             for i = 1, #buttons do
                 local btn = buttons[i]
                 if btn and btn._eabSquared then
-                    -- Do NOT color CheckedTexture or Border â€” Blizzard uses
+                    -- Do NOT color CheckedTexture or Border Blizzard uses
                     -- these for item rarity borders (green/blue/purple) on
                     -- active trinkets / equipped items.
                     if btn.NewActionTexture then btn.NewActionTexture:SetDesaturated(true); btn.NewActionTexture:SetVertexColor(cr, cg, cb, ca) end
@@ -3376,9 +4533,16 @@ local function GetOrCreateBindButton(btn)
     bind:EnableMouseWheel(true)
     bind:RegisterForClicks("AnyUp", "AnyDown")
 
+    -- Register with our custom flyout system (intercepts flyout clicks
+    -- in the secure env so they never reach Blizzard's taint-prone path).
+    -- The owner ref lets the flyout frame reparent to the visible button.
+    EABFlyout:RegisterButton(bind, btn)
+
     -- Translate HOTKEY virtual click into LeftButton inside the secure env.
     -- Only active when keys are bound with "HOTKEY" click type (key-down mode).
     -- When key-down is off, keys are bound as "LeftButton" so this never fires.
+    -- For flyout actions, translate to LeftButton so the flyout WrapScript
+    -- (registered earlier in the chain) can intercept and open the flyout.
     _bindController:WrapScript(bind, "OnClick", [[
         if button == "HOTKEY" then
             return "LeftButton"
@@ -3443,11 +4607,22 @@ local function UpdateKeybinds()
                             ClearOverrideBindings(bind)
                             local bindName = bind:GetName()
                             if bindName then
+                                -- Only override a key if no other addon has already
+                                -- claimed it with an override binding (e.g. OPie rings).
+                                -- GetBindingAction with checkOverride=true returns the
+                                -- current override action; if it's a CLICK on a frame
+                                -- that isn't ours, another addon owns it — skip.
                                 if key1 then
-                                    SetOverrideBindingClick(bind, false, key1, bindName, clickType)
+                                    local current = GetBindingAction(key1, true)
+                                    if not current or current == "" or current == bindingAction or current:find(bindName) then
+                                        SetOverrideBindingClick(bind, false, key1, bindName, clickType)
+                                    end
                                 end
                                 if key2 then
-                                    SetOverrideBindingClick(bind, false, key2, bindName, clickType)
+                                    local current = GetBindingAction(key2, true)
+                                    if not current or current == "" or current == bindingAction or current:find(bindName) then
+                                        SetOverrideBindingClick(bind, false, key2, bindName, clickType)
+                                    end
                                 end
                             end
                         end
@@ -3482,7 +4657,7 @@ end
 local function ClearKeybindsForVehicle()
     if _vehicleBindsCleared then return end
     _vehicleBindsCleared = true
-    -- ClearOverrideBindings is not a protected function and can be called in combat
+    if InCombatLockdown() then return end
     for _, info in ipairs(BAR_CONFIG) do
         local btns = barButtons[info.key]
         if btns then
@@ -3529,7 +4704,7 @@ RegisterStateDriver(_vehicleStateFrame, "vehicleui", "[vehicleui] invehicle; nov
 --  Vehicle Exit Button
 --  Reparent Blizzard's MainMenuBarVehicleLeaveButton so it stays visible
 --  when we hide the default action bars.  Anchor it above the top-right of
---  action bar 1.  This is a secure button â€” no taint, works in combat.
+--  action bar 1.  This is a secure button no taint, works in combat.
 --
 --  Phase 1 (file scope): strip taint-causing scripts, reparent to UIParent,
 --  set a temporary fallback anchor, hook SetPoint to block Blizzard repos.
@@ -3582,7 +4757,7 @@ if IsHouseEditorActive then
     _housingEventFrame:RegisterEvent("HOUSE_EDITOR_MODE_CHANGED")
     _housingEventFrame:SetScript("OnEvent", function()
         if IsHouseEditorActive() then
-            -- House editor opened â€” clear our override bindings
+            -- House editor opened clear our override bindings
             if _housingBindsCleared then return end
             _housingBindsCleared = true
             if not InCombatLockdown() then
@@ -3598,7 +4773,7 @@ if IsHouseEditorActive then
                 end
             end
         else
-            -- House editor closed â€” restore our override bindings
+            -- House editor closed restore our override bindings
             if not _housingBindsCleared then return end
             _housingBindsCleared = false
             if not InCombatLockdown() then
@@ -3634,12 +4809,13 @@ local function OnGridChange()
                     if btn._eabSlotBG then btn._eabSlotBG:Show() end
                     -- Show borders during drag
                     if btn._eabBorders and not (btn._eabShapeMask and btn._eabShapeMask:IsShown()) then
-                        for j = 1, 4 do btn._eabBorders[j]:Show() end
+                        btn._eabBorders:Show()
                     end
                     if btn._eabShapeBorder and btn._eabShapeBorder._eabWantsShow then
                         btn._eabShapeBorder:Show()
                     end
                     -- Make hidden empty buttons visible during drag
+                    btn:Show()
                     if btn:GetAlpha() < 0.01 then
                         btn:SetAlpha(1)
                     end
@@ -3650,7 +4826,7 @@ local function OnGridChange()
 end
 
 -------------------------------------------------------------------------------
---  Apply All â€” orchestrates full visual application
+--  Apply All orchestrates full visual application
 -------------------------------------------------------------------------------
 local function ApplyAll()
     -- Restore any strata raised during a drag that wasn't cleaned up
@@ -3698,6 +4874,7 @@ local function ApplyAll()
     if not inCombat then EAB:ApplyAlwaysHidden() end
     EAB:RefreshMouseover()
     EAB:RefreshProcGlows()
+    EAB:ApplyRangeColoring()
 end
 
 -------------------------------------------------------------------------------
@@ -3728,14 +4905,6 @@ local function RestoreBarPositions()
     end
 end
 
--------------------------------------------------------------------------------
---  Minimap Button (handled by parent addon)
--------------------------------------------------------------------------------
-local function RegisterMinimapButton()
-    if not _EllesmereUI_MinimapRegistered and EllesmereUI and EllesmereUI.CreateMinimapButton then
-        EllesmereUI.CreateMinimapButton()
-    end
-end
 
 -------------------------------------------------------------------------------
 --  Unlock Mode Integration
@@ -3880,10 +5049,13 @@ function EAB:OnInitialize()
     -- Migration: convert old settings formats if needed
     local p = self.db.profile
     if p.font and p.font:find("EllesmereUIActionBars") and not p.font:find("\\EllesmereUI\\") then
-        -- Old path without EllesmereUI subfolder â€” leave as-is, fonts are at addon root
+        -- Old path without EllesmereUI subfolder leave as-is, fonts are at addon root
     end
 
     -- Slash commands
+    -- Expose apply hook for PP scale change re-apply
+    _G._EAB_Apply = function() ApplyAll() end
+
     SLASH_ELLESMEREACTIONBARS1 = "/eab"
     SlashCmdList["ELLESMEREACTIONBARS"] = function(msg)
         if EllesmereUI and EllesmereUI.Toggle then
@@ -3904,6 +5076,50 @@ function EAB:OnInitialize()
         print("[EAB] ACTIONBUTTON1 keys: " .. tostring(k1) .. ", " .. tostring(k2))
         if k1 then
             print("[EAB] GetBindingAction(" .. k1 .. "): " .. tostring(GetBindingAction(k1, true)))
+        end
+    end
+
+    SLASH_EABBORDER1 = "/eabborder"
+    SlashCmdList["EABBORDER"] = function()
+        local PP = EllesmereUI and EllesmereUI.PP
+        local p = function(...) print("|cffff8800[Border]|r", ...) end
+        p("--- PP state ---")
+        p("mult=", PP and PP.mult, "perfect=", PP and PP.perfect)
+        p("UIParent:GetScale()=", UIParent:GetScale())
+        p("UIParent:GetEffectiveScale()=", UIParent:GetEffectiveScale())
+        p("ppUIScale=", EllesmereUIDB and EllesmereUIDB.ppUIScale)
+        p("physH=", PP and PP.physicalHeight)
+        p("--- ActionButton1 ---")
+        local btn = ActionButton1
+        if not btn then p("ActionButton1 not found") return end
+        p("btn size:", btn:GetWidth(), "x", btn:GetHeight())
+        p("btn scale:", btn:GetScale(), "effectiveScale:", btn:GetEffectiveScale())
+        p("_ppBorders:", tostring(btn._ppBorders))
+        p("_ppBorderSize:", tostring(btn._ppBorderSize))
+        p("_eabBorders:", tostring(btn._eabBorders))
+        local border = btn._ppBorders
+        if border then
+            p("border frame size:", border:GetWidth(), "x", border:GetHeight())
+            p("border frame scale:", border:GetScale())
+            local bc = btn._ppBorderColor
+            if bc then
+                p("border color:", bc[1], bc[2], bc[3], bc[4])
+            else
+                p("NO _ppBorderColor stored")
+            end
+            p("borderSize stored:", tostring(btn._ppBorderSize))
+            p("expected thickness (size*mult):", PP and btn._ppBorderSize and (btn._ppBorderSize * PP.mult))
+            p("expected thickness (size*perfect/es):", PP and btn._ppBorderSize and border.GetEffectiveScale and (btn._ppBorderSize * PP.perfect / border:GetEffectiveScale()))
+            -- Check individual texture strips
+            if border._top then
+                p("top height:", border._top:GetHeight())
+                p("top PixelSnapDisabled:", tostring(border._top.PixelSnapDisabled))
+            end
+            if border._left then
+                p("left width:", border._left:GetWidth())
+            end
+        else
+            p("NO _ppBorders on button")
         end
     end
 end
@@ -3938,8 +5154,8 @@ function EAB:OnFirstLogin()
             if data.alwaysShowButtons ~= nil then
                 s.alwaysShowButtons = data.alwaysShowButtons
             end
-            -- Visibility: 3=Hidden â†’ set alwaysHidden
-            -- 1=InCombat â†’ combatShowEnabled, 2=OutOfCombat â†’ combatHideEnabled
+            -- Visibility: 3=Hidden set alwaysHidden
+            -- 1=InCombat combatShowEnabled, 2=OutOfCombat combatHideEnabled
             if data.visibility then
                 if data.visibility == 3 then
                     s.alwaysHidden = true
@@ -4046,15 +5262,17 @@ function EAB:FinishSetup()
             end
             if MainMenuBarPageNumber then MainMenuBarPageNumber:Hide() end
             if ActionBarParent then
-                RegisterAttributeDriver(ActionBarParent, "state-visibility", "[vehicleui] show; hide")
+                RegisterAttributeDriver(ActionBarParent, "state-visibility", "[vehicleui][overridebar] show; hide")
             end
             if OverrideActionBar then
-                RegisterAttributeDriver(OverrideActionBar, "state-visibility", "[vehicleui] show; hide")
+                RegisterAttributeDriver(OverrideActionBar, "state-visibility", "[vehicleui][overridebar] show; hide")
             end
             for _, name in ipairs({"MainActionBar", "MainMenuBar", "MultiBarBottomLeft", "MultiBarBottomRight", "MultiBarRight", "MultiBarLeft", "MultiBar5", "MultiBar6", "MultiBar7"}) do
                 local bar = _G[name]
                 if bar and bar.actionButtons then wipe(bar.actionButtons) end
             end
+            if MultiActionButtonDown then _G.MultiActionButtonDown = function() end end
+            if MultiActionButtonUp then _G.MultiActionButtonUp = function() end end
             C_CVar.SetCVar("SHOW_MULTI_ACTIONBAR_1", "1")
             C_CVar.SetCVar("SHOW_MULTI_ACTIONBAR_2", "1")
             C_CVar.SetCVar("SHOW_MULTI_ACTIONBAR_3", "1")
@@ -4093,7 +5311,10 @@ function EAB:FinishSetup()
                                 -- For MainBar, actionSlot encodes the button index (1-12)
                                 -- so the secure snippet can set up _childupdate-offset paging
                                 actionSlot = i
-                            elseif not info.isStance and not info.isPetBar then
+                            elseif info.isPetBar then
+                                -- PetActionButtons use their index (1-10) as their slot ID
+                                actionSlot = i
+                            elseif not info.isStance then
                                 actionSlot = slotOffset + i
                             end
                             layoutData[btn._secureSlotIdx] = {
@@ -4158,18 +5379,21 @@ function EAB:FinishSetup()
     end
 
     -- When a spell flyout closes, fade out any bars that were kept visible by it
-    if SpellFlyout then
-        SpellFlyout:HookScript("OnHide", function()
-            for key, state in pairs(hoverStates) do
-                if not state.isHovered then
-                    local s = EAB.db.profile.bars[key]
-                    if s and s.mouseoverEnabled and state.fadeDir ~= "out" then
-                        state.fadeDir = "out"
-                        FadeTo(state.frame, 0, s.mouseoverSpeed or 0.15)
+    do
+        local flyFrame = EABFlyout:GetFrame()
+        if flyFrame then
+            flyFrame:HookScript("OnHide", function()
+                for key, state in pairs(hoverStates) do
+                    if not state.isHovered then
+                        local s = EAB.db.profile.bars[key]
+                        if s and s.mouseoverEnabled and state.fadeDir ~= "out" then
+                            state.fadeDir = "out"
+                            FadeTo(state.frame, 0, s.mouseoverSpeed or 0.15)
+                        end
                     end
                 end
-            end
-        end)
+            end)
+        end
     end
 
     -- When UIParent's scale changes, the coordinate space shifts. Re-save
@@ -4371,13 +5595,18 @@ function EAB:FinishSetup()
     end)
 
     self:RegisterEvent("UPDATE_BONUS_ACTIONBAR", function()
-        -- Skyriding mount/dismount: re-apply scale
-        C_Timer_After(0.1, function()
+        -- Skyriding mount/dismount: re-apply scale and layout.
+        -- Two passes: first at 0.1s (catches most cases), second at 0.5s
+        -- (catches slow slot swaps on dismount where HasAction is briefly false).
+        local function DoLayout()
             if InCombatLockdown() then return end
             for _, info in ipairs(BAR_CONFIG) do
                 self:ApplyScaleForBar(info.key)
+                LayoutBar(info.key)
             end
-        end)
+        end
+        C_Timer_After(0.1, DoLayout)
+        C_Timer_After(0.5, DoLayout)
     end)
 
     self:RegisterEvent("ZONE_CHANGED_NEW_AREA", function()
@@ -4427,6 +5656,14 @@ function EAB:FinishSetup()
             if InCombatLockdown() then return end
             LayoutBar("PetBar")
             self:ApplyAlwaysShowButtons("PetBar")
+            -- Re-register the state driver so the [pet] condition is always
+            -- current after a pet summon, swap, or dismissal.
+            local petInfo = BAR_LOOKUP["PetBar"]
+            local petFrame = barFrames["PetBar"]
+            local petS = self.db.profile.bars["PetBar"]
+            if petInfo and petFrame and petS and not petS.alwaysHidden then
+                RegisterAttributeDriver(petFrame, "state-visibility", BuildVisibilityString(petInfo, petS))
+            end
         end)
     end
     local _petEventFrame = CreateFrame("Frame")
@@ -4465,9 +5702,6 @@ function EAB:FinishSetup()
         end
     end
 
-    -- Register minimap button
-    RegisterMinimapButton()
-
     -- Register with unlock mode (deferred to ensure EllesmereUI is loaded)
     C_Timer_After(0.5, RegisterWithUnlockMode)
 end
@@ -4495,12 +5729,6 @@ local REP_COLORS = {
     [8] = { r = 0.35, g = 0.30, b = 0.80 },  -- Exalted
     [9] = { r = 0.80, g = 0.65, b = 0.20 },  -- Paragon
     [10] = { r = 0.20, g = 0.70, b = 0.85 }, -- Renown
-}
-
-local BAR_BACKDROP = {
-    bgFile = "Interface\\BUTTONS\\WHITE8X8",
-    edgeFile = "Interface\\BUTTONS\\WHITE8X8",
-    edgeSize = 1,
 }
 
 local function ApplyDataBarLayout(barKey)
@@ -4581,7 +5809,6 @@ local function CreateDataBarFrame(barKey, updateFunc)
     bar:SetMinMaxValues(0, 1)
     bar:SetValue(0)
     bar:GetStatusBarTexture():SetDrawLayer("ARTWORK", 4)
-    if PP then PP.DisablePixelSnap(bar:GetStatusBarTexture()) end
 
     local text = bar:CreateFontString(nil, "OVERLAY")
     text:SetFont(FONT_PATH, 9, GetEABOutline())
@@ -4661,7 +5888,6 @@ local function CreateXPBar()
     local PP = EllesmereUI and EllesmereUI.PP
     if PP then
         PP.SetInside(restedBar, holder, 1, 1)
-        PP.DisablePixelSnap(restedBar:GetStatusBarTexture())
     else
         restedBar:SetPoint("TOPLEFT", 1, -1)
         restedBar:SetPoint("BOTTOMRIGHT", -1, 1)
@@ -4738,7 +5964,7 @@ local function UpdateRepBar()
     local nextReactionThreshold = data.nextReactionThreshold or 1
     local standing
 
-    -- Friendship handling (check first â€” friendships override normal standing)
+    -- Friendship handling (check first friendships override normal standing)
     local isFriendship = false
     if factionID then
         local friendInfo = C_GossipInfo and C_GossipInfo.GetFriendshipReputation and C_GossipInfo.GetFriendshipReputation(factionID)
@@ -4751,7 +5977,7 @@ local function UpdateRepBar()
         end
     end
 
-    -- Paragon handling (check before renown â€” max-renown factions become paragon)
+    -- Paragon handling (check before renown max-renown factions become paragon)
     local isParagon = false
     if factionID and C_Reputation.IsFactionParagonForCurrentPlayer and C_Reputation.IsFactionParagonForCurrentPlayer(factionID) then
         local paragonVal, paragonThreshold = C_Reputation.GetFactionParagonInfo(factionID)
@@ -5067,7 +6293,7 @@ local function SetupBlizzardMovableFrame(barKey)
         holder:ClearAllPoints()
         holder:SetPoint(pos.point, UIParent, pos.relPoint or pos.point, pos.x, pos.y)
     else
-        -- No saved position yet â€” try to capture Blizzard's Edit Mode position
+        -- No saved position yet try to capture Blizzard's Edit Mode position
         -- immediately, or defer if the frame doesn't have valid bounds yet.
         local src = posSource or blizzFrame
         local bL, bT = src:GetLeft(), src:GetTop()
@@ -5083,7 +6309,7 @@ local function SetupBlizzardMovableFrame(barKey)
             holder:ClearAllPoints()
             holder:SetPoint("CENTER", UIParent, "TOPLEFT", cx, cy)
         else
-            -- Frame not positioned yet â€” place temporarily, capture after Edit Mode applies
+            -- Frame not positioned yet place temporarily, capture after Edit Mode applies
             holder:ClearAllPoints()
             holder:SetPoint("CENTER", UIParent, "CENTER", 0, -200)
             local attempts = 0
@@ -5119,11 +6345,21 @@ local function SetupBlizzardMovableFrame(barKey)
         end
         _recentering = true
         if blizzFrame then
+            -- Remove from Blizzard's managed layout before reparenting to
+            -- prevent UIParentBottomManagedFrameContainer:SetSize() taint.
+            blizzFrame.ignoreInLayout = true
+            if blizzFrame.SetIsLayoutFrame then
+                pcall(blizzFrame.SetIsLayoutFrame, blizzFrame, false)
+            end
             blizzFrame:SetParent(holder)
             blizzFrame:ClearAllPoints()
             blizzFrame:SetPoint("CENTER", holder, "CENTER", 0, 0)
         end
         if encounterWidgetBar then
+            encounterWidgetBar.ignoreInLayout = true
+            if encounterWidgetBar.SetIsLayoutFrame then
+                pcall(encounterWidgetBar.SetIsLayoutFrame, encounterWidgetBar, false)
+            end
             encounterWidgetBar:SetParent(holder)
             encounterWidgetBar:ClearAllPoints()
             encounterWidgetBar:SetPoint("CENTER", holder, "CENTER", 0, 0)
@@ -5150,7 +6386,7 @@ local function SetupBlizzardMovableFrame(barKey)
             blizzFrame:SetUserPlaced(true)
             blizzFrame:SetDontSavePosition(true)
 
-            -- Hook SetupPlayerPowerBarPosition â€” Blizzard calls this to reposition
+            -- Hook SetupPlayerPowerBarPosition Blizzard calls this to reposition
             -- the bar when it activates; re-reparent into our holder.
             if type(blizzFrame.SetupPlayerPowerBarPosition) == "function" then
                 hooksecurefunc(blizzFrame, "SetupPlayerPowerBarPosition", function(bar)
@@ -5160,7 +6396,7 @@ local function SetupBlizzardMovableFrame(barKey)
                 end)
             end
 
-            -- Hook UnitPowerBarAlt_SetUp â€” called when the encounter power bar
+            -- Hook UnitPowerBarAlt_SetUp called when the encounter power bar
             -- is initialized for a fight; re-reparent the player bar.
             if type(UnitPowerBarAlt_SetUp) == "function" then
                 hooksecurefunc("UnitPowerBarAlt_SetUp", function(bar)
@@ -5310,7 +6546,7 @@ local function SetupBlizzardMovableFrames()
 end
 
 -------------------------------------------------------------------------------
---  Extra Bar Holders (MicroBar, BagBar) â€” positioning via holder frames
+--  Extra Bar Holders (MicroBar, BagBar) positioning via holder frames
 --  Reparents Blizzard frames into holder frames so unlock mode can position them.
 -------------------------------------------------------------------------------
 AttachExtraBarHoverHooks = function(info)
@@ -5570,7 +6806,7 @@ local function RegisterExtraBarsWithUnlockMode()
 end
 
 -------------------------------------------------------------------------------
---  Extra Bars (MicroBar, BagBar) â€” visibility-only management
+--  Extra Bars (MicroBar, BagBar) visibility-only management
 --  These use Blizzard's existing frames, we just manage visibility.
 -------------------------------------------------------------------------------
 local function SetupExtraBars()

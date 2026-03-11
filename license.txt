@@ -1,0 +1,5 @@
+Custom License for: EllesmereUI
+
+Copyright ©2026 The contents of this addon, excluding third-party resources, are copyrighted to their authors with all rights reserved.
+
+All rights not explicitly addressed in this license are reserved by the copyright holders.
