@@ -6365,7 +6365,6 @@ local function ReconcileMainBarSpells()
                 if poolHasAny then
                     local existing = barData.trackedSpells
                     local removed = barData.removedSpells or {}
-                    local isTalentAware = TALENT_AWARE_BAR_TYPES[barData.key]
                     local kept = {}
                     local keptSet = {}
                     local isBuffBar = (barData.key == "buffs")
@@ -6379,18 +6378,15 @@ local function ReconcileMainBarSpells()
                             local isPassive = (not isBuffBar) and IsTrulyPassive(sid)
                             if isPassive then
                                 -- Silently drop — passive spells should never be on a cooldown bar
-                            elseif allViewerSpells[sid] then
-                                -- Spell exists in some viewer or is known — keep it in place
-                                kept[#kept + 1] = sid
-                                keptSet[sid] = true
-                            elseif isTalentAware then
-                                -- Talent-aware bar: spell not known at all — move to dormant
-                                if not barData.dormantSpells then barData.dormantSpells = {} end
-                                barData.dormantSpells[sid] = i
                             else
-                                -- Non-talent-aware bar: viewer may not be fully populated yet.
-                                -- Keep the spell in its current position rather than dropping it,
-                                -- so a partially-populated viewer can't scramble the saved order.
+                                -- Always keep the spell in its current position.
+                                -- Viewer pools and the CDM API may not be fully populated
+                                -- at this point (login, zone-in), so a missing spell here
+                                -- does NOT mean the spell is unlearned — it may just be an
+                                -- ID mismatch or partial viewer.  Moving spells to dormant
+                                -- based on incomplete data causes ordering resets.
+                                -- TalentAwareReconcile handles dormant logic on actual
+                                -- talent changes where the known-spell set is reliable.
                                 kept[#kept + 1] = sid
                                 keptSet[sid] = true
                             end
