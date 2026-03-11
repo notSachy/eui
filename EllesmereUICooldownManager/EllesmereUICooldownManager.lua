@@ -1265,6 +1265,11 @@ local function SaveCurrentSpecProfile()
         prof.tbbPositions = DeepCopy(p.tbbPositions)
     end
 
+    -- 4) CDM bar positions (so bars stay where the user put them per-spec)
+    if p.cdmBarPositions then
+        prof.cdmBarPositions = DeepCopy(p.cdmBarPositions)
+    end
+
     p.specProfiles[specKey] = prof
 end
 
@@ -1318,6 +1323,11 @@ local function LoadSpecProfile(specKey)
         end
         if prof.tbbPositions ~= nil then
             p.tbbPositions = DeepCopy(prof.tbbPositions)
+        end
+
+        -- Restore CDM bar positions
+        if prof.cdmBarPositions ~= nil then
+            p.cdmBarPositions = DeepCopy(prof.cdmBarPositions)
         end
     else
         -- No saved profile for this spec: initialize fresh
@@ -2437,23 +2447,6 @@ local function ApplyBarPositionCentered(frame, pos, w, h, scale)
     end
 end
 
-local function SaveCDMBarPosition(barKey, frame)
-    if not frame then return end
-    local p = ECME.db.profile
-    local scale = frame:GetScale() or 1
-    local cx, cy = frame:GetCenter()
-    if not cx then return end
-    local uiW, uiH = UIParent:GetSize()
-    local uiScale = UIParent:GetEffectiveScale()
-    local fScale = frame:GetEffectiveScale()
-    cx = cx * fScale / uiScale
-    cy = cy * fScale / uiScale
-    p.cdmBarPositions[barKey] = {
-        point = "CENTER", relPoint = "CENTER",
-        x = (cx - uiW / 2) / scale,
-        y = (cy - uiH / 2) / scale,
-    }
-end
 
 -------------------------------------------------------------------------------
 --  Helper: get the frame anchor point for a CDM bar.
@@ -4914,7 +4907,7 @@ ns.BuildAllCDMBars = BuildAllCDMBars
 ns.cdmBarFrames = cdmBarFrames
 ns.cdmBarIcons = cdmBarIcons
 ns.barDataByKey = barDataByKey
-ns.SaveCDMBarPosition = SaveCDMBarPosition
+
 ns.LayoutCDMBar = LayoutCDMBar
 ns.BLIZZ_CDM_FRAMES = BLIZZ_CDM_FRAMES
 ns.CDM_BAR_CATEGORIES = CDM_BAR_CATEGORIES
@@ -5831,6 +5824,15 @@ end
 function ECME:OnInitialize()
     self.db = EllesmereUI.Lite.NewDB("EllesmereUICooldownManagerDB", DEFAULTS, true)
 
+    -- Save spec profile before StripDefaults runs on logout so per-spec
+    -- data (glows, tbb positions, bar positions) is captured intact.
+    EllesmereUI.Lite.RegisterPreLogout(function()
+        local p = ECME.db and ECME.db.profile
+        if p and p.activeSpecKey and p.activeSpecKey ~= "0" then
+            SaveCurrentSpecProfile()
+        end
+    end)
+
     -- Migration: enable showStackCount on the buffs bar (was false by default)
     do
         local bars = self.db.profile.cdmBars and self.db.profile.cdmBars.bars
@@ -6669,11 +6671,8 @@ local _unitAuraTimer = nil
 eventFrame:SetScript("OnEvent", function(_, event, unit, updateInfo, arg3)
     if not ECME.db then return end
     if event == "PLAYER_LOGOUT" then
-        -- Save current spec profile on logout
-        local p = ECME.db.profile
-        if p.activeSpecKey and p.activeSpecKey ~= "0" then
-            SaveCurrentSpecProfile()
-        end
+        -- Spec profile save now handled by PreLogout callback (registered
+        -- in OnInitialize) so it runs before StripDefaults.
         return
     end
     if event == "COMBAT_LOG_EVENT_UNFILTERED" then
